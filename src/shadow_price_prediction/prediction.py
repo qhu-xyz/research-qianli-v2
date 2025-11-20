@@ -121,6 +121,7 @@ class Predictor:
                         # Predict binding due to anomaly
                         y_pred_binary[idx] = 1
                         y_pred_proba[idx] = 0.5 + 0.5 * confidence
+                        y_pred_proba_scaled[idx] = y_pred_proba[idx] # Scaled prob = prob since threshold is 0.5
                         y_pred_threshold[idx] = 0.5  # Default threshold for anomaly
 
                         # Use default regressor ensemble for shadow price
@@ -148,6 +149,7 @@ class Predictor:
                         # Predict non-binding
                         y_pred_binary[idx] = 0
                         y_pred_proba[idx] = 0.0
+                        y_pred_proba_scaled[idx] = 0.0
                         y_pred_threshold[idx] = 0.5 # Default threshold
                         y_pred_shadow_price[idx] = 0.0
                         model_used[idx] = f"Never-Binding: {branch_name[:30]}"
@@ -254,7 +256,7 @@ class Predictor:
 
         # Create results DataFrames
         results_per_outage, final_results = self._create_results_dataframes(
-            test_data, y_pred_binary, y_pred_proba, y_pred_proba_scaled, y_pred_threshold, y_pred_shadow_price, verbose
+            test_data, y_pred_binary, y_pred_proba, y_pred_proba_scaled, y_pred_threshold, y_pred_shadow_price, model_used, verbose
         )
 
         return results_per_outage, final_results
@@ -302,6 +304,7 @@ class Predictor:
         y_pred_proba_scaled: np.ndarray,
         y_pred_threshold: np.ndarray,
         y_pred_shadow_price: np.ndarray,
+        model_used: List[str],
         verbose: bool
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Create results DataFrames at outage level and monthly aggregated level."""
@@ -319,6 +322,7 @@ class Predictor:
         results_per_outage['binding_probability_scaled'] = y_pred_proba_scaled
         results_per_outage['threshold'] = y_pred_threshold
         results_per_outage['predicted_binding'] = y_pred_binary
+        results_per_outage['model_used'] = model_used
         results_per_outage['actual_binding'] = (test_data['label'] > 0).astype(int).values
         results_per_outage = results_per_outage.rename(columns={'label': 'actual_shadow_price'})
 
@@ -340,7 +344,8 @@ class Predictor:
             'predicted_binding': 'sum',
             'actual_binding': 'max',
             'auction_month': 'first',
-            'market_month': 'first'
+            'market_month': 'first',
+            'model_used': 'first'
         }).rename(columns={'predicted_binding': 'predicted_binding_count'})
 
         final_results['predicted_binding'] = final_results['predicted_binding_count'] >= 1
@@ -348,11 +353,6 @@ class Predictor:
         # Calculate errors
         final_results['error'] = final_results['predicted_shadow_price'] - final_results['actual_shadow_price']
         final_results['abs_error'] = np.abs(final_results['error'])
-
-        # Add model used
-        final_results['model_used'] = final_results['branch_name'].apply(
-            lambda b: f"Branch: {b}" if b in self.models.clf_ensembles else "Default"
-        )
 
         if verbose:
             print(f"\nAfter aggregation:")

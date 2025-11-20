@@ -24,7 +24,7 @@ sys.path.insert(0, str(project_root))
 import pandas as pd
 
 from src.data.dataset_builder import DatasetBuilder
-from src.utils.config import Config, DataConfig
+from src.utils.config import Config
 
 
 def mock_get_da_shadow(st: str, et: str, class_type: str) -> pd.DataFrame:
@@ -49,9 +49,9 @@ def mock_get_da_shadow(st: str, et: str, class_type: str) -> pd.DataFrame:
         - constraint_id (str)
         - shadow_price (float)
     """
-    print(f"WARNING: Using mock get_da_shadow function!")
+    print("WARNING: Using mock get_da_shadow function!")
     print(f"  Start: {st}, End: {et}, Class: {class_type}")
-    print(f"  Replace with actual get_da_shadow function for real data")
+    print("  Replace with actual get_da_shadow function for real data")
 
     # Create mock data for demonstration
     dates = pd.date_range(st, et, freq="H")
@@ -98,7 +98,7 @@ def main():
     config.data.test_start_date = "2024-07-01"
     config.data.test_end_date = "2024-09-30"
 
-    print(f"\nData Configuration:")
+    print("\nData Configuration:")
     print(f"  Density path: {config.data.density_base_path}")
     print(f"  Train period: {config.data.train_start_date} to {config.data.train_end_date}")
     print(f"  Val period: {config.data.val_start_date} to {config.data.val_end_date}")
@@ -137,8 +137,8 @@ def main():
         print(f"Shape: {train_df.shape}")
         print(f"Constraints: {train_df['constraint_id'].nunique()}")
         print(f"Binding rate: {train_df['target_binding'].mean():.2%}")
-        print(f"\nTarget distribution:")
-        print(train_df['target_shadow_price'].describe())
+        print("\nTarget distribution:")
+        print(train_df["target_shadow_price"].describe())
 
         print(f"\n{'Validation Set':-^60}")
         print(f"Shape: {val_df.shape}")
@@ -154,7 +154,7 @@ def main():
         feature_cols = builder.get_feature_columns(train_df)
         print(f"\n{'Feature Columns':-^60}")
         print(f"Total features: {len(feature_cols)}")
-        print(f"\nFeature names:")
+        print("\nFeature names:")
         for i, col in enumerate(feature_cols, 1):
             print(f"  {i:3d}. {col}")
 

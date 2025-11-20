@@ -1,93 +1,52 @@
+# Project Information
 [project]
-name = "research-template"
-version = "0.1.0"
-description = "research repository for xyzpower"
+name = "shadow-price-prediction"
+version = "1.0.0"
+description = "Shadow price prediction for MISO electricity markets using XGBoost-based two-stage models"
 readme = "README.md"
+authors = [
+    { name = "Engineering Team", email = "consultant@amazand.com" }
+]
 requires-python = "==3.13.5"
+
 dependencies = [
-    "pmodel",
-    "psignal",
-    # math libraries
-    "numpy==2.2.6",
-    "scipy==1.15.3",
-    # Core functionality dependencies
-    "aenum==3.1.16",
-    "cachetools==6.1.0",
-    "codetiming==1.4.0",
-    "filelock==3.18.0",
-    "msgpack==1.1.1",
+    "pbase",
+    # Core data libraries
     "pandas==2.3.0",
-    "python-dotenv==1.1.0",
-    "pytz==2025.2",
-    "pyyaml==6.0.2",
-    "tabulate==0.9.0",
-    "tenacity==9.1.2",
-    "tqdm==4.67.1",
-    "wrapt-timeout-decorator==1.5.1",
-    # Data and computation dependencies
-    "narwhals==1.43.1",
+    "numpy==2.2.6",
     "pyarrow==20.0.0",
-    "qpsolvers[open_source_solvers]==4.7.1",
-    "scikit-learn==1.7.0",
+    # Machine learning
     "xgboost==3.0.2",
-    "gurobipy==12.0.2",
-    # pandas[performance] libraries
-    "numexpr==2.11.0",
-    "bottleneck==1.5.0",
-    "numba==0.61.2",
-    "wirerope==1.0.0",
-    "methodtools==0.4.7",
-    # "multiprocess>=0.70.16",  # replacement for python multiprocessing
-    # "memray>=1.17.0",
-    # GPU-related dependencies
-    # Storage and networking dependencies
-    "boto3==1.38.27",
-    "paramiko==3.5.1",
-    "protobuf==3.20.*", # Because of ray subdependency
-    "s3fs==2025.5.1",
-    "urllib3==2.4.0",
-    "requests==2.32.4",
-    "pyro5==5.15",
-    "fastparquet>=2024.11.0",
-    # Distributed computing dependencies
-    "ray[default]==2.47.0",
-    # Data validation
-    "pydantic==2.11.7",
-    # Fix multidict version issue
-    "multidict!=6.5.0",
-    "openpyxl>=3.1.5",
-    # AI Testing
-    "types-pyyaml==6.0.12.20250516",
-    "anthropic==0.56.0",
-    "langchain==0.3.26",
-    "jellyfish==1.2.0",
-    "polars==1.31.0",
+    "scikit-learn==1.7.0",
+    # Notebook support
     "notebook>=7.4.7",
     "jupyter>=1.1.1",
 ]
 
-[tool.uv]
-override-dependencies = [
-    "pbase @ git+https://github.com/xyzpower/pbase@develop",
-    "pllm @ git+https://github.com/xyzpower/pLLM@main",
-]
-
 [tool.uv.sources]
-pbase = { git = "https://github.com/xyzpower/pbase", branch = "develop" }
-pllm = { git = "https://github.com/xyzpower/pLLM", branch = "main" }
-psignal = { git = "https://github.com/xyzpower/psignal", branch = "develop" }
-pmodel = { git = "https://github.com/xyzpower/pmodel", branch = "develop" }
-
-# pbase = { git = "https://github.com/xyzpower/pbase", tag = "v2.20.0" }
-# pbase = { path = "../pbase", editable = true }
+# pbase = { git = "https://github.com/xyzpower/pbase", branch = "develop" }
+# For local development:
+pbase = { path = "../pbase", editable = true }
 
 # Build system configuration
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# Development dependency groups
-[project.optional-dependencies]
+# Package discovery configuration
+[tool.hatch.build.targets.wheel]
+packages = ["src/shadow_price_prediction"]
+
+# Version control tool configuration
+[tool.bumpversion]
+current_version = "1.0.0"
+commit = true
+tag = true
+
+[[tool.bumpversion.files]]
+filename = "src/shadow_price_prediction/__init__.py"
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
 
 # Code quality tool configuration
 [tool.ruff]
@@ -96,108 +55,49 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = [
-    "B",        # flake8-bugbear (common bugs and design problems)
-    "C4",       # flake8-comprehensions (better list/dict/set comprehensions)
     "E",        # pycodestyle errors
-    "F",        # Pyflakes rules (unused imports, undefined names, etc.)
-    "I",        # isort (import sorting and organization)
-    "N",        # pep8-naming (enforce PEP 8 naming conventions)
-    "NPY",      # NumPy-specific rules
-    "PD",       # Pandas specific rules
-    "PL",       # Pylint rules (code quality and error detection)
-    "RUF",      # Ruff-specific rules (additional checks and improvements)
-    "UP",       # pyupgrade (modernize Python syntax for newer versions)
-] # TODO Add "DTZ"
-
-ignore = [
-    "B007",     # unused-loop-control-variable - Loop control variable not used within loop body
-    "B019",     # TEMPORARY - Use of `functools.lru_cache` or `functools.cache` on methods can lead to memory leaks
-    "B027",     # empty-method-without-abstract-decorator - Empty method in an abstract base class, but has no abstract decorator
-    "C408",     # unnecessary-collection-call - Unnecessary call (rewrite as a literal)
-    "C414",     # unnecessary-double-cast-or-process - Unnecessary call within another call
-    "C416",     # unnecessary-comprehension - Unnecessary comprehension
-    "E501",     # line-too-long - Line too long
-    "N806",     # non-lowercase-variable-in-function - Variable in function should be lowercase
-    "N818",     # error-suffix-on-exception-name - Exception name should end in "Error"
-    "PD002",    # inplace=True should be avoided
-    "PD008",    # Use `.loc` instead of `.at`. If speed is important, use NumPy.
-    "PD010",    # `.pivot_table` is preferred to `.pivot` or `.unstack`; provides same functionality
-    "PD011",    # Use `.to_numpy()` instead of `.values` - ignoring because .to_numpy() is not always a drop-in replacement to .values
-    "PD013",    # `.melt` is preferred to `.stack`; provides same functionality
-    "PD015",    # Use `.merge` method instead of `pd.merge` function. They have equivalent functionality.
-    "PD101",    # Using `series.nunique()` for checking that a series is constant is inefficient
-    "PD901",    # Avoid using the generic variable name `df` for DataFrames
-    "PLC0206",  # dict-index-missing-items - Extracting value from dictionary without calling .items()
-    "PLC0415",  # `import` should be at the top-level of a file
-    "PLR0911",  # too-many-return-statements - Too many return statements
-    "PLR0912",  # too-many-branches - Too many branches
-    "PLR0913",  # too-many-arguments - Too many arguments in function definition
-    "PLR0915",  # too-many-statements - Too many statements
-    "PLR1704",  # redefined-argument-from-local - Redefining argument with the local name
-    "PLR1722",  # use-sys-exit - Use sys.exit() instead of exit()
-    "PLR2004",  # magic-value-comparison - Magic value used in comparison
-    "PLW1508",  # invalid-envvar-default - Invalid type for environment variable default
-    "PLW2901",  # redefined-loop-name - Redefined loop name
-    "RUF002",   # ambiguous-unicode-character-docstring - Ambiguous unicode character in docstring
-    "RUF003",   # ambiguous-unicode-character-comment - Ambiguous unicode character in comment
-    "RUF005",   # collection-literal-concatenation - Consider iterable unpacking instead of concatenation
-    "RUF012",   # Mutable class attributes should be annotated with `typing.ClassVar`
-    "RUF015",   # unnecessary-iterable-allocation-for-first-element - Unnecessary iterable allocation for first element
-    "UP031",    # printf-string-formatting - Use format specifiers instead of percent format
-    "UP035",    # deprecated-import - Import from deprecated module
+    "F",        # Pyflakes rules
+    "B",        # flake8-bugbear
+    "I",        # isort
+    "N",        # pep8-naming
+    "UP",       # pyupgrade
 ]
-exclude = ["notebook/*"]
-fixable = ["ALL"]
-unfixable = []
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+ignore = [
+    "E501",     # line-too-long
+    "N806",     # non-lowercase-variable-in-function
+]
+exclude = ["notebook/*", "*.ipynb"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["pbase", "pmodel", "psignal"]
-known-third-party = ["pandas", "numpy", "ray", "sklearn"]
-split-on-trailing-comma = true
+known-first-party = ["shadow_price_prediction", "pbase"]
+known-third-party = ["pandas", "numpy", "xgboost", "sklearn"]
 
 [tool.ruff.format]
 docstring-code-format = true
 docstring-code-line-length = 110
-quote-style = "double"
-indent-style = "space"
-line-ending = "auto"
 
-# Logging configuration
+# Test configuration
+[tool.pytest.ini_options]
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
-
-# Filtering and warnings
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
-    # Add specific warnings to ignore
-    "ignore:datetime.datetime.utcfromtimestamp:DeprecationWarning:google.*",
 ]
 
+# Dependency groups for uv
 [dependency-groups]
 dev = [
     "plotly>=6.0.1",
     "ipykernel>=6.29.5",
     "ipywidgets>=8.1.6",
-    "notebook>=7.4.1",
     "pytest>=8.3.5",
     "pytest-mock>=3.14.0",
     "pytest-cov>=4.0.0",
-    "pytest-xdist>=3.0.0",
-    "iniconfig>=2.1.0",
-    "coverage>=7.9.1",
-    "kaleido>=1.0.0",
-    "mypy>=1.16.1",
     "ruff>=0.12.1",
-    "openpyxl>=3.1.5",
 ]
 types = [
-    "types-cachetools>=6.0.0.20250525",
     "types-python-dateutil>=2.9.0.20250516",
-    "types-pytz>=2025.2.0.20250516",
-    "types-pyyaml>=6.0.12.20250516",
-    "types-requests>=2.32.4.20250611",
 ]

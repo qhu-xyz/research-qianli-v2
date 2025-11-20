@@ -23,10 +23,10 @@ import pandas as pd
 from src.data.dataset_builder import build_training_dataset
 from src.utils.config import Config
 
-
 # ============================================================================
 # STEP 1: Define your get_da_shadow function
 # ============================================================================
+
 
 def get_da_shadow(st: str, et: str, class_type: str) -> pd.DataFrame:
     """Fetch day-ahead shadow prices from your API.
@@ -55,9 +55,9 @@ def get_da_shadow(st: str, et: str, class_type: str) -> pd.DataFrame:
     # return fetch_shadow_prices(st, et, class_type)
 
     # Mock implementation for demonstration
-    print(f"⚠️  WARNING: Using mock get_da_shadow function!")
+    print("⚠️  WARNING: Using mock get_da_shadow function!")
     print(f"   Start: {st}, End: {et}, Class: {class_type}")
-    print(f"   Replace with actual function in production!")
+    print("   Replace with actual function in production!")
 
     # Create realistic mock data
     dates = pd.date_range(st, et, freq="H")
@@ -91,6 +91,7 @@ def get_da_shadow(st: str, et: str, class_type: str) -> pd.DataFrame:
 # STEP 2: Configure data pipeline
 # ============================================================================
 
+
 def get_custom_config() -> Config:
     """Create custom configuration for data pipeline.
 
@@ -99,9 +100,7 @@ def get_custom_config() -> Config:
     config = Config()
 
     # Data paths
-    config.data.density_base_path = (
-        "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density"
-    )
+    config.data.density_base_path = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density"
 
     # Date ranges for splits
     # ADJUST THESE based on your data availability
@@ -131,6 +130,7 @@ def get_custom_config() -> Config:
 # ============================================================================
 # STEP 3: Build dataset
 # ============================================================================
+
 
 def main():
     """Main function to build training dataset."""
@@ -194,7 +194,7 @@ def main():
 
         print(f"\n{'Features':-^60}")
         print(f"   Total features: {len(feature_cols)}")
-        print(f"\n   Feature names (first 20):")
+        print("\n   Feature names (first 20):")
         for i, col in enumerate(feature_cols[:20], 1):
             print(f"      {i:2d}. {col}")
         if len(feature_cols) > 20:
@@ -207,23 +207,25 @@ def main():
         print(f"   - train.parquet ({len(train_df):,} records)")
         print(f"   - val.parquet ({len(val_df):,} records)")
         print(f"   - test.parquet ({len(test_df):,} records)")
-        print(f"   - metadata.json")
+        print("   - metadata.json")
 
         # Class imbalance warning
         binding_rate = train_df["target_binding"].mean()
         print(f"\n{'⚠️  Class Imbalance Warning':-^60}")
         print(f"   Binding events: {binding_rate:.2%} of data")
-        print(f"   Non-binding: {1-binding_rate:.2%} of data")
-        print(f"\n   When training models, remember to:")
-        print(f"   1. Use class weights in classification")
-        print(f"   2. Evaluate with F1 score, PR-AUC (not accuracy!)")
-        print(f"   3. Use two-stage approach (classify → regress)")
-        print(f"   4. Optimize for binding detection recall")
+        print(f"   Non-binding: {1 - binding_rate:.2%} of data")
+        print("\n   When training models, remember to:")
+        print("   1. Use class weights in classification")
+        print("   2. Evaluate with F1 score, PR-AUC (not accuracy!)")
+        print("   3. Use two-stage approach (classify → regress)")
+        print("   4. Optimize for binding detection recall")
 
         # Next steps
         print(f"\n{'Next Steps':-^60}")
         print("   1. Review saved datasets:")
-        print(f"      python -c \"import pandas as pd; df=pd.read_parquet('{output_dir}/train.parquet'); print(df.info())\"")
+        print(
+            f"      python -c \"import pandas as pd; df=pd.read_parquet('{output_dir}/train.parquet'); print(df.info())\""
+        )
         print("\n   2. Train two-stage model:")
         print("      - Stage 1: Classify binding events (LightGBM with class_weight='balanced')")
         print("      - Stage 2: Predict shadow price magnitude (LightGBM on binding events)")

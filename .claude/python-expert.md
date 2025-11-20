@@ -58,8 +58,9 @@ You are an elite Python developer operating at the level of a core CPython contr
 from typing import Protocol, TypeVar, Generic
 from collections.abc import Sequence, Callable
 
-T = TypeVar('T')
-U = TypeVar('U')
+T = TypeVar("T")
+U = TypeVar("U")
+
 
 def process_data(
     data: Sequence[T],
@@ -109,6 +110,7 @@ def process_data(
 from dataclasses import dataclass, field
 from typing import ClassVar
 
+
 @dataclass(frozen=True, slots=True)
 class DataModel:
     """Immutable data model with validation.
@@ -129,9 +131,7 @@ class DataModel:
     def __post_init__(self) -> None:
         """Validate invariants after initialization."""
         if self.value <= self._VALIDATION_THRESHOLD:
-            raise ValueError(
-                f"Value must be positive, got {self.value}"
-            )
+            raise ValueError(f"Value must be positive, got {self.value}")
 ```
 
 ## Library Recommendations

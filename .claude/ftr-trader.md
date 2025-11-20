@@ -208,12 +208,13 @@ import numpy as np
 from scipy.optimize import minimize
 import cvxpy as cp
 
+
 def optimize_ftr_portfolio(
     expected_returns: np.ndarray,  # Expected $/MW for each path
     covariance_matrix: np.ndarray,  # Return covariance
-    position_limits: dict,          # Max MW per path, zone, ISO
-    budget_constraint: float,       # Maximum capital allocation
-    risk_aversion: float = 1.0,     # Risk-return trade-off parameter
+    position_limits: dict,  # Max MW per path, zone, ISO
+    budget_constraint: float,  # Maximum capital allocation
+    risk_aversion: float = 1.0,  # Risk-return trade-off parameter
 ) -> dict:
     """Optimize FTR portfolio using mean-variance framework.
 
@@ -257,31 +258,29 @@ def optimize_ftr_portfolio(
     portfolio_variance = cp.quad_form(positions, covariance_matrix)
 
     # Objective: Maximize return - risk penalty
-    objective = cp.Maximize(
-        portfolio_return - (risk_aversion / 2) * portfolio_variance
-    )
+    objective = cp.Maximize(portfolio_return - (risk_aversion / 2) * portfolio_variance)
 
     # Constraints
     constraints = [
         positions >= 0,  # Long-only (or adjust for long-short)
-        positions <= position_limits['max_per_path'],
-        cp.sum(positions) <= position_limits['max_gross'],
+        positions <= position_limits["max_per_path"],
+        cp.sum(positions) <= position_limits["max_gross"],
     ]
 
     # Solve
     problem = cp.Problem(objective, constraints)
     problem.solve(solver=cp.ECOS)
 
-    if problem.status == 'optimal':
+    if problem.status == "optimal":
         return {
-            'optimal_positions': positions.value,
-            'expected_return': portfolio_return.value,
-            'portfolio_std': np.sqrt(portfolio_variance.value),
-            'sharpe_ratio': portfolio_return.value / np.sqrt(portfolio_variance.value),
-            'status': 'optimal'
+            "optimal_positions": positions.value,
+            "expected_return": portfolio_return.value,
+            "portfolio_std": np.sqrt(portfolio_variance.value),
+            "sharpe_ratio": portfolio_return.value / np.sqrt(portfolio_variance.value),
+            "status": "optimal",
         }
     else:
-        return {'status': problem.status, 'error': 'Optimization failed'}
+        return {"status": problem.status, "error": "Optimization failed"}
 ```
 
 #### Machine Learning for Congestion Forecasting

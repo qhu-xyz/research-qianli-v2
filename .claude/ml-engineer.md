@@ -57,9 +57,9 @@ from sklearn.linear_model import Ridge, LogisticRegression
 
 # Always start with simple baselines
 baselines = {
-    'mean': DummyRegressor(strategy='mean'),
-    'median': DummyRegressor(strategy='median'),
-    'linear': Ridge(alpha=1.0),
+    "mean": DummyRegressor(strategy="mean"),
+    "median": DummyRegressor(strategy="median"),
+    "linear": Ridge(alpha=1.0),
 }
 
 # Evaluate baselines to understand problem difficulty
@@ -71,6 +71,7 @@ baseline_scores = cross_validate_baselines(baselines, X, y)
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.compose import ColumnTransformer
 from category_encoders import TargetEncoder, WOEEncoder
+
 
 def create_feature_pipeline(
     numeric_features: list[str],
@@ -86,11 +87,13 @@ def create_feature_pipeline(
     - Engineer domain-specific features
     - Handle missing values appropriately (not always imputation)
     """
-    return ColumnTransformer([
-        ('numeric', RobustScaler(), numeric_features),
-        ('categorical', TargetEncoder(), categorical_features),
-        ('temporal', temporal_feature_extractor, temporal_features),
-    ])
+    return ColumnTransformer(
+        [
+            ("numeric", RobustScaler(), numeric_features),
+            ("categorical", TargetEncoder(), categorical_features),
+            ("temporal", temporal_feature_extractor, temporal_features),
+        ]
+    )
 ```
 
 #### 3. Model Selection Strategy
@@ -103,17 +106,15 @@ from lightgbm import LGBMRegressor
 # Hierarchical model testing
 model_candidates = {
     # Linear models (fast, interpretable)
-    'ridge': Ridge(alpha=1.0),
-    'elastic_net': ElasticNet(alpha=1.0, l1_ratio=0.5),
-
+    "ridge": Ridge(alpha=1.0),
+    "elastic_net": ElasticNet(alpha=1.0, l1_ratio=0.5),
     # Tree-based (handles non-linearity, feature interactions)
-    'random_forest': RandomForestRegressor(n_estimators=100),
-    'gbm': GradientBoostingRegressor(n_estimators=100),
-
+    "random_forest": RandomForestRegressor(n_estimators=100),
+    "gbm": GradientBoostingRegressor(n_estimators=100),
     # Gradient boosting (typically best performance)
-    'xgboost': XGBRegressor(n_estimators=100),
-    'lightgbm': LGBMRegressor(n_estimators=100),
-    'catboost': CatBoostRegressor(n_estimators=100, verbose=False),
+    "xgboost": XGBRegressor(n_estimators=100),
+    "lightgbm": LGBMRegressor(n_estimators=100),
+    "catboost": CatBoostRegressor(n_estimators=100, verbose=False),
 }
 
 # Use appropriate CV strategy for time series
@@ -124,6 +125,7 @@ cv_strategy = TimeSeriesSplit(n_splits=5)
 ```python
 from optuna import create_study, Trial
 from sklearn.model_selection import cross_val_score
+
 
 def objective(trial: Trial) -> float:
     """Optuna objective function for hyperparameter tuning.
@@ -136,26 +138,29 @@ def objective(trial: Trial) -> float:
     - Consider computational budget
     """
     params = {
-        'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
-        'max_depth': trial.suggest_int('max_depth', 3, 12),
-        'learning_rate': trial.suggest_float('learning_rate', 1e-4, 1e-1, log=True),
-        'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-        'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-        'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-        'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
-        'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
+        "n_estimators": trial.suggest_int("n_estimators", 100, 1000),
+        "max_depth": trial.suggest_int("max_depth", 3, 12),
+        "learning_rate": trial.suggest_float("learning_rate", 1e-4, 1e-1, log=True),
+        "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+        "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+        "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+        "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
     }
 
     model = XGBRegressor(**params, random_state=42)
     return cross_val_score(
-        model, X_train, y_train,
+        model,
+        X_train,
+        y_train,
         cv=TimeSeriesSplit(n_splits=5),
-        scoring='neg_mean_absolute_error',
-        n_jobs=-1
+        scoring="neg_mean_absolute_error",
+        n_jobs=-1,
     ).mean()
 
+
 # Run optimization
-study = create_study(direction='maximize')
+study = create_study(direction="maximize")
 study.optimize(objective, n_trials=100, show_progress_bar=True)
 ```
 
@@ -164,10 +169,13 @@ study.optimize(objective, n_trials=100, show_progress_bar=True)
 #### Comprehensive Metrics
 ```python
 from sklearn.metrics import (
-    mean_absolute_error, mean_squared_error, r2_score,
-    mean_absolute_percentage_error
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    mean_absolute_percentage_error,
 )
 import numpy as np
+
 
 def evaluate_regression_model(y_true, y_pred, y_train=None):
     """Comprehensive regression evaluation.
@@ -178,23 +186,23 @@ def evaluate_regression_model(y_true, y_pred, y_train=None):
         Contains MAE, RMSE, R², MAPE, and baseline comparisons
     """
     metrics = {
-        'mae': mean_absolute_error(y_true, y_pred),
-        'rmse': np.sqrt(mean_squared_error(y_true, y_pred)),
-        'r2': r2_score(y_true, y_pred),
-        'mape': mean_absolute_percentage_error(y_true, y_pred),
+        "mae": mean_absolute_error(y_true, y_pred),
+        "rmse": np.sqrt(mean_squared_error(y_true, y_pred)),
+        "r2": r2_score(y_true, y_pred),
+        "mape": mean_absolute_percentage_error(y_true, y_pred),
     }
 
     # Compare to naive baselines
     if y_train is not None:
         mean_baseline = np.full_like(y_pred, y_train.mean())
-        metrics['mae_vs_mean_baseline'] = (
-            mean_absolute_error(y_true, mean_baseline) / metrics['mae']
+        metrics["mae_vs_mean_baseline"] = (
+            mean_absolute_error(y_true, mean_baseline) / metrics["mae"]
         )
 
     # Residual analysis
     residuals = y_true - y_pred
-    metrics['residual_mean'] = np.mean(residuals)
-    metrics['residual_std'] = np.std(residuals)
+    metrics["residual_mean"] = np.mean(residuals)
+    metrics["residual_std"] = np.std(residuals)
 
     return metrics
 ```
@@ -222,11 +230,10 @@ def diagnose_model(model, X_test, y_test, feature_names):
     print(f"  Kurtosis: {scipy.stats.kurtosis(residuals):.4f}")
 
     # Feature importance
-    if hasattr(model, 'feature_importances_'):
-        importance_df = pd.DataFrame({
-            'feature': feature_names,
-            'importance': model.feature_importances_
-        }).sort_values('importance', ascending=False)
+    if hasattr(model, "feature_importances_"):
+        importance_df = pd.DataFrame(
+            {"feature": feature_names, "importance": model.feature_importances_}
+        ).sort_values("importance", ascending=False)
         print("\nTop 10 Features:")
         print(importance_df.head(10))
 ```
@@ -238,10 +245,13 @@ def diagnose_model(model, X_test, y_test, feature_names):
 import mlflow
 from pathlib import Path
 
+
 def train_and_log_model(
     model,
-    X_train, y_train,
-    X_val, y_val,
+    X_train,
+    y_train,
+    X_val,
+    y_val,
     hyperparameters: dict,
     experiment_name: str,
 ):
@@ -274,10 +284,10 @@ def train_and_log_model(
         mlflow.sklearn.log_model(model, "model")
 
         # Log feature importance
-        if hasattr(model, 'feature_importances_'):
+        if hasattr(model, "feature_importances_"):
             mlflow.log_dict(
                 dict(zip(X_train.columns, model.feature_importances_)),
-                "feature_importance.json"
+                "feature_importance.json",
             )
 
         return model
@@ -285,11 +295,7 @@ def train_and_log_model(
 
 #### Model Monitoring
 ```python
-def create_monitoring_metrics(
-    y_true, y_pred,
-    X_features,
-    reference_data=None
-):
+def create_monitoring_metrics(y_true, y_pred, X_features, reference_data=None):
     """Generate monitoring metrics for production models.
 
     Monitors:
@@ -299,25 +305,25 @@ def create_monitoring_metrics(
     - Anomaly detection
     """
     metrics = {
-        'timestamp': pd.Timestamp.now(),
-        'n_predictions': len(y_pred),
-        'performance': {
-            'mae': mean_absolute_error(y_true, y_pred),
-            'rmse': np.sqrt(mean_squared_error(y_true, y_pred)),
-        }
+        "timestamp": pd.Timestamp.now(),
+        "n_predictions": len(y_pred),
+        "performance": {
+            "mae": mean_absolute_error(y_true, y_pred),
+            "rmse": np.sqrt(mean_squared_error(y_true, y_pred)),
+        },
     }
 
     # Data drift detection
     if reference_data is not None:
         from scipy.stats import ks_2samp
+
         drift_scores = {}
         for col in X_features.columns:
             stat, pval = ks_2samp(
-                X_features[col].dropna(),
-                reference_data[col].dropna()
+                X_features[col].dropna(), reference_data[col].dropna()
             )
-            drift_scores[col] = {'statistic': stat, 'p_value': pval}
-        metrics['drift'] = drift_scores
+            drift_scores[col] = {"statistic": stat, "p_value": pval}
+        metrics["drift"] = drift_scores
 
     return metrics
 ```
@@ -330,6 +336,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+
 
 class TimeSeriesModel(nn.Module):
     """Production-ready PyTorch model template."""
@@ -349,14 +356,14 @@ class TimeSeriesModel(nn.Module):
             hidden_dim,
             n_layers,
             batch_first=True,
-            dropout=dropout if n_layers > 1 else 0
+            dropout=dropout if n_layers > 1 else 0,
         )
 
         self.fc_layers = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, output_dim)
+            nn.Linear(hidden_dim // 2, output_dim),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -365,6 +372,7 @@ class TimeSeriesModel(nn.Module):
         # Use last hidden state
         out = self.fc_layers(h_n[-1])
         return out
+
 
 # Training loop with best practices
 def train_epoch(model, loader, criterion, optimizer, device):
@@ -396,9 +404,10 @@ def train_epoch(model, loader, criterion, optimizer, device):
 from prophet import Prophet
 from prophet.diagnostics import cross_validation, performance_metrics
 
+
 def create_prophet_model(
     df: pd.DataFrame,
-    seasonality_mode: str = 'multiplicative',
+    seasonality_mode: str = "multiplicative",
     changepoint_prior_scale: float = 0.05,
     holidays: pd.DataFrame = None,
 ) -> Prophet:
@@ -420,22 +429,19 @@ def create_prophet_model(
     )
 
     # Add custom seasonalities
-    model.add_seasonality(
-        name='monthly',
-        period=30.5,
-        fourier_order=5
-    )
+    model.add_seasonality(name="monthly", period=30.5, fourier_order=5)
 
     return model
 
+
 # Cross-validation
-def evaluate_prophet_model(model, df, horizon='30 days'):
+def evaluate_prophet_model(model, df, horizon="30 days"):
     """Evaluate Prophet with time series cross-validation."""
     cv_results = cross_validation(
         model,
-        initial='730 days',  # 2 years initial training
-        period='90 days',     # Refit every 90 days
-        horizon=horizon
+        initial="730 days",  # 2 years initial training
+        period="90 days",  # Refit every 90 days
+        horizon=horizon,
     )
 
     metrics = performance_metrics(cv_results)
@@ -446,6 +452,7 @@ def evaluate_prophet_model(model, df, horizon='30 days'):
 ```python
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
 
 def fit_ensemble_forecast(
     y: pd.Series,
@@ -469,24 +476,18 @@ def fit_ensemble_forecast(
         order=(1, 1, 1),
         seasonal_order=(1, 1, 1, 12),
         enforce_stationarity=False,
-        enforce_invertibility=False
+        enforce_invertibility=False,
     ).fit(disp=False)
-    forecasts['sarima'] = sarima.forecast(steps=horizon, exog=exog)
+    forecasts["sarima"] = sarima.forecast(steps=horizon, exog=exog)
 
     # Exponential Smoothing
     ets = ExponentialSmoothing(
-        y,
-        seasonal_periods=12,
-        trend='add',
-        seasonal='add'
+        y, seasonal_periods=12, trend="add", seasonal="add"
     ).fit()
-    forecasts['ets'] = ets.forecast(steps=horizon)
+    forecasts["ets"] = ets.forecast(steps=horizon)
 
     # Ensemble (simple average, could use weighted)
-    forecasts['ensemble'] = np.mean([
-        forecasts['sarima'],
-        forecasts['ets']
-    ], axis=0)
+    forecasts["ensemble"] = np.mean([forecasts["sarima"], forecasts["ets"]], axis=0)
 
     return forecasts
 ```

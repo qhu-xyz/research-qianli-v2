@@ -64,11 +64,12 @@ from your_module import get_da_shadow  # Your shadow price API
 
 # Build complete dataset with train/val/test splits
 train_df, val_df, test_df = build_training_dataset(
-    get_da_shadow_func=get_da_shadow,
-    save=True  # Save to results/data/processed/
+    get_da_shadow_func=get_da_shadow, save=True  # Save to results/data/processed/
 )
 
-print(f"Train: {len(train_df)} records, Binding: {train_df['target_binding'].mean():.2%}")
+print(
+    f"Train: {len(train_df)} records, Binding: {train_df['target_binding'].mean():.2%}"
+)
 print(f"Val: {len(val_df)} records")
 print(f"Test: {len(test_df)} records")
 ```
@@ -183,13 +184,13 @@ class DataConfig:
 ```python
 from src.data.score_loader import ScoreLoader
 
-loader = ScoreLoader('/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density')
+loader = ScoreLoader("/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density")
 
 # Load single auction month
-df = loader.load_auction_month('2024-01')
+df = loader.load_auction_month("2024-01")
 
 # Load date range
-df = loader.load_date_range('2024-01-01', '2024-03-31')
+df = loader.load_date_range("2024-01-01", "2024-03-31")
 
 # Get constraint statistics
 stats = loader.get_coverage_stats(df)
@@ -205,12 +206,12 @@ from src.data.shadow_price_loader import ShadowPriceLoader
 
 loader = ShadowPriceLoader(
     get_da_shadow_func=get_da_shadow,
-    aggregation_method='mean',  # 'mean', 'max', 'median', 'p95'
-    binding_threshold=0.5
+    aggregation_method="mean",  # 'mean', 'max', 'median', 'p95'
+    binding_threshold=0.5,
 )
 
 # Load shadow prices
-shadow_df = loader.load_shadow_prices('2024-01-01', '2024-03-31')
+shadow_df = loader.load_shadow_prices("2024-01-01", "2024-03-31")
 
 # Aggregate for 3-day periods
 result = loader.aggregate_for_score_data(score_df, shadow_df)
@@ -250,9 +251,7 @@ print(f"Features: {len(feature_cols)}")
 from src.features.temporal import add_temporal_features
 
 df = add_temporal_features(
-    df,
-    timestamp_col='outage_date',
-    use_cyclical=True  # Use sin/cos encoding
+    df, timestamp_col="outage_date", use_cyclical=True  # Use sin/cos encoding
 )
 
 # Added features:
@@ -303,9 +302,9 @@ Non-binding: ~85-95% of data
 from src.data.score_loader import load_scores
 
 scores = load_scores(
-    '/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density',
-    '2024-01-01',
-    '2024-01-31'
+    "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density",
+    "2024-01-01",
+    "2024-01-31",
 )
 print(f"Loaded {len(scores)} score records")
 print(f"Constraints: {scores['constraint_id'].nunique()}")
@@ -313,25 +312,28 @@ print(f"Constraints: {scores['constraint_id'].nunique()}")
 # Test shadow price loader (with mock function)
 from src.data.shadow_price_loader import load_and_aggregate_shadow_prices
 
+
 def mock_get_da_shadow(st, et, class_type):
     # Create mock data for testing
-    dates = pd.date_range(st, et, freq='H')
-    constraints = ['CON_001', 'CON_002']
+    dates = pd.date_range(st, et, freq="H")
+    constraints = ["CON_001", "CON_002"]
     data = []
     for c in constraints:
         for d in dates:
-            data.append({
-                'timestamp': d,
-                'constraint_id': c,
-                'shadow_price': np.random.gamma(2, 10) if np.random.random() < 0.1 else 0.0
-            })
+            data.append(
+                {
+                    "timestamp": d,
+                    "constraint_id": c,
+                    "shadow_price": np.random.gamma(2, 10)
+                    if np.random.random() < 0.1
+                    else 0.0,
+                }
+            )
     return pd.DataFrame(data)
 
+
 result = load_and_aggregate_shadow_prices(
-    scores,
-    mock_get_da_shadow,
-    '2024-01-01',
-    '2024-01-31'
+    scores, mock_get_da_shadow, "2024-01-01", "2024-01-31"
 )
 print(f"Binding rate: {(result['shadow_price_agg'] > 0.5).mean():.2%}")
 ```
@@ -352,16 +354,16 @@ config.data.train_end_date = "2023-12-31"
 
 # 2. Build dataset
 train_df, val_df, test_df = build_training_dataset(
-    get_da_shadow_func=get_da_shadow,
-    config=config,
-    save=True
+    get_da_shadow_func=get_da_shadow, config=config, save=True
 )
 
 # 3. Inspect data
 print(f"\nTraining Set:")
 print(f"  Shape: {train_df.shape}")
 print(f"  Binding rate: {train_df['target_binding'].mean():.2%}")
-print(f"  Date range: {train_df['outage_date'].min()} to {train_df['outage_date'].max()}")
+print(
+    f"  Date range: {train_df['outage_date'].min()} to {train_df['outage_date'].max()}"
+)
 
 # 4. Get features for modeling
 from src.data.dataset_builder import DatasetBuilder
@@ -370,8 +372,8 @@ builder = DatasetBuilder(config=config, get_da_shadow_func=get_da_shadow)
 feature_cols = builder.get_feature_columns(train_df)
 
 X_train = train_df[feature_cols]
-y_train_binding = train_df['target_binding']
-y_train_shadow = train_df['target_shadow_price']
+y_train_binding = train_df["target_binding"]
+y_train_shadow = train_df["target_shadow_price"]
 
 print(f"\nFeature matrix: {X_train.shape}")
 print(f"Target binding distribution: {y_train_binding.value_counts()}")

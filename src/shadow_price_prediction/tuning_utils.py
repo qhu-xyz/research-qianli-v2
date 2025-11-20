@@ -228,7 +228,7 @@ def run_single_experiment(iteration, params, test_periods, save_dir):
         pipeline = ShadowPricePipeline(config)
         
         # Run pipeline (use_parallel=False to avoid nested Ray contexts)
-        results_per_outage, final_results, metrics = pipeline.run(verbose=False, use_parallel=False)
+        results_per_outage, final_results, metrics = pipeline.run(verbose=False, use_parallel=True, n_jobs=2)
         
         # Generate unique ID for this run
         timestamp = time.strftime("%Y%m%d_%H%M%S")

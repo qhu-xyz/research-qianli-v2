@@ -2,11 +2,14 @@
 Prediction pipeline for shadow prices.
 """
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
 from .anomaly_detection import AnomalyDetector
 from .config import PredictionConfig
+from .evaluation import analyze_results
 from .models import ShadowPriceModels, predict_ensemble
 
 
@@ -18,7 +21,7 @@ class Predictor:
         self.models = models
         self.anomaly_detector = anomaly_detector
 
-    def predict(self, test_data: pd.DataFrame, verbose: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def predict(self, test_data: pd.DataFrame, verbose: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         """
         Make predictions on test data.
 
@@ -35,6 +38,8 @@ class Predictor:
             Per-outage-date predictions
         final_results : pd.DataFrame
             Monthly aggregated predictions
+        metrics : dict
+            Evaluation metrics
         """
         if verbose:
             print("\n[Making Predictions with Branch-Specific Models + Flow Anomaly Detection]")
@@ -42,7 +47,7 @@ class Predictor:
 
         # Prepare test features
         X_test = test_data[self.config.features.all_features].copy()
-        y_test = test_data["label"].copy()
+        # y_test = test_data["label"].copy()
 
         # Calculate forecast horizon for weight selection
         # Assumes test_data has auction_month and market_month columns
@@ -86,7 +91,7 @@ class Predictor:
         used_default_reg_count = 0
         no_reg_model_count = 0
 
-        anomaly_detection_stats = {
+        anomaly_detection_stats: dict[str, Any] = {
             "branches_checked": 0,
             "samples_checked": 0,
             "anomalies_detected": 0,
@@ -175,12 +180,19 @@ class Predictor:
                                 forecast_horizon, "regressor", is_branch=False
                             )
 
-                            y_pred_shadow_price[idx] = predict_ensemble(
+                            # Predict shadow price with inverse log-transform
+                            raw_pred = predict_ensemble(
                                 reg_ensemble_anom,
                                 test_sample_reg,
                                 predict_proba=False,
                                 weight_overrides=reg_weights_anom,
                             )[0]
+
+                            y_pred_shadow_price[idx] = np.maximum(0, np.expm1(raw_pred))
+
+                            # Apply heuristic boost for anomalies (Recommendation #1)
+                            # Anomalies are "surprise" events, so we boost the prediction
+                            y_pred_shadow_price[idx] = max(y_pred_shadow_price[idx] * 2.0, 20.0)
 
                         # Track anomaly
                         anomaly_detection_stats["anomalies_detected"] += 1
@@ -338,8 +350,16 @@ class Predictor:
 
                 # Predict shadow prices
                 if reg_ensemble_to_use is not None:
-                    y_pred_shadow_price_branch = predict_ensemble(
-                        reg_ensemble_to_use, X_binding_in_branch, predict_proba=False, weight_overrides=reg_weights
+                    y_pred_shadow_price_branch = np.maximum(
+                        0,
+                        np.expm1(
+                            predict_ensemble(
+                                reg_ensemble_to_use,
+                                X_binding_in_branch,
+                                predict_proba=False,
+                                weight_overrides=reg_weights,
+                            )
+                        ),
                     )
                     y_pred_shadow_price[binding_indices_in_branch] = y_pred_shadow_price_branch
 
@@ -378,11 +398,24 @@ class Predictor:
             verbose,
         )
 
-        return results_per_outage, final_results
+        # Calculate Metrics only if labels are available
+        if results_per_outage["actual_shadow_price"].notna().any():
+            metrics = analyze_results(final_results, results_per_outage, verbose=verbose)
+            if verbose:
+                print("\n[Evaluation Metrics]")
+                for k, v in metrics.items():
+                    print(f"  {k}: {v:.4f}")
+        else:
+            if verbose:
+                print("\n[Evaluation Metrics]")
+                print("  Skipping metrics calculation (no labels available)")
+            metrics = {}
+
+        return results_per_outage, final_results, metrics
 
     def _print_stats(
         self,
-        X_test,
+        X_test,  # noqa: N803
         used_branch_clf,
         used_default_clf,
         used_branch_reg,
@@ -422,6 +455,10 @@ class Predictor:
                         f"flow_100={example['flow_100']:.4f}, conf={example['confidence']:.2f}"
                     )
                     print(f"       {example['reason']}")
+
+    def aggregate_probabilities(self, series):
+        p = 3
+        return np.power((series**p).sum() / len(series), 1 / p)
 
     def _create_results_dataframes(
         self,
@@ -470,8 +507,8 @@ class Predictor:
                     **{feat: "mean" for feat in self.config.features.all_features},
                     "actual_shadow_price": "sum",
                     "predicted_shadow_price": "sum",
-                    "binding_probability": "mean",
-                    "binding_probability_scaled": "mean",
+                    "binding_probability": "max",
+                    "binding_probability_scaled": self.aggregate_probabilities,
                     "threshold": "first",
                     "predicted_binding": "sum",
                     "actual_binding": "max",

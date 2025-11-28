@@ -2,6 +2,8 @@
 Main pipeline for shadow price prediction.
 """
 
+from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -23,6 +25,8 @@ def _process_auction_month(
     test_periods: list[tuple[pd.Timestamp, pd.Timestamp]] | None = None,
     train_only: bool = False,
     verbose: bool = True,
+    output_dir: str | None = None,
+    refresh: bool = False,
 ) -> tuple[list[tuple[pd.DataFrame | None, pd.DataFrame | None, pd.Timestamp, pd.Timestamp]], Any]:
     """
     Process a single auction month: train models once, predict for all market months.
@@ -102,7 +106,7 @@ def _process_auction_month(
 
         if train_data is None or len(train_data) == 0:
             print(f"⚠️ No training data found for auction month {auction_month.strftime('%Y-%m')}. Skipping.")
-            return [(None, None, auction_month, mm) for mm in market_months]
+            return [(None, None, auction_month, mm) for mm in market_months], None
 
         # Step 2.5: Scale Features - MOVED TO PER-MODEL TRAINING
         # We no longer scale globally here. Scaling happens inside train_classifiers/train_regressors
@@ -116,6 +120,7 @@ def _process_auction_month(
         # Load test data for all market months to get unique branches
         # OPTIMIZATION: We load, extract branches, and discard data to save memory
         all_test_branches = set()
+        test_data_cache = {}
 
         for market_month in market_months:
             if verbose:
@@ -127,15 +132,13 @@ def _process_auction_month(
             if test_data is not None and len(test_data) > 0:
                 all_test_branches.update(test_data["branch_name"].unique())
 
-            # Free memory immediately
-            del test_data
-            import gc
-
-            gc.collect()
+            # Cache data for later use (Step 6) since we have enough memory
+            if test_data is not None:
+                test_data_cache[market_month] = test_data
 
         if len(all_test_branches) == 0:
             print(f"⚠️ No test data found for any market month in auction {auction_month.strftime('%Y-%m')}. Skipping.")
-            return [(None, None, auction_month, mm) for mm in market_months]
+            return [(None, None, auction_month, mm) for mm in market_months], None
 
         if verbose:
             print(f"  Found {len(all_test_branches)} unique branches across {len(market_months)} market month(s).")
@@ -176,7 +179,7 @@ def _process_auction_month(
         if train_only:
             if verbose:
                 print(f"\n✅ Training Complete for Auction Month {auction_month.strftime('%Y-%m')}")
-            return [(None, None, auction_month, mm) for mm in market_months]
+            return [(None, None, auction_month, mm) for mm in market_months], None
 
         # Step 6: Make predictions for ALL market months (using the same trained models)
         if verbose:
@@ -190,8 +193,28 @@ def _process_auction_month(
             if verbose:
                 print(f"  Predicting for market month: {market_month.strftime('%Y-%m')}")
 
+            # Check if result already exists
+            if output_dir is not None and not refresh:
+                output_path = Path(output_dir)
+                auc_month_str = auction_month.strftime("%Y-%m")
+                market_month_str = market_month.strftime("%Y-%m")
+                output_file = (
+                    output_path
+                    / f"auction_month={auc_month_str}/market_month={market_month_str}/class_type={config.class_type}/final_results.parquet"
+                )
+
+                if output_file.exists():
+                    if verbose:
+                        print(f"  ⚠️  Result already exists for {market_month.strftime('%Y-%m')}. Skipping.")
+                    results.append((None, None, auction_month, market_month))
+                    continue
+
             # Reload test data (trade-off: I/O vs Memory)
-            test_data = period_data_loader.load_test_data_for_period(auction_month, market_month, verbose=False)
+            # Use cached data if available
+            if market_month in test_data_cache:
+                test_data = test_data_cache[market_month]
+            else:
+                test_data = period_data_loader.load_test_data_for_period(auction_month, market_month, verbose=False)
 
             if test_data is None or len(test_data) == 0:
                 if verbose:
@@ -206,13 +229,31 @@ def _process_auction_month(
             # scaler = period_models.get_scaler(horizon_months)
             # if scaler:
             #     test_data[feature_cols] = scaler.transform(test_data[feature_cols])
-            pass
 
-            results_per_outage, final_results = period_predictor.predict(test_data, verbose=False)
+            # test_data.to_parquet(f'/opt/temp/haoyan/test_data_{market_month.strftime("%Y-%m")}.parquet')
+            results_per_outage, final_results, metrics = period_predictor.predict(test_data, verbose=False)
+
+            # Save results immediately if output_dir is provided
+            if output_dir is not None:
+                output_path = Path(output_dir)
+                auc_month_str = auction_month.strftime("%Y-%m")
+                market_month_str = market_month.strftime("%Y-%m")
+                output_file = (
+                    output_path
+                    / f"auction_month={auc_month_str}/market_month={market_month_str}/class_type={config.class_type}/"
+                )
+                output_file.mkdir(parents=True, exist_ok=True)
+                final_results.to_parquet(output_file / "final_results.parquet")
+
+                if verbose:
+                    print(f"  Saved final results to: {output_file}")
+
             results.append((results_per_outage, final_results, auction_month, market_month))
 
             # Free memory
             del test_data
+            import gc
+
             gc.collect()
 
         if verbose:
@@ -249,11 +290,15 @@ class ShadowPricePipeline:
     def run(
         self,
         test_periods: list[tuple[pd.Timestamp, pd.Timestamp]] | dict[pd.Timestamp, list[pd.Timestamp]],
+        class_type: str | None = None,
         train_only: bool = False,
         predict_only: bool = False,
         verbose: bool = True,
         use_parallel: bool = True,
         n_jobs: int = 0,
+        save_results: bool = False,  # Deprecated but kept for compatibility
+        output_dir: str | None = None,
+        refresh: bool = False,
     ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         """
         Run the complete prediction pipeline with parallel processing.
@@ -269,6 +314,8 @@ class ShadowPricePipeline:
             Either:
             - List of (auction_month, market_month) tuples
             - Dictionary mapping auction_month -> list of market_months
+        class_type : str, optional
+            Override the class_type in the configuration (e.g. 'onpeak', 'offpeak')
         train_only : bool
             If True, only train models without prediction
         predict_only : bool
@@ -306,6 +353,12 @@ class ShadowPricePipeline:
                 "No test periods provided. Pass test_periods to run() or configure them in PredictionConfig."
             )
 
+        # Create run-specific config if class_type is provided
+        if class_type is not None:
+            run_config = replace(self.config, class_type=class_type)
+        else:
+            run_config = self.config
+
         # Group test periods by auction month
         from collections import defaultdict
 
@@ -335,8 +388,8 @@ class ShadowPricePipeline:
                 print(f"  Auction: {auction_month.strftime('%Y-%m')} → {len(market_months)} market month(s)")
                 for mm in sorted(market_months):
                     print(f"    - Market: {mm.strftime('%Y-%m')}")
-            print(f"Class Type: {self.config.class_type}")
-            print(f"Period Type: {self.config.period_type}")
+            print(f"Class Type: {run_config.class_type}")
+            print(f"Period Type: {run_config.period_type}")
             if use_parallel and len(auction_month_groups) > 1:
                 n_jobs_str = "auto-determined" if n_jobs == 0 else ("all CPUs" if n_jobs == -1 else str(n_jobs))
                 print(f"\n🚀 Using Ray parallel processing for {len(auction_month_groups)} auction months")
@@ -349,12 +402,14 @@ class ShadowPricePipeline:
         # Each dict contains all kwargs needed for one _process_auction_month call
         param_dict_list = [
             {
-                "config": self.config,
+                "config": run_config,
                 "auction_month": auction_month,
                 "market_months": market_months,
-                "test_periods": periods_to_process,  # Pass the actual test_periods
+                "test_periods": test_periods if isinstance(test_periods, list) else None,
                 "train_only": train_only,
-                "verbose": verbose,
+                "verbose": verbose and (not use_parallel),  # Reduce verbosity in parallel
+                "output_dir": output_dir,
+                "refresh": refresh,
             }
             for auction_month, market_months in auction_month_groups
         ]
@@ -402,7 +457,7 @@ class ShadowPricePipeline:
 
         for auction_result_item in auction_results:
             # Handle potential wrapping (e.g. if parallel pool returns [result])
-            if isinstance(auction_result_item, (list, tuple)) and len(auction_result_item) == 1:
+            if isinstance(auction_result_item, list | tuple) and len(auction_result_item) == 1:
                 auction_result_tuple = auction_result_item[0]
             else:
                 auction_result_tuple = auction_result_item
@@ -441,11 +496,31 @@ class ShadowPricePipeline:
                 f"to {combined_results_per_outage['outage_date'].max().strftime('%Y-%m-%d')}"
             )
 
+        # Save results if requested - REMOVED (Moved to _process_auction_month for immediate saving)
+        # if output_dir is not None:
+        #     output_path = Path(output_dir)
+        #
+        #     for (auction_month, market_month), gp in combined_final_results.groupby(["auction_month", "market_month"]):
+        #         auc_month_str = auction_month.strftime("%Y-%m")
+        #         market_month_str = market_month.strftime("%Y-%m")
+        #         output_file = output_path / f"auction_month={auc_month_str}/market_month={market_month_str}/"
+        #         output_file.mkdir(parents=True, exist_ok=True)
+        #         gp.to_parquet(output_file / "final_results.parquet")
+        #
+        #     if verbose:
+        #         print(f"\n[SAVING RESULTS]")
+        #         print(f"  Saved final results to: {output_path}")
+
         # Analyze combined results
         if verbose:
             print("\n[ANALYZING COMBINED RESULTS]")
 
-        metrics = analyze_results(combined_results_per_outage, combined_final_results, verbose)
+        if combined_results_per_outage["actual_shadow_price"].notna().any():
+            metrics = analyze_results(combined_results_per_outage, combined_final_results, verbose)
+        else:
+            if verbose:
+                print("  Skipping metrics calculation (no labels available)")
+            metrics = {}
 
         if verbose:
             print("\n" + "=" * 80)
@@ -454,7 +529,9 @@ class ShadowPricePipeline:
 
         return combined_results_per_outage, combined_final_results, metrics
 
-    def predict_new_data(self, test_data: pd.DataFrame, verbose: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def predict_new_data(
+        self, test_data: pd.DataFrame, verbose: bool = True
+    ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         """
         Make predictions on new test data using already-trained models.
 
@@ -471,8 +548,10 @@ class ShadowPricePipeline:
             Per-outage-date predictions
         final_results : pd.DataFrame
             Monthly aggregated predictions
+        metrics : dict
+            Evaluation metrics
         """
-        if self.models.clf_default is None:
+        if not self.models.scalers_default:
             raise ValueError("Models not trained. Run pipeline.run() first or set predict_only=False")
 
         return self.predictor.predict(test_data, verbose)

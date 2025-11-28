@@ -20,7 +20,7 @@ def load_previous_params(save_dir: Path) -> set[tuple]:
         Set of tuples representing previously searched parameter combinations
     """
     metrics_dir = save_dir / "metrics"
-    seen_params = set()
+    seen_params: set[tuple] = set()
 
     if not metrics_dir.exists():
         print(f"Metrics directory {metrics_dir} does not exist. Starting fresh.")
@@ -93,7 +93,7 @@ def sample_params(
     if seen_params is None:
         seen_params = set()
 
-    for attempt in range(max_retries):
+    for _ in range(max_retries):
         # Sample parameters
         params = {}
         for param_name, param_values in param_grid.items():
@@ -134,7 +134,6 @@ def update_config_with_params(config, params):
     Returns:
         Updated config
     """
-    from sklearn.linear_model import ElasticNet, LogisticRegression
     from xgboost import XGBClassifier, XGBRegressor
 
     from shadow_price_prediction.config import ModelConfig, ModelSpec
@@ -156,24 +155,24 @@ def update_config_with_params(config, params):
     }
 
     # --- Update Logistic Regression Parameters ---
-    lr_params = {
-        "penalty": params["lr_penalty"],
-        "C": params["lr_C"],
-        "max_iter": 1000,
-        "class_weight": "balanced",
-        "random_state": 42,
-        "n_jobs": 1,
-        "solver": "lbfgs",
-    }
+    # lr_params = {
+    #     "penalty": params["lr_penalty"],
+    #     "C": params["lr_C"],
+    #     "max_iter": 1000,
+    #     "class_weight": "balanced",
+    #     "random_state": 42,
+    #     "n_jobs": 1,
+    #     "solver": "lbfgs",
+    # }
 
     # Update Ensemble Config (Classifiers)
     config.models.default_classifiers = [
-        ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), params["clf_xgb_thres"]),
-        ModelSpec(LogisticRegression, ModelConfig(lr_params), 1 - params["clf_xgb_thres"]),
+        ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), 1),
+        # ModelSpec(LogisticRegression, ModelConfig(lr_params), 1 - params["clf_xgb_thres"]),
     ]
     config.models.branch_classifiers = [
-        ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), params["clf_xgb_thres"]),
-        ModelSpec(LogisticRegression, ModelConfig(lr_params), 1 - params["clf_xgb_thres"]),
+        ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), 1),
+        # ModelSpec(LogisticRegression, ModelConfig(lr_params), 1 - params["clf_xgb_thres"]),
     ]
 
     # --- Update XGBoost Regressor Parameters ---
@@ -193,28 +192,35 @@ def update_config_with_params(config, params):
     }
 
     # --- Update ElasticNet Parameters ---
-    enet_params = {
-        "alpha": params["enet_alpha"],
-        "l1_ratio": params["enet_l1_ratio"],
-        "max_iter": 1000,
-        "fit_intercept": True,
-    }
+    # enet_params = {
+    #     "alpha": params["enet_alpha"],
+    #     "l1_ratio": params["enet_l1_ratio"],
+    #     "max_iter": 1000,
+    #     "fit_intercept": True,
+    # }
 
     # Update Ensemble Config (Regressors)
     config.models.default_regressors = [
-        ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), params["reg_xgb_thres"]),
-        ModelSpec(ElasticNet, ModelConfig(enet_params), 1 - params["reg_xgb_thres"]),
+        ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), 1),
+        # ModelSpec(ElasticNet, ModelConfig(enet_params), 1 - params["reg_xgb_thres"]),
     ]
     config.models.branch_regressors = [
-        ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), params["reg_xgb_thres"]),
-        ModelSpec(ElasticNet, ModelConfig(enet_params), 1 - params["reg_xgb_thres"]),
+        ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), 1),
+        # ModelSpec(ElasticNet, ModelConfig(enet_params), 1 - params["reg_xgb_thres"]),
     ]
-    config.models.short_term_clf_weights = [params["short_term_clf_xgb_w"], 1 - params["short_term_clf_xgb_w"]]
-    config.models.short_term_reg_weights = [params["short_term_reg_xgb_w"], 1 - params["short_term_reg_xgb_w"]]
-    config.models.medium_term_clf_weights = [params["medium_term_clf_xgb_w"], 1 - params["medium_term_clf_xgb_w"]]
-    config.models.medium_term_reg_weights = [params["medium_term_reg_xgb_w"], 1 - params["medium_term_reg_xgb_w"]]
-    config.models.long_term_clf_weights = [params["long_term_clf_xgb_w"], 1 - params["long_term_clf_xgb_w"]]
-    config.models.long_term_reg_weights = [params["long_term_reg_xgb_w"], 1 - params["long_term_reg_xgb_w"]]
+    # config.models.short_term_clf_weights = [params["short_term_clf_xgb_w"], 1 - params["short_term_clf_xgb_w"]]
+    # config.models.short_term_reg_weights = [params["short_term_reg_xgb_w"], 1 - params["short_term_reg_xgb_w"]]
+    # config.models.medium_term_clf_weights = [params["medium_term_clf_xgb_w"], 1 - params["medium_term_clf_xgb_w"]]
+    # config.models.medium_term_reg_weights = [params["medium_term_reg_xgb_w"], 1 - params["medium_term_reg_xgb_w"]]
+    # config.models.long_term_clf_weights = [params["long_term_clf_xgb_w"], 1 - params["long_term_clf_xgb_w"]]
+    # config.models.long_term_reg_weights = [params["long_term_reg_xgb_w"], 1 - params["long_term_reg_xgb_w"]]
+    config.models.short_term_clf_weights = [1]
+    config.models.short_term_reg_weights = [1]
+    config.models.medium_term_clf_weights = [1]
+    config.models.medium_term_reg_weights = [1]
+    config.models.long_term_clf_weights = [1]
+    config.models.long_term_reg_weights = [1]
+    config.class_type = params["class_type"]
 
     # --- Update Threshold Config ---
     config.threshold.threshold_beta = params["threshold_beta"]

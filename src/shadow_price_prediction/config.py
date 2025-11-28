@@ -17,8 +17,8 @@ class FeatureConfig:
             # '110', '105', '100', '95', '90',
             # '105_diff', '100_diff', '95_diff', '90_diff',
             # '85_diff', '80_diff', '70_diff', '60_diff',
-            "risk_ratio",
-            "curvature_100",
+            # "risk_ratio",
+            # "curvature_100",
             "prob_exceed_110",
             "prob_exceed_105",
             "prob_exceed_100",
@@ -39,8 +39,8 @@ class FeatureConfig:
             # '110',
             # '105_diff', '100_diff', '95_diff', '90_diff',
             # '85_diff', '80_diff', '70_diff', '60_diff',
-            "risk_ratio",
-            "curvature_100",
+            # "risk_ratio",
+            # "curvature_100",
             "prob_exceed_110",
             "prob_exceed_105",
             "prob_exceed_100",
@@ -403,6 +403,7 @@ class ThresholdConfig:
     threshold_range_end: float = 0.99
     threshold_range_steps: int = 99
     threshold_beta: float = 0.5  # F-beta score beta parameter (0.5 favors precision)
+    threshold_scaling_factor: float = 1.0  # Scale factor for optimal threshold (heuristic to avoid overfitting)
 
     # Dynamic Thresholds (4.B)
     # Adjust threshold based on predicted shadow price magnitude
@@ -441,7 +442,8 @@ class PredictionConfig:
 
     # Market parameters
     period_type: str = "f0"
-    class_type: str = "onpeak"
+    # class_type: str = "onpeak"
+    class_type: str = "offpeak"
     market_round: int = 1
 
     # Path configuration

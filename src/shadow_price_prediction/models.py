@@ -10,7 +10,7 @@ from joblib import Parallel, delayed
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import fbeta_score
 from sklearn.model_selection import GroupKFold, cross_val_predict
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from .config import ModelSpec, PredictionConfig
 
@@ -36,7 +36,7 @@ class StackingModel:
         self.split_by_groups = split_by_groups
         self.is_fitted = False
 
-    def fit(self, X, y, groups=None):
+    def fit(self, X, y, groups=None):  # noqa: N803
         # 1. Train base models
         # To avoid overfitting, we should ideally use cross-val predictions for the meta-model training
         # But for simplicity in this custom implementation, we'll use the standard approach:
@@ -69,7 +69,7 @@ class StackingModel:
         self.is_fitted = True
         return self
 
-    def predict(self, X):
+    def predict(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError("Model not fitted")
 
@@ -84,7 +84,7 @@ class StackingModel:
         meta_X = np.hstack(meta_features)
         return self.meta_model.predict(meta_X)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError("Model not fitted")
 
@@ -100,7 +100,7 @@ class StackingModel:
         return self.meta_model.predict_proba(meta_X)
 
 
-def create_model(model_spec: ModelSpec, is_classifier: bool = True, scale_pos_weight: float = None) -> Any:
+def create_model(model_spec: ModelSpec, is_classifier: bool = True, scale_pos_weight: float | None = None) -> Any:
     """
     Factory function to create a model instance based on ModelSpec.
 
@@ -136,7 +136,7 @@ def create_model(model_spec: ModelSpec, is_classifier: bool = True, scale_pos_we
 
 def train_ensemble(
     model_specs: list[ModelSpec],
-    X: pd.DataFrame,
+    X: pd.DataFrame,  # noqa: N803
     y: pd.Series,
     is_classifier: bool = True,
     use_stacking: bool = False,
@@ -192,7 +192,7 @@ def train_ensemble(
 
 def predict_ensemble(
     ensemble: list[tuple[Any, float]],
-    X: pd.DataFrame,
+    X: pd.DataFrame,  # noqa: N803
     predict_proba: bool = False,
     weight_overrides: list[float] | None = None,
 ) -> np.ndarray:
@@ -249,7 +249,11 @@ def predict_ensemble(
 
 
 def find_optimal_threshold(
-    y_true: np.ndarray, y_proba: np.ndarray, thresholds: np.ndarray = None, beta: float = 0.5
+    y_true: np.ndarray,
+    y_proba: np.ndarray,
+    thresholds: np.ndarray = None,
+    beta: float = 0.5,
+    scaling_factor: float = 1.0,
 ) -> tuple[float, float]:
     """
     Find optimal classification threshold that maximizes F-beta score.
@@ -285,10 +289,10 @@ def find_optimal_threshold(
     optimal_threshold = thresholds[optimal_idx]
     max_fbeta = fbeta_scores[optimal_idx]
 
+    # Apply scaling factor (heuristic to avoid overfitting)
+    optimal_threshold = scaling_factor * optimal_threshold + (1 - scaling_factor) * 0.5
+
     return optimal_threshold, max_fbeta
-
-
-from sklearn.preprocessing import StandardScaler
 
 
 class ShadowPriceModels:
@@ -432,7 +436,11 @@ class ShadowPriceModels:
             # Optimize threshold using ensemble predictions
             y_proba_train_branch = predict_ensemble(clf_ensemble, X_branch, predict_proba=True)
             optimal_threshold_branch, _ = find_optimal_threshold(
-                y_branch_binary, y_proba_train_branch, thresholds, self.config.threshold.threshold_beta
+                y_branch_binary,
+                y_proba_train_branch,
+                thresholds,
+                self.config.threshold.threshold_beta,
+                self.config.threshold.threshold_scaling_factor,
             )
 
             return branch_name, clf_ensemble, optimal_threshold_branch, scaler_branch
@@ -462,7 +470,7 @@ class ShadowPriceModels:
             # Filter for binding constraints (label > 0)
             binding_mask = branch_data_scaled["label"] > 0
             X_branch_reg = branch_data_scaled.loc[binding_mask, self.config.features.step2_features].copy()
-            y_branch_reg = branch_data_scaled.loc[binding_mask, "label"].copy()
+            y_branch_reg = np.log1p(branch_data_scaled.loc[binding_mask, "label"].copy())
             groups_branch_reg = (
                 branch_data_scaled.loc[binding_mask, "auction_month"].values
                 if "auction_month" in branch_data_scaled.columns
@@ -613,7 +621,7 @@ class ShadowPriceModels:
 
             if verbose:
                 n_models = len(default_ensemble)
-                model_names = [spec.model_class.__name__ for spec in self.config.models.default_classifiers]
+                # model_names = [spec.model_class.__name__ for spec in self.config.models.default_classifiers]
                 print(f"    ✓ Default ensemble trained ({n_models} models)")
                 print(f"    Total samples: {len(X_train_all):,}")
 
@@ -628,7 +636,11 @@ class ShadowPriceModels:
                 self.config.threshold.threshold_range_steps,
             )
             optimal_threshold, max_f1 = find_optimal_threshold(
-                y_train_binary_all, y_proba_train_all, thresholds, self.config.threshold.threshold_beta
+                y_train_binary_all,
+                y_proba_train_all,
+                thresholds,
+                self.config.threshold.threshold_beta,
+                self.config.threshold.threshold_scaling_factor,
             )
             setattr(self, default_threshold_attr, optimal_threshold)
 
@@ -754,7 +766,7 @@ class ShadowPriceModels:
 
             binding_mask_all = y_train_all_reg > self.config.training.label_threshold
             X_train_binding_all = X_train_all_reg[binding_mask_all]
-            y_train_binding_all = y_train_all_reg[binding_mask_all]
+            y_train_binding_all = np.log1p(y_train_all_reg[binding_mask_all])
 
             if groups_all_reg is not None:
                 groups_binding_all = groups_all_reg[binding_mask_all]
@@ -774,7 +786,7 @@ class ShadowPriceModels:
 
                 if verbose:
                     n_models = len(default_ensemble)
-                    model_names = [spec.model_class.__name__ for spec in self.config.models.default_regressors]
+                    # model_names = [spec.model_class.__name__ for spec in self.config.models.default_regressors]
                     print(f"    ✓ Default ensemble trained ({n_models} models)")
                     print(f"    Binding samples: {len(X_train_binding_all):,}")
             else:

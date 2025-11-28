@@ -80,9 +80,14 @@ class DataLoader:
 
         return required_periods
 
-    def get_training_period(self) -> tuple[pd.Timestamp, pd.Timestamp]:
+    def get_training_period(self, auction_month: pd.Timestamp) -> tuple[pd.Timestamp, pd.Timestamp]:
         """
-        Calculate the training period based on the configured test auction month.
+        Calculate the training period based on the target auction month.
+
+        Parameters:
+        -----------
+        auction_month : pd.Timestamp
+            Target auction month
 
         Returns:
         --------
@@ -92,13 +97,28 @@ class DataLoader:
             End of training period (exclusive)
         """
         # Training ends at the start of the test auction month
-        train_end = self.config.test_auction_month
+        train_end = auction_month
         # Training starts N months before
         train_start = train_end - pd.offsets.MonthBegin(self.config.training.train_months_lookback)
 
         return train_start, train_end
 
-    @cache
+    def get_branch_map(self, da):
+        da_label_constraint_id_branch_map = da[["constraint_id", "branch_name"]].copy()
+        da_label_constraint_id_branch_map = da_label_constraint_id_branch_map[
+            (da_label_constraint_id_branch_map["branch_name"] != "None")
+            & da_label_constraint_id_branch_map["branch_name"].notna()
+        ].drop_duplicates(subset=["branch_name", "branch_name"])[["constraint_id", "branch_name"]]
+        da_label_constraint_id_branch_map["branch_name"] = (
+            da_label_constraint_id_branch_map["branch_name"].str.rsplit("(", n=1).str[0]
+        )
+        da_label_constraint_id_branch_map["branch_name"] = da_label_constraint_id_branch_map["branch_name"].str.strip()
+        da_label_constraint_id_branch_map = da_label_constraint_id_branch_map.set_index("constraint_id")["branch_name"]
+        da_label_constraint_id_branch_map = da_label_constraint_id_branch_map[
+            da_label_constraint_id_branch_map.index.duplicated(keep="last")
+        ]
+        return da_label_constraint_id_branch_map
+
     def get_historical_shadow(self, auction_month, market_month, class_type):
         run_at_day = 10
         cutoff_month = auction_month - pd.offsets.MonthBegin(1)
@@ -133,8 +153,10 @@ class DataLoader:
             return da
 
         recent_da = get_da(recent_month_list)
+        recent_da_branch = self.get_branch_map(recent_da)
         recent_da = recent_da.groupby("constraint_id")["shadow_price"].sum().abs() / len(recent_month_list)
         season_da = get_da(season_list)
+        season_da_branch = self.get_branch_map(season_da)
         season_da["planning_year"] = season_da.index.year + np.where(season_da.index.month < 6, -1, 0)
         season_da = season_da.groupby(["constraint_id", "planning_year"])["shadow_price"].sum().abs().reset_index()
         planning_year = auction_month.year
@@ -147,14 +169,15 @@ class DataLoader:
         season_da = season_da.pivot(index="constraint_id", columns="planning_year", values="shadow_price").fillna(0)
         recent_da = np.log1p(recent_da)
         season_da = np.log1p(season_da)
-        return recent_da, season_da
+        return recent_da, season_da, recent_da_branch, season_da_branch
 
     def load_data_for_outage(
         self,
         auction_month: pd.Timestamp,
         market_month: pd.Timestamp,
         outage_date: pd.Timestamp,
-        constraint_period_type: str | None = None,
+        constraint_period_type: str = "f0",
+        require_label: bool = True,
     ) -> pd.DataFrame | None:
         """
         Load training data (score features + shadow price labels) for a single outage date.
@@ -250,7 +273,7 @@ class DataLoader:
 
                     if len(x_range) > 1:
                         cols = [str(x) for x in x_range]
-                        res[name] = np.trapz(y=df[cols].values, x=x_range, axis=1)
+                        res[name] = np.trapezoid(y=df[cols].values, x=x_range, axis=1)
                     else:
                         res[name] = 0.0
 
@@ -264,7 +287,7 @@ class DataLoader:
 
                 # if len(overload_x) > 1:
                 #     cols = [str(x) for x in overload_x]
-                #     res['prob_overload'] = np.trapz(y=df[cols].values, x=overload_x, axis=1)
+                #     res['prob_overload'] = np.trapezoid(y=df[cols].values, x=overload_x, axis=1)
                 # else:
                 #     res['prob_overload'] = 0.0
 
@@ -279,7 +302,7 @@ class DataLoader:
 
                     if len(x_range) > 1:
                         cols = [str(x) for x in x_range]
-                        res[feat_name] = np.trapz(y=df[cols].values, x=x_range, axis=1)
+                        res[feat_name] = np.trapezoid(y=df[cols].values, x=x_range, axis=1)
                     else:
                         res[feat_name] = 0.0
 
@@ -291,7 +314,7 @@ class DataLoader:
 
                 if len(safe_x) > 1:
                     cols = [str(x) for x in safe_x]
-                    safe_mass = np.trapz(y=df[cols].values, x=safe_x, axis=1)
+                    safe_mass = np.trapezoid(y=df[cols].values, x=safe_x, axis=1)
                 else:
                     safe_mass = 0.0
 
@@ -326,19 +349,45 @@ class DataLoader:
             outage_st = outage_date
             outage_et = outage_date + pd.Timedelta(days=4)
 
-            # Use cached function for current month labels
-            da_label = fetch_da_shadow(market_month, market_month + pd.offsets.MonthBegin(1), self.config.class_type)
+            da_label_chunk = None
+            if require_label:
+                try:
+                    # Use cached function for current month labels
+                    da_label = fetch_da_shadow(
+                        market_month, market_month + pd.offsets.MonthBegin(1), self.config.class_type
+                    )
 
-            da_label = da_label.copy()  # Copy to avoid modifying cached object
-            da_label.index = da_label.index.tz_localize(None)
+                    da_label = da_label.copy()  # Copy to avoid modifying cached object
+                    da_label.index = da_label.index.tz_localize(None)
 
-            # Aggregate shadow prices for this outage period (SUM)
-            da_label_chunk = (
-                da_label.loc[(da_label.index >= outage_st) & (da_label.index < outage_et)]
-                .groupby("constraint_id")["shadow_price"]
-                .sum()
-                .abs()
-            )
+                    # Aggregate shadow prices for this outage period (SUM)
+                    da_filtered = da_label.loc[(da_label.index >= outage_st) & (da_label.index < outage_et)]
+                    da_label_chunk = da_filtered.groupby("constraint_id")["shadow_price"].sum().abs()
+
+                    # Create mapping for label branch names
+                    da_label_constraint_id_branch_map = da_filtered[["constraint_id", "branch_name"]].copy()
+                    da_label_constraint_id_branch_map = da_label_constraint_id_branch_map[
+                        (da_label_constraint_id_branch_map["branch_name"] != "None")
+                        & da_label_constraint_id_branch_map["branch_name"].notna()
+                    ].drop_duplicates(subset=["branch_name", "branch_name"])[["constraint_id", "branch_name"]]
+                    da_label_constraint_id_branch_map["branch_name"] = (
+                        da_label_constraint_id_branch_map["branch_name"].str.rsplit("(", n=1).str[0]
+                    )
+                    da_label_constraint_id_branch_map["branch_name"] = da_label_constraint_id_branch_map[
+                        "branch_name"
+                    ].str.strip()
+                    da_label_constraint_id_branch_map = da_label_constraint_id_branch_map.set_index("constraint_id")[
+                        "branch_name"
+                    ]
+                    da_label_constraint_id_branch_map = da_label_constraint_id_branch_map[
+                        da_label_constraint_id_branch_map.index.duplicated(keep="last")
+                    ]
+                except Exception as e:
+                    print(f"    ⚠️ Failed to load labels for {market_month}: {e}")
+                    da_label_chunk = None
+
+            # Load constraint info using cache
+            cons = fetch_constraints(cons_path)
 
             # Load constraint info using cache
             cons = fetch_constraints(cons_path)
@@ -356,19 +405,29 @@ class DataLoader:
             else:
                 full_df["branch_name"] = full_df.index.map(spice_map)
 
-            da_label_chunk.index = da_label_chunk.index.map(spice_map)
-            da_label_chunk = da_label_chunk.groupby(level=0).sum()
+            if da_label_chunk is not None:
+                da_label_chunk_index = pd.Series(da_label_chunk.index.map(spice_map), index=da_label_chunk.index)
+                da_label_chunk_index = da_label_chunk_index.fillna(da_label_constraint_id_branch_map)
+                da_label_chunk.index = da_label_chunk_index.values
+                da_label_chunk = da_label_chunk.groupby(level=0).sum()
 
-            recent_hist_da, season_hist_da = self.get_historical_shadow(
+            recent_hist_da, season_hist_da, recent_hist_da_branch, season_hist_da_branch = self.get_historical_shadow(
                 auction_month, market_month, self.config.class_type
             )
-            recent_hist_da.index = recent_hist_da.index.map(spice_map)
+            recent_hist_da_index = pd.Series(recent_hist_da.index.map(spice_map), index=recent_hist_da.index)
+            recent_hist_da_index = recent_hist_da_index.fillna(recent_hist_da_branch)
+            recent_hist_da.index = recent_hist_da_index.values
             recent_hist_da = recent_hist_da.groupby(level=0).sum()
-            season_hist_da.index = season_hist_da.index.map(spice_map)
+            season_hist_da_index = pd.Series(season_hist_da.index.map(spice_map), index=season_hist_da.index)
+            season_hist_da_index = season_hist_da_index.fillna(season_hist_da_branch)
+            season_hist_da.index = season_hist_da_index.values
             season_hist_da = season_hist_da.groupby(level=0).sum()
 
             # Assign labels
-            full_df["label"] = full_df["branch_name"].map(da_label_chunk).fillna(0)
+            if da_label_chunk is not None:
+                full_df["label"] = full_df["branch_name"].map(da_label_chunk).fillna(0)
+            else:
+                full_df["label"] = np.nan
             full_df["recent_hist_da"] = full_df["branch_name"].map(recent_hist_da).fillna(0)
             full_df = full_df.merge(season_hist_da, left_on="branch_name", right_index=True, how="left")
             cols = full_df.filter(like="season_hist_da_").columns
@@ -579,9 +638,30 @@ class DataLoader:
         if verbose:
             print(f"  Scanning for outage dates in {market_month.strftime('%Y-%m')}...")
 
+        # Determine constraint_period_type based on horizon
+        horizon = (market_month.year - auction_month.year) * 12 + (market_month.month - auction_month.month)
+        constraint_period_type = self.config.period_type  # Default
+
+        if horizon == 0:
+            constraint_period_type = "f0"
+        elif horizon == 1:
+            constraint_period_type = "f1"
+        elif horizon == 2:
+            constraint_period_type = "f2"
+        elif horizon == 3:
+            constraint_period_type = "f3"
+        # For quarters, it's more complex, but we can try to infer or stick to default if unsure
+        # Assuming standard f0-f3 for now as they are most common for monthly predictions
+
         loaded_outage_count = 0
         for outage_date in test_outage_dates:
-            data = self.load_data_for_outage(auction_month, market_month, outage_date)
+            data = self.load_data_for_outage(
+                auction_month,
+                market_month,
+                outage_date,
+                constraint_period_type=constraint_period_type,
+                require_label=False,
+            )
 
             if data is not None and len(data) > 0:
                 test_data_list.append(data)

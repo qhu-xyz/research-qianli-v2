@@ -77,7 +77,7 @@ class HyperparameterTuner:
             scoring=scoring,
             cv=tscv,
             verbose=self.verbose,
-            n_jobs=-1,  # Use all cores
+            n_jobs=1,  # Disable internal parallelism to avoid conflicts
             random_state=42,
         )
 

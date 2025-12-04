@@ -12,46 +12,57 @@ class FeatureConfig:
     """Feature column configuration."""
 
     # Classification features (raw + engineered)
-    step1_features: list[str] = field(
+    # Format: (feature_name, monotonicity_constraint)
+    # 1 = increasing, -1 = decreasing, 0 = no constraint
+    step1_features: list[tuple[str, int]] = field(
         default_factory=lambda: [
-            # '110', '105', '100', '95', '90',
-            # '105_diff', '100_diff', '95_diff', '90_diff',
-            # '85_diff', '80_diff', '70_diff', '60_diff',
-            # "risk_ratio",
-            # "curvature_100",
-            "prob_exceed_110",
-            "prob_exceed_105",
-            "prob_exceed_100",
-            "prob_exceed_95",
-            "prob_exceed_90",
-            # 'log_density_100',
-            "season_hist_da_1",
-            "season_hist_da_2",
-            "season_hist_da_3",
-            "recent_hist_da",
-            # 'forecast_horizon'
+            ("prob_exceed_110", 1),
+            ("prob_exceed_105", 1),
+            ("prob_exceed_100", 1),
+            ("prob_exceed_95", 1),
+            ("prob_exceed_90", 1),
+            # ("prob_exceed_85", 1),
+            # ("prob_exceed_80", 1),
+            ("hist_da", 1),
+            # ("105_diff", 0),
+            # ("100_diff", 0),
+            # ("95_diff", 0),
+            # ("90_diff", 0),
+            # ("85_diff", 0),
+            # ("80_diff", 0),
+            # ("70_diff", 0),
+            # ("60_diff", 0),
+            # ("risk_ratio", 1),
+            # ("curvature_100", 1),
+            # ("interaction_risk_overload", 1),
+            # ("interaction_curvature_exceed", 1),
         ]
     )
 
     # Regression features (raw + derived diffs + engineered)
-    step2_features: list[str] = field(
+    step2_features: list[tuple[str, int]] = field(
         default_factory=lambda: [
-            # '110',
-            # '105_diff', '100_diff', '95_diff', '90_diff',
-            # '85_diff', '80_diff', '70_diff', '60_diff',
-            # "risk_ratio",
-            # "curvature_100",
-            "prob_exceed_110",
-            "prob_exceed_105",
-            "prob_exceed_100",
-            "prob_exceed_95",
-            "prob_exceed_90",
-            # 'log_density_100',
-            "season_hist_da_1",
-            "season_hist_da_2",
-            "season_hist_da_3",
-            "recent_hist_da",
-            # 'forecast_horizon'
+            # ("curvature_100", 1),
+            ("prob_exceed_110", 1),
+            ("prob_exceed_105", 1),
+            ("prob_exceed_100", 1),
+            ("prob_exceed_95", 1),
+            ("prob_exceed_90", 1),
+            # ("prob_exceed_85", 1),
+            # ("prob_exceed_80", 1),
+            ("hist_da", 1),
+            # ("105_diff", 0),
+            # ("100_diff", 0),
+            # ("95_diff", 0),
+            # ("90_diff", 0),
+            # ("85_diff", 0),
+            # ("80_diff", 0),
+            # ("70_diff", 0),
+            # ("60_diff", 0),
+            # ("risk_ratio", 1),
+            # ("curvature_100", 1),
+            # ("interaction_risk_overload", 1),
+            # ("interaction_curvature_exceed", 1),
         ]
     )
 
@@ -60,7 +71,10 @@ class FeatureConfig:
 
     def __post_init__(self):
         """Compute all_features as union of step1 and step2 features."""
-        self.all_features = list(set(self.step1_features + self.step2_features))
+        # Extract just the feature names for all_features
+        s1_names = [f[0] for f in self.step1_features]
+        s2_names = [f[0] for f in self.step2_features]
+        self.all_features = list(set(s1_names + s2_names))
 
 
 # MISO FTR Auction Schedule (Planning Year: Jun - May)
@@ -80,20 +94,6 @@ AUCTION_SCHEDULE = {
     5: ["f0"],
 }
 
-# AUCTION_SCHEDULE = {
-#     6: ['f0'],
-#     7: ['f0'],
-#     8: ['f0'],
-#     9: ['f0'],
-#     10: ['f0'],
-#     11: ['f0'],
-#     12: ['f0'],
-#     1: ['f0'],
-#     2: ['f0'],
-#     3: ['f0'],
-#     4: ['f0'],
-#     5: ['f0']
-# }
 
 # Period Type to Market Month Offset Mapping
 # For q-series, it maps to the start month offset relative to auction month
@@ -117,10 +117,10 @@ class ModelConfig:
     Examples:
     ---------
     # XGBoost Classifier
-    ModelConfig(params={'n_estimators': 200, 'max_depth': 4, 'learning_rate': 0.1, 'n_jobs': -1})
+    ModelConfig(params={'n_estimators': 200, 'max_depth': 4, 'learning_rate': 0.1, 'n_jobs': 1})
 
     # Logistic Regression
-    ModelConfig(params={'C': 1.0, 'max_iter': 1000, 'class_weight': 'balanced', 'n_jobs': -1})
+    ModelConfig(params={'C': 1.0, 'max_iter': 1000, 'class_weight': 'balanced', 'n_jobs': 1})
 
     # ElasticNet
     ModelConfig(params={'alpha': 1.0, 'l1_ratio': 0.5, 'max_iter': 1000})
@@ -195,18 +195,6 @@ class EnsembleConfig:
                 ),
                 weight=1,
             ),
-            # ModelSpec(
-            #     model_class=LogisticRegression,
-            #     config=ModelConfig(params={
-            #         'C': 1.0,
-            #         'max_iter': 1000,
-            #         'class_weight': 'balanced',
-            #         'n_jobs': -1,
-            #         'solver': 'lbfgs',
-            #         'random_state': 42
-            #     }),
-            #     weight=0.5
-            # )
         ]
     )
 
@@ -228,18 +216,6 @@ class EnsembleConfig:
                 ),
                 weight=1,
             ),
-            # ModelSpec(
-            #     model_class=LogisticRegression,
-            #     config=ModelConfig(params={
-            #         'C': 1.0,
-            #         'max_iter': 1000,
-            #         'class_weight': 'balanced',
-            #         'n_jobs': 1,
-            #         'solver': 'lbfgs',
-            #         'random_state': 42
-            #     }),
-            #     weight=0.5
-            # )
         ]
     )
 
@@ -316,11 +292,6 @@ class EnsembleConfig:
     short_term_clf_weights: list[float] = field(default_factory=lambda: [0.5, 0.5])
     short_term_reg_weights: list[float] = field(default_factory=lambda: [0.5, 0.5])
 
-    # Medium-term horizons (2-3 months): f2, f3
-    # Favor XGBoost slightly - it can learn horizon effects
-    medium_term_clf_weights: list[float] = field(default_factory=lambda: [0.6, 0.4])
-    medium_term_reg_weights: list[float] = field(default_factory=lambda: [0.6, 0.4])
-
     # Long-term horizons (4+ months): q2, q3, q4
     # Heavily favor XGBoost - scarce data, need horizon-aware model
     long_term_clf_weights: list[float] = field(default_factory=lambda: [0.7, 0.3])
@@ -328,7 +299,6 @@ class EnsembleConfig:
 
     # Horizon thresholds for weight selection
     short_term_max_horizon: int = 1  # horizon <= 1
-    medium_term_max_horizon: int = 3  # horizon <= 3
 
     def __post_init__(self):
         """Normalize weights to sum to 1.0 for each ensemble."""
@@ -375,8 +345,6 @@ class EnsembleConfig:
         # Select weights based on horizon
         if horizon <= self.short_term_max_horizon:
             weights = self.short_term_clf_weights if model_type == "classifier" else self.short_term_reg_weights
-        elif horizon <= self.medium_term_max_horizon:
-            weights = self.medium_term_clf_weights if model_type == "classifier" else self.medium_term_reg_weights
         else:
             weights = self.long_term_clf_weights if model_type == "classifier" else self.long_term_reg_weights
 
@@ -389,7 +357,7 @@ class EnsembleConfig:
 class TrainingConfig:
     """Model training configuration."""
 
-    min_samples_for_branch_model: int = 10
+    min_samples_for_branch_model: int = 1
     min_binding_samples_for_regression: int = 1
     train_months_lookback: int = 12  # Number of months to look back for training
     label_threshold: float = 0.0  # Threshold for binary classification label
@@ -442,8 +410,7 @@ class PredictionConfig:
 
     # Market parameters
     period_type: str = "f0"
-    # class_type: str = "onpeak"
-    class_type: str = "offpeak"
+    class_type: str = "onpeak"
     market_round: int = 1
 
     # Path configuration

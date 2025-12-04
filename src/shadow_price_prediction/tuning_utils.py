@@ -138,75 +138,85 @@ def update_config_with_params(config, params):
 
     from shadow_price_prediction.config import ModelConfig, ModelSpec
 
+    # Get n_jobs from existing config to respect user setting
+    # Default to 1 if not found, but try to use what's in the config
+    base_n_jobs = 1
+    if config.models.default_classifiers and "n_jobs" in config.models.default_classifiers[0].config.params:
+        base_n_jobs = config.models.default_classifiers[0].config.params["n_jobs"]
+
     # --- Update XGBoost Classifier Parameters ---
     # Using unified XGBoost params
     xgb_clf_params = {
-        "n_estimators": params["clf_xgb_n_estimators"],
-        "max_depth": params["clf_xgb_max_depth"],
+        "n_estimators": int(params["clf_xgb_n_estimators"]),
+        "max_depth": int(params["clf_xgb_max_depth"]),
         "learning_rate": params["clf_xgb_learning_rate"],
         "gamma": params["clf_xgb_gamma"],
         "min_child_weight": params["clf_xgb_min_child_weight"],
         "reg_alpha": params["clf_xgb_reg_alpha"],
         "reg_lambda": params["clf_xgb_reg_lambda"],
         "random_state": 42,
-        "n_jobs": 1,
+        "n_jobs": base_n_jobs,
         "verbosity": 0,
         "eval_metric": "logloss",
     }
 
     # --- Update Logistic Regression Parameters ---
-    # lr_params = {
-    #     "penalty": params["lr_penalty"],
-    #     "C": params["lr_C"],
-    #     "max_iter": 1000,
-    #     "class_weight": "balanced",
-    #     "random_state": 42,
-    #     "n_jobs": 1,
-    #     "solver": "lbfgs",
-    # }
+    # (Currently disabled in ensemble config but kept for reference)
+    _lr_params = {
+        "penalty": params["lr_penalty"],
+        "C": params["lr_C"],
+        "max_iter": 1000,
+        "class_weight": "balanced",
+        "random_state": 42,
+        "n_jobs": base_n_jobs,
+        "solver": "lbfgs",
+    }
+    _ = _lr_params  # Suppress unused warning
 
     # Update Ensemble Config (Classifiers)
     config.models.default_classifiers = [
-        ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), 1),
-        # ModelSpec(LogisticRegression, ModelConfig(lr_params), 1 - params["clf_xgb_thres"]),
+        ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), params["clf_xgb_thres"]),
+        # ModelSpec(LogisticRegression, ModelConfig(lr_params), params["clf_xgb_thres"]),
     ]
     config.models.branch_classifiers = [
-        ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), 1),
-        # ModelSpec(LogisticRegression, ModelConfig(lr_params), 1 - params["clf_xgb_thres"]),
+        ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), params["clf_xgb_thres"]),
+        # ModelSpec(LogisticRegression, ModelConfig(lr_params), params["clf_xgb_thres"]),
     ]
 
     # --- Update XGBoost Regressor Parameters ---
     # Using same unified XGBoost params
     xgb_reg_params = {
-        "n_estimators": params["reg_xgb_n_estimators"],
-        "max_depth": params["reg_xgb_max_depth"],
+        "n_estimators": int(params["reg_xgb_n_estimators"]),
+        "max_depth": int(params["reg_xgb_max_depth"]),
         "learning_rate": params["reg_xgb_learning_rate"],
         "gamma": params["reg_xgb_gamma"],
         "min_child_weight": params["reg_xgb_min_child_weight"],
         "reg_alpha": params["reg_xgb_reg_alpha"],
         "reg_lambda": params["reg_xgb_reg_lambda"],
         "random_state": 42,
-        "n_jobs": 1,
+        "n_jobs": base_n_jobs,
         "verbosity": 0,
         "objective": "reg:squarederror",
     }
 
     # --- Update ElasticNet Parameters ---
-    # enet_params = {
-    #     "alpha": params["enet_alpha"],
-    #     "l1_ratio": params["enet_l1_ratio"],
-    #     "max_iter": 1000,
-    #     "fit_intercept": True,
-    # }
+    # (Currently disabled in ensemble config but kept for reference)
+    _enet_params = {
+        "alpha": params["enet_alpha"],
+        "l1_ratio": params["enet_l1_ratio"],
+        "max_iter": 1000,
+        "fit_intercept": True,
+    }
+    _ = _enet_params  # Suppress unused warning
 
     # Update Ensemble Config (Regressors)
     config.models.default_regressors = [
-        ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), 1),
-        # ModelSpec(ElasticNet, ModelConfig(enet_params), 1 - params["reg_xgb_thres"]),
+        ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), params["reg_xgb_thres"]),
+        # ModelSpec(ElasticNet, ModelConfig(enet_params), params["reg_xgb_thres"]),
     ]
     config.models.branch_regressors = [
-        ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), 1),
-        # ModelSpec(ElasticNet, ModelConfig(enet_params), 1 - params["reg_xgb_thres"]),
+        ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), params["reg_xgb_thres"]),
+        # ModelSpec(ElasticNet, ModelConfig(enet_params), params["reg_xgb_thres"]),
     ]
     # config.models.short_term_clf_weights = [params["short_term_clf_xgb_w"], 1 - params["short_term_clf_xgb_w"]]
     # config.models.short_term_reg_weights = [params["short_term_reg_xgb_w"], 1 - params["short_term_reg_xgb_w"]]
@@ -220,7 +230,6 @@ def update_config_with_params(config, params):
     config.models.medium_term_reg_weights = [1]
     config.models.long_term_clf_weights = [1]
     config.models.long_term_reg_weights = [1]
-    config.class_type = params["class_type"]
 
     # --- Update Threshold Config ---
     config.threshold.threshold_beta = params["threshold_beta"]
@@ -260,8 +269,9 @@ def run_single_experiment(iteration, params, test_periods, save_dir):
         pipeline = ShadowPricePipeline(config)
 
         # Run pipeline (use_parallel=False to avoid nested Ray contexts)
-        results_per_outage, final_results, metrics = pipeline.run(
-            test_periods=test_periods, verbose=False, use_parallel=True, n_jobs=2
+        # Also set n_jobs=1 to prevent inner model training from trying to use Ray pool
+        results_per_outage, final_results, metrics, _, _ = pipeline.run(
+            test_periods=test_periods, verbose=False, use_parallel=False, n_jobs=1
         )
 
         # Generate unique ID for this run

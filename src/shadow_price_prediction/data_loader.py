@@ -2,7 +2,6 @@
 Data loading functions for shadow price prediction.
 """
 
-from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -16,11 +15,10 @@ from .config import AUCTION_SCHEDULE, PredictionConfig
 # memory = joblib.Memory(location='./.gemini_cache', verbose=0)
 
 
-@cache
-def fetch_da_shadow(st, et, peak_type):
+# @lru_cache
+def fetch_da_shadow(st, et, peak_type, aptools):
     """Cached wrapper for fetching DA shadow prices."""
-    ap = MisoApTools()
-    return ap.tools.get_da_shadow_by_peaktype(
+    return aptools.tools.get_da_shadow_by_peaktype(
         st=st,
         et_ex=et,
         peak_type=peak_type,
@@ -28,7 +26,6 @@ def fetch_da_shadow(st, et, peak_type):
     )
 
 
-@cache
 def fetch_constraints(cons_path):
     """Cached wrapper for loading constraints parquet."""
     return pd.read_parquet(cons_path / "constraints.parquet")
@@ -69,39 +66,16 @@ class DataLoader:
                 required_periods.add("f0")
             elif horizon == 1:
                 required_periods.add("f1")
-            elif horizon == 2:
-                required_periods.add("f2")
-            elif horizon == 3:
-                required_periods.add("f3")
-            elif horizon > 3:
+            # elif horizon == 2:
+            #     required_periods.add("f2")
+            # elif horizon == 3:
+            #     required_periods.add("f3")
+            elif horizon >= 2:
                 # For quarters, conservatively add all quarter types
                 # since we don't know exactly which quarter without detailed logic
-                required_periods.update(["q2", "q3", "q4"])
+                required_periods.update(["f2", "f3", "q2", "q3", "q4"])
 
         return required_periods
-
-    def get_training_period(self, auction_month: pd.Timestamp) -> tuple[pd.Timestamp, pd.Timestamp]:
-        """
-        Calculate the training period based on the target auction month.
-
-        Parameters:
-        -----------
-        auction_month : pd.Timestamp
-            Target auction month
-
-        Returns:
-        --------
-        train_start : pd.Timestamp
-            Start of training period
-        train_end : pd.Timestamp
-            End of training period (exclusive)
-        """
-        # Training ends at the start of the test auction month
-        train_end = auction_month
-        # Training starts N months before
-        train_start = train_end - pd.offsets.MonthBegin(self.config.training.train_months_lookback)
-
-        return train_start, train_end
 
     def get_branch_map(self, da):
         da_label_constraint_id_branch_map = da[["constraint_id", "branch_name"]].copy()
@@ -115,11 +89,30 @@ class DataLoader:
         da_label_constraint_id_branch_map["branch_name"] = da_label_constraint_id_branch_map["branch_name"].str.strip()
         da_label_constraint_id_branch_map = da_label_constraint_id_branch_map.set_index("constraint_id")["branch_name"]
         da_label_constraint_id_branch_map = da_label_constraint_id_branch_map[
-            da_label_constraint_id_branch_map.index.duplicated(keep="last")
+            ~da_label_constraint_id_branch_map.index.duplicated(keep="last")
         ]
         return da_label_constraint_id_branch_map
 
-    def get_historical_shadow(self, auction_month, market_month, class_type):
+    def get_outage_dates(self, market_month: pd.Timestamp) -> pd.DatetimeIndex:
+        """
+        Get outage dates for a given market month based on configuration frequency.
+
+        Parameters:
+        -----------
+        market_month : pd.Timestamp
+            The market month to generate dates for
+
+        Returns:
+        --------
+        pd.DatetimeIndex
+            Index of outage dates
+        """
+        return pd.date_range(
+            market_month, market_month + pd.offsets.MonthBegin(1), freq=self.config.outage_freq, inclusive="left"
+        )
+
+    # @lru_cache
+    def get_historical_shadow(self, auction_month, market_month, constraint_period_type, class_type):
         run_at_day = 10
         cutoff_month = auction_month - pd.offsets.MonthBegin(1)
         run_at = cutoff_month.replace(day=run_at_day)
@@ -144,6 +137,7 @@ class DataLoader:
                     st=st,
                     et=et,
                     peak_type=class_type,
+                    aptools=self.aptools,
                 )
                 tmp_sp.index = tmp_sp.index.tz_localize(None)
                 if tmp_market_month == cutoff_month:
@@ -153,10 +147,13 @@ class DataLoader:
             return da
 
         recent_da = get_da(recent_month_list)
-        recent_da_branch = self.get_branch_map(recent_da)
+
+        # Get branch map (used for reference but not stored separately)
+        _ = self.get_branch_map(recent_da)
+
         recent_da = recent_da.groupby("constraint_id")["shadow_price"].sum().abs() / len(recent_month_list)
         season_da = get_da(season_list)
-        season_da_branch = self.get_branch_map(season_da)
+        _ = self.get_branch_map(season_da)
         season_da["planning_year"] = season_da.index.year + np.where(season_da.index.month < 6, -1, 0)
         season_da = season_da.groupby(["constraint_id", "planning_year"])["shadow_price"].sum().abs().reset_index()
         planning_year = auction_month.year
@@ -169,16 +166,61 @@ class DataLoader:
         season_da = season_da.pivot(index="constraint_id", columns="planning_year", values="shadow_price").fillna(0)
         recent_da = np.log1p(recent_da)
         season_da = np.log1p(season_da)
-        return recent_da, season_da, recent_da_branch, season_da_branch
+
+        cons_path = Path(
+            self.config.paths.constraint_path_template.format(
+                auction_month=auction_month.strftime("%Y-%m"),
+                market_round=self.config.market_round,
+                period_type=constraint_period_type if constraint_period_type else self.config.period_type,
+                class_type=self.config.class_type,
+            )
+        )
+        cons = fetch_constraints(cons_path)
+        spice_map = (
+            cons[cons["convention"] != 999]
+            .dropna(subset=["branch_name"])
+            .groupby("constraint_id")["branch_name"]
+            .apply(",".join)
+        )
+
+        recent_da_index = pd.Series(recent_da.index.map(spice_map), index=recent_da.index)
+        # recent_da_index = recent_da_index.fillna(recent_da_branch)
+        recent_da.index = recent_da_index.values
+        recent_da = recent_da.groupby(level=0).sum()
+        season_da_index = pd.Series(season_da.index.map(spice_map), index=season_da.index)
+        # season_da_index = season_da_index.fillna(season_da_branch)
+        season_da.index = season_da_index.values
+        season_da = season_da.groupby(level=0).sum()
+        return recent_da, season_da, spice_map
 
     def load_data_for_outage(
         self,
         auction_month: pd.Timestamp,
         market_month: pd.Timestamp,
         outage_date: pd.Timestamp,
-        constraint_period_type: str = "f0",
         require_label: bool = True,
+        # Optimization: Accept pre-calculated data
+        da_label: pd.DataFrame | None = None,
+        da_label_branch_map: pd.Series | None = None,
+        recent_hist_da: pd.Series | None = None,
+        season_hist_da: pd.Series | None = None,
+        spice_map: pd.Series | None = None,
+        data_cache: dict | None = None,
     ) -> pd.DataFrame | None:
+        """
+        Load training data (score features + shadow price labels) for a single outage date.
+
+        Parameters:
+        -----------
+        ...
+        data_cache : dict, optional
+            Shared cache for dataframes. Key: (auction_month, market_month, outage_date)
+        """
+        # Check cache first
+        cache_key = (auction_month, market_month, outage_date)
+        if data_cache is not None and cache_key in data_cache:
+            # print(f"  ⚠️ Using cached data for {outage_date.strftime('%Y-%m-%d')}")
+            return data_cache[cache_key].copy()
         """
         Load training data (score features + shadow price labels) for a single outage date.
 
@@ -187,6 +229,7 @@ class DataLoader:
         DataFrame with columns: score features, label, branch_name, metadata
         Index: (constraint_id, flow_direction)
         """
+        # print(f"\n[Loading Data for Outage: {outage_date.strftime('%Y-%m-%d')}]")
         try:
             # Build paths using config templates
             density_path = Path(
@@ -198,30 +241,28 @@ class DataLoader:
                 )
             )
 
-            cons_path = Path(
-                self.config.paths.constraint_path_template.format(
-                    auction_month=auction_month.strftime("%Y-%m"),
-                    market_round=self.config.market_round,
-                    period_type=constraint_period_type if constraint_period_type else self.config.period_type,
-                    class_type=self.config.class_type,
-                )
-            )
-
             # Check if paths exist
             if not density_path.exists():
                 return None
 
             # Load density data
             density_df = pd.read_parquet(density_path / "density.parquet")
+            # density_df = density_df.loc[['278858']]
 
             # Identify available flow points (columns)
             # Filter out non-numeric columns
             flow_points = []
-            for c in density_df.columns:
+            for col in density_df.columns:
                 try:
-                    flow_points.append(int(c))
+                    # Convert to float first to handle "100.0", then int
+                    val = int(float(col))
+                    flow_points.append(val)
                 except ValueError:
                     continue
+
+            if not flow_points:
+                return None
+
             flow_points = sorted(flow_points)
 
             # Define helper to calculate features for a given direction
@@ -279,12 +320,6 @@ class DataLoader:
 
                 # --- Engineered Risk Features ---
 
-                # Prob Overload (Flow > 100 or Flow < -100) - REMOVED (Duplicate of prob_exceed_100)
-                # if direction == 1:
-                #     overload_x = [x for x in flow_points if x >= 100]
-                # else:
-                #     overload_x = [x for x in flow_points if x <= -100]
-
                 # if len(overload_x) > 1:
                 #     cols = [str(x) for x in overload_x]
                 #     res['prob_overload'] = np.trapezoid(y=df[cols].values, x=overload_x, axis=1)
@@ -292,7 +327,7 @@ class DataLoader:
                 #     res['prob_overload'] = 0.0
 
                 # Prob Exceed X
-                exceed_thresholds = [110, 105, 100, 95, 90]
+                exceed_thresholds = [110, 105, 100, 95, 90, 85, 80]
                 for t in exceed_thresholds:
                     feat_name = f"prob_exceed_{t}"
                     if direction == 1:
@@ -353,10 +388,8 @@ class DataLoader:
             if require_label:
                 try:
                     # Use cached function for current month labels
-                    da_label = fetch_da_shadow(
-                        market_month, market_month + pd.offsets.MonthBegin(1), self.config.class_type
-                    )
-
+                    if da_label is None:
+                        raise ValueError("da_label is None")
                     da_label = da_label.copy()  # Copy to avoid modifying cached object
                     da_label.index = da_label.index.tz_localize(None)
 
@@ -385,18 +418,16 @@ class DataLoader:
                 except Exception as e:
                     print(f"    ⚠️ Failed to load labels for {market_month}: {e}")
                     da_label_chunk = None
+                    raise ValueError(f"Failed to load labels for {market_month}: {e}") from e
 
             # Load constraint info using cache
-            cons = fetch_constraints(cons_path)
-
-            # Load constraint info using cache
-            cons = fetch_constraints(cons_path)
-            spice_map = (
-                cons[cons["convention"] != 999]
-                .dropna(subset=["branch_name"])
-                .groupby("constraint_id")["branch_name"]
-                .apply(",".join)
-            )
+            # cons = fetch_constraints(cons_path)
+            # spice_map = (
+            #     cons[cons["convention"] != 999]
+            #     .dropna(subset=["branch_name"])
+            #     .groupby("constraint_id")["branch_name"]
+            #     .apply(",".join)
+            # )
 
             # Map to branch names
             # full_df index is constraint_id (repeated for pos and neg)
@@ -411,17 +442,14 @@ class DataLoader:
                 da_label_chunk.index = da_label_chunk_index.values
                 da_label_chunk = da_label_chunk.groupby(level=0).sum()
 
-            recent_hist_da, season_hist_da, recent_hist_da_branch, season_hist_da_branch = self.get_historical_shadow(
-                auction_month, market_month, self.config.class_type
-            )
-            recent_hist_da_index = pd.Series(recent_hist_da.index.map(spice_map), index=recent_hist_da.index)
-            recent_hist_da_index = recent_hist_da_index.fillna(recent_hist_da_branch)
-            recent_hist_da.index = recent_hist_da_index.values
-            recent_hist_da = recent_hist_da.groupby(level=0).sum()
-            season_hist_da_index = pd.Series(season_hist_da.index.map(spice_map), index=season_hist_da.index)
-            season_hist_da_index = season_hist_da_index.fillna(season_hist_da_branch)
-            season_hist_da.index = season_hist_da_index.values
-            season_hist_da = season_hist_da.groupby(level=0).sum()
+            # recent_hist_da_index = pd.Series(recent_hist_da.index.map(spice_map), index=recent_hist_da.index)
+            # recent_hist_da_index = recent_hist_da_index.fillna(recent_hist_da_branch)
+            # recent_hist_da.index = recent_hist_da_index.values
+            # recent_hist_da = recent_hist_da.groupby(level=0).sum()
+            # season_hist_da_index = pd.Series(season_hist_da.index.map(spice_map), index=season_hist_da.index)
+            # season_hist_da_index = season_hist_da_index.fillna(season_hist_da_branch)
+            # season_hist_da.index = season_hist_da_index.values
+            # season_hist_da = season_hist_da.groupby(level=0).sum()
 
             # Assign labels
             if da_label_chunk is not None:
@@ -432,6 +460,7 @@ class DataLoader:
             full_df = full_df.merge(season_hist_da, left_on="branch_name", right_index=True, how="left")
             cols = full_df.filter(like="season_hist_da_").columns
             full_df[cols] = full_df[cols].fillna(0)
+            full_df["hist_da"] = full_df["recent_hist_da"] + full_df[cols].sum(axis=1)
 
             # Sort by risk metrics
             full_df = full_df.sort_values(
@@ -460,69 +489,122 @@ class DataLoader:
 
         except Exception as e:
             print(f"  ⚠️  Error loading data for {outage_date.strftime('%Y-%m-%d')}: {str(e)}")
-            return None
+            import traceback
+
+            traceback.print_exc()
+            raise ValueError from None
 
     def load_training_data(
         self,
         train_start: pd.Timestamp,
         train_end: pd.Timestamp,
         required_period_types: set | None = None,
+        branch_name: str | None = None,
         verbose: bool = True,
+        data_cache: dict | None = None,
     ) -> pd.DataFrame | None:
         """
         Load all training data using multi-period strategy.
 
         Note: train_start is ignored. The method uses a fixed 12-month lookback
-        from train_end (the target auction month).
+        from train_end (the target auction month exclusive).
 
         Parameters:
         -----------
         train_start : pd.Timestamp
             Ignored (kept for backward compatibility)
         train_end : pd.Timestamp
-            Target auction month
+            Target auction month, exclusive.
         required_period_types : Optional[set]
             If provided, only load data for these period types (e.g., {'f0', 'f1'}).
-            If None, load all period types from AUCTION_SCHEDULE.
+        branch_name : Optional[str]
+            If provided, only load data for branches containing this string.
         verbose : bool
             Print progress messages
 
-        Strategy:
-        1. Look back 12 months from train_end (exclusive).
-        2. For each historical auction month, look up available period types from AUCTION_SCHEDULE.
-        3. Filter by required_period_types if specified.
-        4. Expand period types into (Market Month, Constraint Period Type) pairs.
-        5. Load data for each pair.
+        Returns:
+        --------
+        Combined DataFrame with all training data
         """
+        auction_month = train_end
         if verbose:
-            print("\n[Loading Training Data - Multi-Period Strategy]")
+            print(f"\n[Loading Training Data for Auction: {auction_month.strftime('%Y-%m')}]")
             print("-" * 80)
-            if required_period_types:
-                print(f"  Filtering to period types: {sorted(required_period_types)}")
 
-        # Generate list of auction months in lookback period (12 months before train_end)
-        # train_end is the target auction month
-        lookback_start = train_end - pd.offsets.MonthBegin(12)
-        training_months = pd.date_range(lookback_start, train_end, freq="MS", inclusive="left")
-
-        if verbose:
-            print(f"Training Window: {len(training_months)} months")
-            print(f"  From: {training_months[0].strftime('%Y-%m')}")
-            print(f"  To:   {training_months[-1].strftime('%Y-%m')}")
-
-        # Collect all training data
         training_data_list = []
 
-        # Helper to get market months for a period type
-        def get_market_months(auction_month, period_type):
-            st, et = self.aptools.tools.get_market_month_from_auction_month_and_period_trades(
-                auction_month, period_type
-            )
-            return pd.date_range(st, et, freq="MS", inclusive="left")
+        # Strategy:
+        # 1. Look back 12 months from auction_month
+        # 2. For each past auction month, find relevant market months
+        # 3. Load data for those market months
 
-        for auction_month in training_months:
+        past_auction_months = pd.date_range(train_start, train_end, freq="MS", inclusive="left")
+
+        # Helper to get market months for a given auction and period type
+        def get_market_months(auc_month, p_type):
+            if p_type.startswith("f"):
+                # Forward month (f0 = current month, f1 = next month, etc.)
+                offset = int(p_type[1:])
+                return [auc_month + pd.DateOffset(months=offset)]
+            elif p_type.startswith("q"):
+                # Quarter (q1 = Jan-Mar, q2 = Apr-Jun, etc.)
+                # This is more complex as it depends on the auction month relative to the quarter
+                # Simplified: Return all months in the quarter that are valid for this auction
+                # For now, let's assume standard quarterly products relative to auction
+                # But actually, the period type defines the PRODUCT, not the time relative to auction?
+                # No, period type like 'q2' usually means "Quarter 2" (Apr-Jun)
+                # Let's use a simplified heuristic:
+                # If auction is in Jan (1), q2 is Apr-Jun.
+                # If auction is in Feb (2), q2 is Apr-Jun.
+                # If auction is in Mar (3), q2 is Apr-Jun.
+                # So we need to find the next occurrence of the quarter.
+
+                # However, for historical training, we want to find where this product WAS traded.
+                # This logic is tricky.
+                # Let's stick to the existing logic if possible, or simplified one.
+                # The existing logic (implied) was likely just f-products.
+                # But we added q-products support.
+
+                # Let's look at how we can map p_type to market months.
+                # Actually, for training data, we want to find "similar" periods.
+                # But here we are iterating over PAST auctions.
+                # For a past auction, we want to load data that matches the requested period types.
+
+                # Let's use a simple mapping for now:
+                # f-types are relative.
+                # q-types are absolute (calendar quarters).
+
+                if p_type.startswith("f"):
+                    offset = int(p_type[1:])
+                    return [auc_month + pd.DateOffset(months=offset)]
+
+                # For q-types, we need to know which months correspond to qN
+                q_num = int(p_type[1:])
+                # q1: 1,2,3; q2: 4,5,6; q3: 7,8,9; q4: 10,11,12
+                start_month = (q_num - 1) * 3 + 1
+                # We need to find the year.
+                # If auction month is before the quarter start, it's same year.
+                # If auction month is after, it's next year?
+                # Usually auctions trade future quarters.
+
+                current_year = auc_month.year
+                # Try same year
+                candidate = pd.Timestamp(year=current_year, month=start_month, day=1)
+                if candidate < auc_month:
+                    # If quarter start is in past, maybe it's next year?
+                    # But we are looking at PAST auctions.
+                    # If we are at past auction, we traded a future quarter.
+                    candidate = pd.Timestamp(year=current_year + 1, month=start_month, day=1)
+
+                return [candidate + pd.DateOffset(months=i) for i in range(3)]
+
+            return []
+
+        for i, auction_month in enumerate(past_auction_months):
             if verbose:
-                print(f"\nProcessing Auction: {auction_month.strftime('%Y-%m')}...")
+                print(
+                    f"  Processing past auction: {auction_month.strftime('%Y-%m')} ({i + 1}/{len(past_auction_months)})"
+                )
 
             # 1. Get available period types from schedule
             available_periods = AUCTION_SCHEDULE.get(auction_month.month, [])
@@ -538,14 +620,62 @@ class DataLoader:
 
             for p_type in available_periods:
                 # 2. Expand to market months
-                market_months = get_market_months(auction_month, p_type)
+                _ = get_market_months(auction_month, p_type)  # For reference only
+                market_st, market_et = self.aptools.tools.get_market_month_from_auction_month_and_period_trades(
+                    auction_month=auction_month,
+                    period_type=p_type,
+                )
 
-                for market_month in market_months:
+                for market_month in pd.date_range(market_st, market_et, freq="MS", inclusive="left"):
                     # 3. Load data for each outage date
                     # Note: We use p_type as the constraint_period_type
 
-                    # Optimization: Check if density file exists first?
-                    # load_data_for_outage does that.
+                    # Optimization: Pre-calculate data for the whole month
+                    if market_month >= train_end:
+                        print(f"    Skipping future month: {market_month.strftime('%Y-%m')}")
+                        continue
+
+                    try:
+                        # Fetch Full Month Labels
+                        da_label = fetch_da_shadow(
+                            market_month, market_month + pd.offsets.MonthBegin(1), self.config.class_type, self.aptools
+                        )
+                        da_label = da_label.copy()
+                        da_label.index = da_label.index.tz_localize(None)
+
+                        # Derive Branch Map from Labels (once per month)
+                        da_label_branch_map = da_label[["constraint_id", "branch_name"]].copy()
+                        da_label_branch_map = da_label_branch_map[
+                            (da_label_branch_map["branch_name"] != "None") & da_label_branch_map["branch_name"].notna()
+                        ].drop_duplicates(subset=["branch_name", "branch_name"])[["constraint_id", "branch_name"]]
+                        da_label_branch_map["branch_name"] = (
+                            da_label_branch_map["branch_name"].str.rsplit("(", n=1).str[0]
+                        )
+                        da_label_branch_map["branch_name"] = da_label_branch_map["branch_name"].str.strip()
+                        da_label_branch_map = da_label_branch_map.set_index("constraint_id")["branch_name"]
+                        da_label_branch_map = da_label_branch_map[da_label_branch_map.index.duplicated(keep="last")]
+                    except Exception as e:
+                        print(
+                            f"    ⚠️ Failed to load labels for {auction_month} {market_month} with training period {train_start} - {train_end}: {e}"
+                        )
+                        da_label = None
+                        da_label_branch_map = None
+                        raise ValueError from e
+
+                    # Fetch Historical Data
+
+                    try:
+                        recent_hist_da, season_hist_da, spice_map = self.get_historical_shadow(
+                            auction_month, market_month, p_type, self.config.class_type
+                        )
+                    except Exception as e:
+                        print(
+                            f"    ⚠️ Failed to load historical data for {auction_month} {market_month} with training period {train_start} - {train_end}: {e}"
+                        )
+                        recent_hist_da = None
+                        season_hist_da = None
+                        spice_map = None
+                        raise ValueError from e
 
                     for outage_date in pd.date_range(
                         market_month,
@@ -558,12 +688,25 @@ class DataLoader:
                             continue
 
                         data = self.load_data_for_outage(
-                            auction_month, market_month, outage_date, constraint_period_type=p_type
+                            auction_month,
+                            market_month,
+                            outage_date,
+                            # Pass pre-calculated data
+                            da_label=da_label,
+                            recent_hist_da=recent_hist_da,
+                            season_hist_da=season_hist_da,
+                            spice_map=spice_map,
+                            data_cache=data_cache,
                         )
 
                         if data is not None and len(data) > 0:
-                            training_data_list.append(data)
-                            month_data_count += 1
+                            # Filter by branch_name if provided
+                            if branch_name:
+                                data = data[data["branch_name"].str.contains(branch_name, na=False)]
+
+                            if len(data) > 0:
+                                training_data_list.append(data)
+                                month_data_count += 1
 
             if verbose:
                 print(f"  Loaded {month_data_count} samples across {len(available_periods)} period types")
@@ -605,7 +748,11 @@ class DataLoader:
             return None
 
     def load_test_data_for_period(
-        self, auction_month: pd.Timestamp, market_month: pd.Timestamp, verbose: bool = True
+        self,
+        auction_month: pd.Timestamp,
+        market_month: pd.Timestamp,
+        branch_name: str | None = None,
+        verbose: bool = True,
     ) -> pd.DataFrame | None:
         """
         Load test data for all outage dates in a specific test period.
@@ -616,6 +763,8 @@ class DataLoader:
             Auction month for this test period
         market_month : pd.Timestamp
             Market month for this test period
+        branch_name : Optional[str]
+            If provided, only load data for branches containing this string.
         verbose : bool
             Print progress messages
 
@@ -638,20 +787,39 @@ class DataLoader:
         if verbose:
             print(f"  Scanning for outage dates in {market_month.strftime('%Y-%m')}...")
 
-        # Determine constraint_period_type based on horizon
+        # Determine constraint_period_type based on horizon and AUCTION_SCHEDULE
         horizon = (market_month.year - auction_month.year) * 12 + (market_month.month - auction_month.month)
-        constraint_period_type = self.config.period_type  # Default
 
-        if horizon == 0:
-            constraint_period_type = "f0"
-        elif horizon == 1:
-            constraint_period_type = "f1"
-        elif horizon == 2:
-            constraint_period_type = "f2"
-        elif horizon == 3:
-            constraint_period_type = "f3"
-        # For quarters, it's more complex, but we can try to infer or stick to default if unsure
-        # Assuming standard f0-f3 for now as they are most common for monthly predictions
+        f_type = f"f{horizon}"
+        q_num = ((market_month.month - 6) % 12) // 3 + 1
+        q_type = f"q{q_num}"
+
+        valid_periods = AUCTION_SCHEDULE.get(auction_month.month, [])
+
+        # Priority: Quarter -> Month (matches notebook logic)
+        if q_type in valid_periods:
+            constraint_period_type = q_type
+        elif f_type in valid_periods:
+            constraint_period_type = f_type
+        else:
+            # Fallback to f-type if not found in schedule (or default)
+            constraint_period_type = f_type
+
+        if verbose:
+            print(f"  Constraint Period Type: {constraint_period_type}")
+
+        # Optimization: Pre-calculate historical data for the whole month
+        # Labels are not required for test data, so we skip da_label pre-calc
+        try:
+            recent_hist_da, season_hist_da, spice_map = self.get_historical_shadow(
+                auction_month, market_month, constraint_period_type, self.config.class_type
+            )
+        except Exception as e:
+            if verbose:
+                print(f"    ⚠️ Failed to load historical data for {market_month}: {e}")
+            recent_hist_da = None
+            season_hist_da = None
+            spice_map = None
 
         loaded_outage_count = 0
         for outage_date in test_outage_dates:
@@ -659,15 +827,23 @@ class DataLoader:
                 auction_month,
                 market_month,
                 outage_date,
-                constraint_period_type=constraint_period_type,
                 require_label=False,
+                # Pass pre-calculated data
+                recent_hist_da=recent_hist_da,
+                season_hist_da=season_hist_da,
+                spice_map=spice_map,
             )
 
             if data is not None and len(data) > 0:
-                test_data_list.append(data)
-                loaded_outage_count += 1
-                if verbose:
-                    print(f"  ✓ {outage_date.strftime('%Y-%m-%d')}: {len(data):,} constraints")
+                # Filter by branch_name if provided
+                if branch_name:
+                    data = data[data["branch_name"].str.contains(branch_name, na=False)]
+
+                if len(data) > 0:
+                    test_data_list.append(data)
+                    loaded_outage_count += 1
+                    if verbose:
+                        print(f"  ✓ {outage_date.strftime('%Y-%m-%d')}: {len(data):,} constraints")
 
         # Combine all test data
         if len(test_data_list) > 0:
@@ -726,7 +902,7 @@ class DataLoader:
             if verbose and len(test_periods) > 1:
                 print(f"\n--- Period {i + 1}/{len(test_periods)} ---")
 
-            period_data = self.load_test_data_for_period(auction_month, market_month, verbose)
+            period_data = self.load_test_data_for_period(auction_month, market_month, verbose=verbose)
 
             if period_data is not None:
                 all_test_data.append(period_data)

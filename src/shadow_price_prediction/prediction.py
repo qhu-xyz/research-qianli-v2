@@ -21,6 +21,24 @@ class Predictor:
         self.models = models
         self.anomaly_detector = anomaly_detector
 
+    def transform_features(self, data: pd.DataFrame, scaled_col_suffix: str | None = None) -> pd.DataFrame:
+        """
+        Transform features using the trained scalers.
+
+        Parameters:
+        -----------
+        data : pd.DataFrame
+            Data to transform. Must contain 'forecast_horizon' and 'branch_name'.
+        scaled_col_suffix : str, optional
+            If provided, scaled features will be added as new columns with this suffix.
+
+        Returns:
+        --------
+        data_scaled : pd.DataFrame
+            Data with scaled features.
+        """
+        return self.models.transform_features(data, scaled_col_suffix)
+
     def predict(self, test_data: pd.DataFrame, verbose: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         """
         Make predictions on test data.
@@ -47,7 +65,6 @@ class Predictor:
 
         # Prepare test features
         X_test = test_data[self.config.features.all_features].copy()
-        # y_test = test_data["label"].copy()
 
         # Calculate forecast horizon for weight selection
         # Assumes test_data has auction_month and market_month columns
@@ -102,9 +119,32 @@ class Predictor:
         branches_processed = 0
 
         # Loop over each unique branch in the test set
-        for branch_name in unique_branches_in_test:
+        # Loop over each unique branch in the test set
+        # Get unique (branch_name, flow_direction) pairs
+        if "flow_direction" in test_data.columns:
+            unique_pairs = test_data[["branch_name", "flow_direction"]].drop_duplicates().values
+        else:
+            # Fallback if flow_direction is in index (should have been reset before calling predict?)
+            # But predict receives test_data which might have index
+            if "flow_direction" in test_data.index.names:
+                unique_pairs = test_data.reset_index()[["branch_name", "flow_direction"]].drop_duplicates().values
+            else:
+                # Fallback if flow_direction is missing completely (should not happen)
+                unique_pairs = [(b, 0) for b in unique_branches_in_test]  # Dummy flow
+
+        for branch_name, flow_direction in unique_pairs:
             # Get all test samples for this branch using boolean mask
-            branch_mask = test_data["branch_name"] == branch_name
+            if "flow_direction" in test_data.columns:
+                branch_mask = (test_data["branch_name"] == branch_name) & (
+                    test_data["flow_direction"] == flow_direction
+                )
+            elif "flow_direction" in test_data.index.names:
+                branch_mask = (test_data["branch_name"] == branch_name) & (
+                    test_data.index.get_level_values("flow_direction") == flow_direction
+                )
+            else:
+                branch_mask = test_data["branch_name"] == branch_name
+
             branch_indices = np.where(branch_mask)[0]  # Get positional indices
 
             X_branch_all = X_test.iloc[branch_indices]
@@ -117,8 +157,8 @@ class Predictor:
                 horizon_group = "f0"
             elif forecast_horizon == 1:
                 horizon_group = "f1"
-            elif 2 <= forecast_horizon <= 3:
-                horizon_group = "medium"
+            # elif 2 <= forecast_horizon <= 3:
+            #     horizon_group = "medium"
             else:
                 horizon_group = "long"
 
@@ -156,10 +196,9 @@ class Predictor:
                         y_pred_threshold[idx] = 0.5  # Default threshold for anomaly
 
                         # Use default regressor ensemble for shadow price (for this horizon)
-                        # Use default regressor ensemble for shadow price (for this horizon)
-                        # We pass a dummy branch name to force default model
+                        # We pass a dummy branch name and flow direction to force default model
                         reg_ensemble_anom, reg_scaler_anom = self.models.get_regressor_ensemble(
-                            "NON_EXISTENT_BRANCH", forecast_horizon
+                            "NON_EXISTENT_BRANCH", 0, forecast_horizon
                         )
 
                         if len(reg_ensemble_anom) > 0:
@@ -171,9 +210,12 @@ class Predictor:
                                 feature_cols = self.config.features.all_features
                                 sample_df[feature_cols] = reg_scaler_anom.transform(sample_df[feature_cols])
                                 # Clip to prevent explosion from near-constant features
-                                test_sample_reg = sample_df[self.config.features.step2_features]
+                                if self.config.models.short_term_reg_weights[0] > 0:
+                                    step2_names = [f[0] for f in self.config.features.step2_features]
+                                    test_sample_reg = sample_df[step2_names]
                             else:
-                                test_sample_reg = test_sample_all[self.config.features.step2_features].to_frame().T
+                                step2_names = [f[0] for f in self.config.features.step2_features]
+                                test_sample_reg = test_sample_all[step2_names].to_frame().T
 
                             # Get horizon-specific weights for default regressor
                             reg_weights_anom = self.models.get_ensemble_weights_for_horizon(
@@ -229,7 +271,7 @@ class Predictor:
 
             # Get appropriate classifier ensemble, threshold, and scaler for this horizon
             clf_ensemble_to_use, threshold_to_use, clf_scaler = self.models.get_classifier_ensemble(
-                branch_name, forecast_horizon
+                branch_name, flow_direction, forecast_horizon
             )
 
             # Scale features if scaler is available
@@ -242,31 +284,49 @@ class Predictor:
                 # Clip to prevent explosion from near-constant features
 
                 # Extract classification features from SCALED data
-                X_branch_clf = X_branch_scaled_all[self.config.features.step1_features]
+                step1_names = [f[0] for f in self.config.features.step1_features]
+                X_branch_clf = X_branch_scaled_all[step1_names]
             else:
                 # Fallback (should not happen if model exists)
-                X_branch_clf = X_branch_all[self.config.features.step1_features]
+                step1_names = [f[0] for f in self.config.features.step1_features]
+                X_branch_clf = X_branch_all[step1_names]
 
             # Determine if we are using a branch-specific model (for logging/weights)
-            has_branch_model = False
-            if forecast_horizon == 0:
-                has_branch_model = branch_name in self.models.clf_ensembles_f0
-            elif forecast_horizon == 1:
-                has_branch_model = branch_name in self.models.clf_ensembles_f1
-            elif 2 <= forecast_horizon <= 3:
-                has_branch_model = branch_name in self.models.clf_ensembles_medium
-            else:
-                has_branch_model = branch_name in self.models.clf_ensembles_long
+            # Note: get_classifier_ensemble returns branch specific if available, else default
+            # We can check if branch_name is in the ensemble dict to know for sure,
+            # but simpler to check if returned ensemble is default
+            # Actually, let's just count based on result
+            # Or check if (branch_name, flow_direction) is in keys
+            # But we don't have easy access to keys here without re-checking logic
+            # Let's just assume if clf_scaler is not None and not default scaler...
+            # A bit complex. Let's just rely on the fact that we got a model.
 
-            if has_branch_model:
+            # Get horizon-specific weights
+            # Note: weight overrides are handled inside predict_ensemble if passed,
+            # but here we need to pass them.
+            # We need to know if it's a branch model or default to pass correct 'is_branch' flag
+            # Re-check logic:
+            is_branch_model = False
+            # Check if we have a specific model for this branch/flow
+            if forecast_horizon == 0:
+                if (branch_name, flow_direction) in self.models.clf_ensembles_f0:
+                    is_branch_model = True
+            elif forecast_horizon == 1:
+                if (branch_name, flow_direction) in self.models.clf_ensembles_f1:
+                    is_branch_model = True
+
+            else:
+                if (branch_name, flow_direction) in self.models.clf_ensembles_long:
+                    is_branch_model = True
+
+            if is_branch_model:
                 used_branch_clf_count += n_samples_in_branch
-                model_name = f"Branch: {branch_name}"
             else:
                 used_default_clf_count += n_samples_in_branch
-                model_name = "Default"
 
-            # Get horizon-specific weights for classifier
-            clf_weights = self.models.get_ensemble_weights_for_horizon(forecast_horizon, "classifier", has_branch_model)
+            clf_weights = self.models.get_ensemble_weights_for_horizon(
+                forecast_horizon, "classifier", is_branch=is_branch_model
+            )
 
             # Safety check: Skip if no samples to predict
             if len(X_branch_clf) == 0:
@@ -276,102 +336,131 @@ class Predictor:
                 continue
 
             # Get probabilities using ensemble with horizon-specific weights
-            y_pred_proba_branch = predict_ensemble(
+            y_proba_branch = predict_ensemble(
                 clf_ensemble_to_use, X_branch_clf, predict_proba=True, weight_overrides=clf_weights
-            )
-            y_pred_binary_branch = (y_pred_proba_branch >= threshold_to_use).astype(int)
-
-            # Calculate scaled binding probability
-            # Map [0, threshold] -> [0, 0.5] and [threshold, 1] -> [0.5, 1]
-            # f(p) = 0.5 * (p / t) if p < t
-            # f(p) = 0.5 + 0.5 * (p - t) / (1 - t) if p >= t
-
-            # Avoid division by zero if threshold is 0 or 1 (unlikely but safe)
-            t = np.clip(threshold_to_use, 1e-6, 1.0 - 1e-6)
-
-            y_pred_proba_scaled_branch = np.where(
-                y_pred_proba_branch < t,
-                0.5 * (y_pred_proba_branch / t),
-                0.5 + 0.5 * (y_pred_proba_branch - t) / (1.0 - t),
             )
 
             # Store predictions
-            y_pred_binary[branch_indices] = y_pred_binary_branch
-            y_pred_proba[branch_indices] = y_pred_proba_branch
-            y_pred_proba_scaled[branch_indices] = y_pred_proba_scaled_branch
+            y_pred_proba[branch_indices] = y_proba_branch
             y_pred_threshold[branch_indices] = threshold_to_use
 
-            # ====================================================================
-            # Stage 2: Regression (Shadow Price Prediction)
-            # ====================================================================
-            # Find binding samples
-            binding_mask_in_branch = y_pred_binary_branch == 1
+            # Apply threshold
+            y_pred_binary_branch = (y_proba_branch >= threshold_to_use).astype(int)
+            y_pred_binary[branch_indices] = y_pred_binary_branch
 
-            if binding_mask_in_branch.sum() > 0:
-                binding_indices_in_branch = branch_indices[binding_mask_in_branch]
-                n_binding_in_branch = len(binding_indices_in_branch)
+            # Scale probability for output (0.5 = threshold)
+            # If prob < threshold, map [0, threshold] -> [0.5, 0.5]
+            # If prob >= threshold, map [threshold, 1] -> [0.5, 1]
+            # Avoid division by zero
+            safe_threshold = np.clip(threshold_to_use, 0.001, 0.999)
 
-                # Get appropriate regressor ensemble and scaler for this horizon
-                reg_ensemble_to_use, reg_scaler = self.models.get_regressor_ensemble(branch_name, forecast_horizon)
+            # Vectorized scaling
+            mask_below = y_proba_branch < safe_threshold
+            mask_above = ~mask_below
 
-                # Scale features if scaler is available
-                if reg_scaler:
-                    # We need to scale ALL features then select step2 features
-                    X_binding_all_raw = X_branch_all.iloc[binding_mask_in_branch].copy()
-                    feature_cols = self.config.features.all_features
-                    X_binding_all_raw[feature_cols] = reg_scaler.transform(X_binding_all_raw[feature_cols])
+            y_pred_proba_scaled_branch = np.zeros_like(y_proba_branch)
+            y_pred_proba_scaled_branch[mask_below] = 0.5 * (y_proba_branch[mask_below] / safe_threshold)
+            y_pred_proba_scaled_branch[mask_above] = 0.5 + 0.5 * (
+                (y_proba_branch[mask_above] - safe_threshold) / (1.0 - safe_threshold)
+            )
+            y_pred_proba_scaled[branch_indices] = y_pred_proba_scaled_branch
 
-                    # Extract regression features from SCALED data
-                    X_binding_in_branch = X_binding_all_raw[self.config.features.step2_features]
-                else:
-                    # Extract regression features from RAW data (fallback)
-                    X_binding_in_branch = X_branch_all.iloc[binding_mask_in_branch][self.config.features.step2_features]
-
-                # Determine if we are using a branch-specific model
-                has_branch_reg_model = False
-                if forecast_horizon == 0:
-                    has_branch_reg_model = branch_name in self.models.reg_ensembles_f0
-                elif forecast_horizon == 1:
-                    has_branch_reg_model = branch_name in self.models.reg_ensembles_f1
-                elif 2 <= forecast_horizon <= 3:
-                    has_branch_reg_model = branch_name in self.models.reg_ensembles_medium
-                else:
-                    has_branch_reg_model = branch_name in self.models.reg_ensembles_long
-
-                if has_branch_reg_model:
-                    used_branch_reg_count += n_binding_in_branch
-                else:
-                    used_default_reg_count += n_binding_in_branch
-
-                # Get horizon-specific weights for regressor
-                reg_weights = self.models.get_ensemble_weights_for_horizon(
-                    forecast_horizon, "regressor", has_branch_reg_model
-                )
-
-                # Predict shadow prices
-                if reg_ensemble_to_use is not None:
-                    y_pred_shadow_price_branch = np.maximum(
-                        0,
-                        np.expm1(
-                            predict_ensemble(
-                                reg_ensemble_to_use,
-                                X_binding_in_branch,
-                                predict_proba=False,
-                                weight_overrides=reg_weights,
-                            )
-                        ),
-                    )
-                    y_pred_shadow_price[binding_indices_in_branch] = y_pred_shadow_price_branch
-
-            # Store model name
+            # Log model usage
+            model_name = f"{'Branch' if is_branch_model else 'Default'} CLF"
             for idx in branch_indices:
                 model_used[idx] = model_name
+
+            # ====================================================================
+            # Stage 2: Regression (Shadow Price Estimation)
+            # ====================================================================
+
+            # Only predict shadow price for binding constraints
+            binding_mask_local = y_pred_binary_branch == 1
+
+            if np.any(binding_mask_local):
+                # Get appropriate regressor ensemble
+                reg_ensemble_to_use, reg_scaler = self.models.get_regressor_ensemble(
+                    branch_name, flow_direction, forecast_horizon
+                )
+
+                if len(reg_ensemble_to_use) == 0:
+                    # No regression model available (even default)
+                    no_reg_model_count += binding_mask_local.sum()
+                    # Shadow price remains 0
+                else:
+                    # Prepare regression features
+                    # Use the SAME scaler if it exists (it should match the one from classifier if branch-specific)
+                    # Or reg_scaler might be different if we fell back to default regressor but used branch classifier?
+                    # get_regressor_ensemble handles logic.
+
+                    if reg_scaler:
+                        # If we already scaled for classification and it's the SAME scaler, we could reuse
+                        # But simpler to just transform again to be safe/robust
+                        X_branch_scaled_reg_all = X_branch_all.copy()
+                        X_branch_scaled_reg_all[feature_cols] = reg_scaler.transform(
+                            X_branch_scaled_reg_all[feature_cols]
+                        )
+                        # Extract regression features from SCALED
+                        step2_names = [f[0] for f in self.config.features.step2_features]
+                        X_branch_reg = X_branch_scaled_reg_all[step2_names]
+                    else:
+                        step2_names = [f[0] for f in self.config.features.step2_features]
+                        X_branch_reg = X_branch_all[step2_names]
+
+                    # Filter for binding samples
+                    # We need to subset X_branch_reg using binding_mask_local
+                    X_branch_reg_binding = X_branch_reg[binding_mask_local]
+
+                    # Check if branch model
+                    is_branch_reg_model = False
+                    if forecast_horizon == 0:
+                        if (branch_name, flow_direction) in self.models.reg_ensembles_f0:
+                            is_branch_reg_model = True
+                    elif forecast_horizon == 1:
+                        if (branch_name, flow_direction) in self.models.reg_ensembles_f1:
+                            is_branch_reg_model = True
+                    # elif 2 <= forecast_horizon <= 3:
+                    #     if (branch_name, flow_direction) in self.models.reg_ensembles_medium: is_branch_reg_model = True
+                    else:
+                        if (branch_name, flow_direction) in self.models.reg_ensembles_long:
+                            is_branch_reg_model = True
+
+                    if is_branch_reg_model:
+                        used_branch_reg_count += binding_mask_local.sum()
+                    else:
+                        used_default_reg_count += binding_mask_local.sum()
+
+                    reg_weights = self.models.get_ensemble_weights_for_horizon(
+                        forecast_horizon, "regressor", is_branch=is_branch_reg_model
+                    )
+
+                    # Predict shadow price (log-transformed)
+                    raw_pred = predict_ensemble(
+                        reg_ensemble_to_use,
+                        X_branch_reg_binding,
+                        predict_proba=False,
+                        weight_overrides=reg_weights,
+                    )
+
+                    # Inverse transform (expm1) and clip to 0
+                    shadow_price_pred = np.maximum(0, np.expm1(raw_pred))
+
+                    # Map back to full array
+                    # binding_indices_local are indices within X_branch_all
+                    # We need to map to global indices
+                    binding_indices_global = branch_indices[binding_mask_local]
+                    y_pred_shadow_price[binding_indices_global] = shadow_price_pred
+
+                    # Update model usage log
+                    reg_model_name = f" + {'Branch' if is_branch_reg_model else 'Default'} REG"
+                    for idx in binding_indices_global:
+                        model_used[idx] += reg_model_name
 
             branches_processed += 1
 
             # Progress indicator
             if verbose and branches_processed % 1000 == 0:
-                print(f"  Progress: {branches_processed:,} / {len(unique_branches_in_test):,} branches processed...")
+                print(f"  Progress: {branches_processed:,} / {len(unique_pairs):,} branch-flow pairs processed...")
 
         if verbose:
             print("\n✓ Predictions Complete")
@@ -400,7 +489,7 @@ class Predictor:
 
         # Calculate Metrics only if labels are available
         if results_per_outage["actual_shadow_price"].notna().any():
-            metrics = analyze_results(final_results, results_per_outage, verbose=verbose)
+            metrics = analyze_results(results_per_outage, final_results, verbose=verbose)
             if verbose:
                 print("\n[Evaluation Metrics]")
                 for k, v in metrics.items():

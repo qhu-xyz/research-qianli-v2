@@ -1,27 +1,51 @@
 """
 Main pipeline for shadow price prediction.
 """
+
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+# Set OMP_NUM_THREADS to 1 to avoid CPU thrashing when using Ray parallelism
+# This must be done before importing numpy/pandas/xgboost in some cases
 import pandas as pd
-from typing import Tuple, Dict, Optional, List
-from sklearn.preprocessing import StandardScaler
+
 from pbase.utils.ray import parallel_equal_pool
 
+from .anomaly_detection import AnomalyDetector
 from .config import PredictionConfig
 from .data_loader import DataLoader
-from .models import ShadowPriceModels
-from .anomaly_detection import AnomalyDetector
-from .prediction import Predictor
 from .evaluation import analyze_results
+from .models import ShadowPriceModels
+from .prediction import Predictor
 
 
-def _process_single_period(
+def _process_auction_month(
     config: PredictionConfig,
-    period_info: Tuple[int, pd.Timestamp, pd.Timestamp],
+    auction_month: pd.Timestamp,
+    market_months: list[pd.Timestamp],
     train_only: bool = False,
-    verbose: bool = True
-) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], int, pd.Timestamp, pd.Timestamp]:
+    verbose: bool = True,
+    output_dir: str | None = None,
+    refresh: bool = False,
+    branch_name: str | None = None,
+    # data_cache: dict | None = None, # Removed
+) -> tuple[
+    list[tuple[dict[Any, Any] | None, pd.DataFrame | None, Any, Any]],
+    ShadowPriceModels | None,
+    AnomalyDetector | None,
+    pd.DataFrame | None,
+    pd.Timestamp | None,
+]:
+    # Import joblib here to avoid serialization issues
+    import copy
+
+    # If data_cache is a Ray ObjectRef, get it
+    # if isinstance(data_cache, ray.ObjectRef):
+    #     data_cache = ray.get(data_cache)
+
     """
-    Process a single test period: load data, train models, make predictions.
+    Process a single auction month: train models once, predict for all market months.
 
     This function is designed to be called in parallel via Ray.
 
@@ -29,152 +53,249 @@ def _process_single_period(
     -----------
     config : PredictionConfig
         Configuration for the pipeline
-    period_info : Tuple[int, pd.Timestamp, pd.Timestamp]
-        Tuple of (period_idx, test_auction_month, test_market_month)
+    auction_month : pd.Timestamp
+        Auction month to process
+    market_months : List[pd.Timestamp]
+        List of market months to predict for this auction month
     train_only : bool
         If True, only train models and return None
     verbose : bool
         Print progress messages
+    output_dir : str, optional
+        Directory to save intermediate results
+    refresh : bool
+        If True, force re-computation even if results exist
+    branch_name : Optional[str]
+        If provided, only process branches containing this string.
+    n_jobs : int
+        Number of parallel jobs for model training.
 
     Returns:
     --------
-    results_per_outage : pd.DataFrame
-        Per-outage-date predictions
-    final_results : pd.DataFrame
-        Monthly aggregated predictions
-    period_idx : int
-        Index of the period
-    test_auction_month : pd.Timestamp
-        Auction month for this period
-    test_market_month : pd.Timestamp
-        Market month for this period
+    Tuple containing:
+        results : list of tuples (results_per_outage, final_results, auction_month, market_month)
+        period_models : ShadowPriceModels
+        period_anomaly_detector : AnomalyDetector
+        train_data : pd.DataFrame
+        auction_month : pd.Timestamp
     """
     # Import joblib here to avoid serialization issues
-    import joblib
-    import copy
-    
-    # Force joblib to use threading backend to avoid conflict with Ray's multiprocessing
-    # This prevents the "resource_tracker" error: del registry[rtype][name] KeyError
-    with joblib.parallel_backend('threading'):
-        period_idx, test_auction_month, test_market_month = period_info
-        
+    import time
+
+    start_time = time.time()
+
+    if verbose:
+        print(f"\n{'=' * 80}", flush=True)
+        print(f"[Processing Auction Month: {auction_month.strftime('%Y-%m')}]", flush=True)
+        print(f"  Market Months: {len(market_months)}")
+        for mm in sorted(market_months):
+            print(f"    - {mm.strftime('%Y-%m')}")
+        if branch_name:
+            print(f"  Filtering for branch: {branch_name}")
+        print(f"{'=' * 80}")
+
+    # Create auction-specific config
+    period_config = copy.deepcopy(config)
+
+    # Initialize components
+    from .data_loader import BaseDataLoader
+
+    period_data_loader: BaseDataLoader
+    if config.iso.name == "PJM":
+        from .data_loader import PjmDataLoader
+
+        period_data_loader = PjmDataLoader(period_config)
+    else:
+        from .data_loader import MisoDataLoader
+
+        period_data_loader = MisoDataLoader(period_config)
+
+    period_models = ShadowPriceModels(period_config)
+    period_anomaly_detector = AnomalyDetector(period_config)
+
+    # Derive current test periods for this auction month
+    current_test_periods = [(auction_month, mm) for mm in market_months]
+
+    # Step 1: Calculate Training Period
+    # Training ends 2 months before the auction_month (to simulate data availability)
+    # We use auction_month - 1 month as the exclusive upper bound, so data is loaded up to auction_month - 2 months
+    train_end = auction_month - pd.DateOffset(months=1)
+    train_start = auction_month - pd.offsets.MonthBegin(period_config.training.train_months_lookback)
+
+    if verbose:
+        print("\n[STEP 1: Training Period Calculation]")
+        print(f"  Training Range: {train_start.strftime('%Y-%m')} to {train_end.strftime('%Y-%m')}")
+
+    # Step 2: Load Training Data
+    if verbose:
+        print("\n[STEP 2: Loading Training Data]")
+
+    train_data = period_data_loader.load_training_data(
+        train_start,
+        train_end,
+        # Determine required period types based on CURRENT auction/market months
+        # This avoids loading unnecessary data types (e.g. long-term) if we only need short-term
+        required_period_types=period_data_loader.get_required_period_types(
+            [(auction_month, mm) for mm in market_months]
+        ),
+        branch_name=branch_name,
+        verbose=verbose,
+        # data_cache=data_cache # Removed
+    )
+
+    if train_data is None or len(train_data) == 0:
+        print(f"⚠️ No training data found for auction month {auction_month.strftime('%Y-%m')}. Skipping.")
+        return [(None, None, auction_month, mm) for mm in market_months], None, None, None, auction_month
+
+    # Apply label modification logic
+    # If prob_exceed_80 is 0, set label to 0
+    # Save original label in label_ori
+    if "prob_exceed_80" in train_data.columns:
         if verbose:
-            print(f"\n{'='*80}")
-            print(f"[Processing Period {period_idx + 1}]")
-            print(f"  Auction Month: {test_auction_month.strftime('%Y-%m')}")
-            print(f"  Market Month:  {test_market_month.strftime('%Y-%m')}")
-            print(f"{'='*80}")
-
-        # Create a period-specific config (copy of main config)
-        # We need to update the date parameters for this specific period
-        period_config = copy.deepcopy(config)
-        period_config.test_auction_month = test_auction_month
-        period_config.test_market_month = test_market_month
-
-        # Initialize components for this period
-        period_data_loader = DataLoader(period_config)
-        period_models = ShadowPriceModels(period_config)
-        period_anomaly_detector = AnomalyDetector(period_config)
-        period_predictor = Predictor(period_config, period_models, period_anomaly_detector)
-
-        # Step 1: Calculate Training Period
-        train_start, train_end = period_data_loader.get_training_period()
-        
-        if verbose:
-            print(f"\n[STEP 1: Training Period Calculation]")
-            print(f"  Training Range: {train_start.strftime('%Y-%m')} to {train_end.strftime('%Y-%m')}")
-
-        # Step 2: Load Training Data
-        if verbose:
-            print(f"\n[STEP 2: Loading Training Data]")
-        
-        train_data = period_data_loader.load_training_data(train_start, train_end, verbose=verbose)
-        
-        if train_data is None or len(train_data) == 0:
-            print(f"⚠️ No training data found for period {period_idx + 1}. Skipping.")
-            return None, None, period_idx, test_auction_month, test_market_month
-
-        # Step 2.5: Scale Features
-        if verbose:
-            print(f"  Scaling features...")
-        
-        scaler = StandardScaler()
-        feature_cols = config.features.all_features
-        
-        # Fit and transform training data
-        train_data[feature_cols] = scaler.fit_transform(train_data[feature_cols])
-
-        # Step 3: Identify Test Branches
-        # We need to know which branches are in the test set (outage period)
-        # to know which specific models to train.
-        # Since we are in a "simulated" environment where we might not have the future test data yet,
-        # we can either:
-        # A) Load the test data now (if available) to get the branches
-        # B) Train on ALL branches found in training data (more expensive but safer)
-        # C) Use a heuristic (e.g. top N branches)
-        
-        # Here we'll load the test data metadata/structure to get the branches
-        # This is slightly inefficient as we might load it again for prediction, 
-        # but ensures we train the right models.
-        if verbose:
-            print(f"\n[STEP 3: Identifying Test Branches]")
-
-        # Load test data for the target month
-        # We use the data loader's method but we need to iterate over outages in that month
-        # For efficiency, let's just get the unique branches from the training data
-        # and train models for all of them (or top N). 
-        # Ideally, we should only train for branches that appear in the test set.
-        
-        # Let's load the test data to be precise
-        test_data = period_data_loader.load_test_data_for_period(test_auction_month, test_market_month, verbose=False) # Don't be verbose here
-        
-        if test_data is None or len(test_data) == 0:
-             print(f"⚠️ No test data found for period {period_idx + 1}. Skipping.")
-             return None, None, period_idx, test_auction_month, test_market_month
-             
-        # Scale test data using the same scaler
-        test_data[feature_cols] = scaler.transform(test_data[feature_cols])
-             
-        test_branches = set(test_data['branch_name'].unique())
-        
-        if verbose:
-            print(f"  Found {len(test_branches)} unique branches in test set.")
-
-        # Step 4: Train Models
-        if verbose:
-            print(f"\n[STEP 4: Training Models]")
-        
-        # Train classifiers
-        period_models.train_classifiers(train_data, test_branches, verbose)
-        
-        # Step 5: Characterize Never-Binding Branches & Train Regressors
-        if verbose:
-            print(f"\n[STEP 5: Characterizing Branches & Training Regressors]")
-
-        # Characterize never-binding branches
-        period_anomaly_detector.characterize_never_binding_branches(train_data, verbose)
-
-        # Train regressors
-        period_models.train_regressors(train_data, test_branches, verbose)
-
-        # Return early if train_only
-        if train_only:
+            print("  Applying label modification based on prob_exceed_80...")
+        train_data["label_ori"] = train_data["label"]
+        mask_zero_prob = train_data["prob_exceed_80"] < 1e-6
+        n_modified = mask_zero_prob.sum()
+        if n_modified > 0:
+            train_data.loc[mask_zero_prob, "label"] = 0
             if verbose:
-                print(f"\n✅ Training Complete for Period {period_idx + 1}")
-            return None, None, period_idx, test_auction_month, test_market_month
-
-        # Step 6: Make predictions for this period
+                print(f"    Modified {n_modified} labels to 0 where prob_exceed_80 is 0.")
+    else:
         if verbose:
-            print(f"\n[STEP 6: Making Predictions for Period {period_idx + 1}]")
+            print("  ⚠️ prob_exceed_80 not found in training data. Skipping label modification.")
 
-        # Create predictor and predict
-        # We already loaded test_data in Step 3, reuse it
-        results_per_outage, final_results = period_predictor.predict(test_data, verbose=verbose)
-        
+    # Step 3: Identify Test Branches (from all market months)
+    if verbose:
+        print("\n[STEP 3: Identifying Target Branches]")
+
+    # Identify all unique (branch_name, flow_direction) pairs in the test set (future market months)
+    # We need to know which branches to train models for
+    if verbose:
+        print("  Identifying target branches from test periods...")
+
+    all_test_branches = set()
+    test_data_by_month = {}
+
+    # Load test data for all periods at once
+    all_test_data = period_data_loader.load_test_data(
+        test_periods=[(auction_month, mm) for mm in market_months],
+        branch_name=branch_name,
+        verbose=False,
+    )
+
+    if all_test_data is not None and not all_test_data.empty:
+        # Populate test_data_by_month and all_test_branches
+        for market_month, month_df in all_test_data.groupby("market_month"):
+            test_data_by_month[market_month] = month_df
+            pairs = month_df[["branch_name", "flow_direction"]].drop_duplicates().itertuples(index=False, name=None)
+            all_test_branches.update(pairs)
+
+    if verbose:
+        print(f"  Found {len(all_test_branches)} unique branch-flow pairs in test set.")
+
+    # Step 4: Train Models
+    if verbose:
+        print(f"\n[STEP 4: Training Models for Auction Month {auction_month.strftime('%Y-%m')}]")
+    # Train classifiers
+    period_models.train_classifiers(train_data, all_test_branches, current_test_periods, verbose)
+
+    # Step 5: Characterize Never-Binding Branches & Train Regressors
+    if verbose:
+        print(f"\n[STEP 5: Training Regressors for Auction Month {auction_month.strftime('%Y-%m')}]")
+
+    # Characterize never-binding branches per horizon group
+    # Only process groups that are actually needed for test_periods
+    required_groups = period_models._get_required_groups(current_test_periods)
+
+    horizon_filters = {}
+    for group in config.horizon_groups:
+        # Capture group values in closure
+        def make_filter(min_h, max_h):
+            return lambda df: df[(df["forecast_horizon"] >= min_h) & (df["forecast_horizon"] <= max_h)]
+
+        horizon_filters[group.name] = make_filter(group.min_horizon, group.max_horizon)
+
+    for horizon_group in required_groups:
+        if horizon_group in horizon_filters:
+            filter_func = horizon_filters[horizon_group]
+            horizon_data = filter_func(train_data)
+            if len(horizon_data) > 0:
+                period_anomaly_detector.characterize_never_binding_branches(horizon_data, horizon_group, verbose)
+
+    # Train regressors
+    period_models.train_regressors(train_data, all_test_branches, current_test_periods, verbose)
+
+    # end_time = time.time()
+    # duration = end_time - start_time
+    # print(f"[Timing Training] _process_auction_month training for {auction_month.strftime('%Y-%m')} took {duration:.2f} seconds")
+
+    if train_only:
         if verbose:
-            print(f"\n✅ Period {period_idx + 1} Complete")
+            print(f"  Training complete for {auction_month.strftime('%Y-%m')}. Skipping prediction.")
+        return [], period_models, period_anomaly_detector, train_data, auction_month
 
-        return results_per_outage, final_results, period_idx, test_auction_month, test_market_month
+    # Step 6: Make Predictions
+    if verbose:
+        print(f"\n[STEP 6: Making Predictions for Auction Month {auction_month.strftime('%Y-%m')}]")
+
+    # Initialize predictor for this period
+    period_predictor = Predictor(period_config, period_models, period_anomaly_detector)
+
+    results: list[tuple[dict[Any, Any] | None, pd.DataFrame | None, Any, Any]] = []
+    for market_month in sorted(market_months):
+        if verbose:
+            print(f"  Predicting for Market Month: {market_month.strftime('%Y-%m')}")
+
+        # Check if result already exists
+        if output_dir is not None and not refresh:
+            output_path = Path(output_dir)
+            auc_month_str = auction_month.strftime("%Y-%m")
+            market_month_str = market_month.strftime("%Y-%m")
+            output_file = (
+                output_path
+                / f"auction_month={auc_month_str}/market_month={market_month_str}/class_type={config.class_type}/final_results.parquet"
+            )
+
+            if output_file.exists():
+                if verbose:
+                    print(f"  ⚠️  Result already exists for {market_month.strftime('%Y-%m')}. Skipping.")
+                results.append((None, None, auction_month, market_month))
+                continue
+
+        test_data = test_data_by_month[market_month]
+        results_per_outage, final_results, metrics = period_predictor.predict(test_data, verbose=False)
+
+        if output_dir is not None:
+            output_path = Path(output_dir)
+            auc_month_str = auction_month.strftime("%Y-%m")
+            market_month_str = market_month.strftime("%Y-%m")
+            output_file = (
+                output_path
+                / f"auction_month={auc_month_str}/market_month={market_month_str}/class_type={config.class_type}/"
+            )
+            output_file.mkdir(parents=True, exist_ok=True)
+            final_results.to_parquet(output_file / "final_results.parquet")
+
+            if verbose:
+                print(f"  Saved final results to: {output_file}")
+
+        results.append((results_per_outage, final_results, auction_month, market_month))
+
+        # Free memory
+        del test_data
+        import gc
+
+        gc.collect()
+
+    if verbose:
+        print(f"\n✅ Auction Month {auction_month.strftime('%Y-%m')} Complete ({len(results)} predictions)")
+
+    end_time = time.time()
+    duration = end_time - start_time
+    print(f"[Timing] _process_auction_month for {auction_month.strftime('%Y-%m')} took {duration:.2f} seconds")
+
+    # return results, period_models, period_anomaly_detector, train_data, auction_month
+    return results, None, None, None, None
 
 
 class ShadowPricePipeline:
@@ -196,28 +317,43 @@ class ShadowPricePipeline:
         self.predictor = Predictor(config, self.models, self.anomaly_detector)
 
         # Store data for later use
-        self.train_data: Optional[pd.DataFrame] = None
-        self.test_data: Optional[pd.DataFrame] = None
+        self.train_data: pd.DataFrame | None = None
+        self.test_data: pd.DataFrame | None = None
+
+        # Store trained models by auction month
+        self.trained_models: dict[pd.Timestamp, ShadowPriceModels] = {}
+        self.trained_predictors: dict[pd.Timestamp, Predictor] = {}
 
     def run(
         self,
+        test_periods: list[tuple[pd.Timestamp, pd.Timestamp]] | dict[pd.Timestamp, list[pd.Timestamp]],
+        class_type: str | None = None,
         train_only: bool = False,
         predict_only: bool = False,
         verbose: bool = True,
         use_parallel: bool = True,
-        n_jobs: int = 0
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, Dict]:
+        n_jobs: int = 0,
+        save_results: bool = False,  # Deprecated but kept for compatibility
+        output_dir: str | None = None,
+        refresh: bool = False,
+        branch_name: str | None = None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, dict, pd.DataFrame, dict[pd.Timestamp, Predictor]]:
         """
         Run the complete prediction pipeline with parallel processing.
 
-        For each test period (processed in parallel):
-        1. Calculate training period based on that period's auction_month
-        2. Train models on that period's training data
-        3. Make predictions for that period
-        4. Aggregate results across all periods
+        Optimized to group test periods by auction month to avoid redundant training.
+        For each unique auction month:
+        1. Train models once
+        2. Predict for all associated market months
 
         Parameters:
         -----------
+        test_periods : Union[List[Tuple], Dict[Timestamp, List[Timestamp]]] (REQUIRED)
+            Either:
+            - List of (auction_month, market_month) tuples
+            - Dictionary mapping auction_month -> list of market_months
+        class_type : str, optional
+            Override the class_type in the configuration (e.g. 'onpeak', 'offpeak')
         train_only : bool
             If True, only train models without prediction
         predict_only : bool
@@ -225,11 +361,11 @@ class ShadowPricePipeline:
         verbose : bool
             Print progress messages
         use_parallel : bool
-            If True, use Ray parallel processing for multiple periods (default: True)
-            If False, process periods sequentially
+            If True, use Ray parallel processing for model training (branch-level).
+            Auction months are always processed sequentially to avoid nested parallelism.
         n_jobs : int
             Number of parallel workers for Ray processing (default: 0 = auto-determine)
-            Only used when use_parallel=True and multiple periods exist
+            Only used when use_parallel=True.
             - 0: Auto-determine based on available CPUs
             - Positive integer: Use exactly this many workers
             - -1: Use all available CPUs
@@ -243,82 +379,170 @@ class ShadowPricePipeline:
         metrics : dict
             Analysis metrics for both levels (combined across all periods)
         """
+        # Validate test_periods
+        if not test_periods:
+            raise ValueError("test_periods is required and cannot be None or empty")
+
+        # Use the provided test_periods
+        periods_to_process = test_periods
+
+        if periods_to_process is None or len(periods_to_process) == 0:
+            raise ValueError(
+                "No test periods provided. Pass test_periods to run() or configure them in PredictionConfig."
+            )
+
+        # Create run-specific config if class_type is provided
+        if class_type is not None:
+            run_config = replace(self.config, class_type=class_type)
+        else:
+            run_config = self.config
+
+        # Group test periods by auction month
+        from collections import defaultdict
+
+        # If parallel is enabled, we want to maximize parallelism by treating each (auction, market) pair as a separate task
+        # This allows us to use n_jobs to parallelize across market months even within the same auction month
+        if use_parallel:
+            # Flatten to individual (auction_month, [market_month]) items
+            if isinstance(periods_to_process, dict):
+                auction_month_groups = []
+                for auction_month, market_months in periods_to_process.items():
+                    for mm in market_months:
+                        auction_month_groups.append((auction_month, [mm]))
+            else:
+                auction_month_groups = [(am, [mm]) for am, mm in periods_to_process]
+
+            # Sort for consistent order
+            auction_month_groups.sort(key=lambda x: (x[0], x[1][0]))
+
+        else:
+            # Sequential mode: Group by auction month to optimize training (train once per auction month)
+            if isinstance(periods_to_process, dict):
+                # Already in dict format: {auction_month: [market_months]}
+                periods_by_auction = periods_to_process
+            else:
+                # Convert list of tuples to dict
+                periods_by_auction = defaultdict(list)
+                for auction_month, market_month in periods_to_process:
+                    periods_by_auction[auction_month].append(market_month)
+
+            # Convert to sorted list of (auction_month, [market_months])
+            auction_month_groups = sorted(periods_by_auction.items(), key=lambda x: x[0])
+
         if verbose:
             print("=" * 80)
-            if use_parallel and len(self.config.test_periods) > 1:
-                print("SHADOW PRICE PREDICTION PIPELINE - PARALLEL PER-PERIOD TRAINING MODE")
+            if use_parallel and len(auction_month_groups) > 1:
+                print("SHADOW PRICE PREDICTION PIPELINE - PARALLEL PER-AUCTION-MONTH MODE")
             else:
-                print("SHADOW PRICE PREDICTION PIPELINE - PER-PERIOD TRAINING MODE")
+                print("SHADOW PRICE PREDICTION PIPELINE - PER-AUCTION-MONTH MODE")
             print("=" * 80)
-            print(f"Test Periods: {len(self.config.test_periods)}")
-            for i, (auction_month, market_month) in enumerate(self.config.test_periods):
-                print(f"  {i + 1}. Auction: {auction_month.strftime('%Y-%m')}, Market: {market_month.strftime('%Y-%m')}")
-            print(f"Class Type: {self.config.class_type}")
-            print(f"Period Type: {self.config.period_type}")
-            if use_parallel and len(self.config.test_periods) > 1:
+            print(f"Total Test Periods: {len(periods_to_process)}")
+            print(f"Unique Auction Months: {len(auction_month_groups)}")
+            print()
+            for auction_month, market_months in auction_month_groups:
+                print(f"  Auction: {auction_month.strftime('%Y-%m')} → {len(market_months)} market month(s)")
+                for mm in sorted(market_months):
+                    print(f"    - Market: {mm.strftime('%Y-%m')}")
+            print(f"Class Type: {run_config.class_type}")
+            # print(f"Period Type: {run_config.period_type}")  # Dynamic per market month
+            if use_parallel and len(auction_month_groups) > 1:
                 n_jobs_str = "auto-determined" if n_jobs == 0 else ("all CPUs" if n_jobs == -1 else str(n_jobs))
-                print(f"\n🚀 Using Ray parallel processing for {len(self.config.test_periods)} periods")
+                print(f"\n🚀 Using Ray parallel processing for {len(auction_month_groups)} auction months")
                 print(f"   Workers: {n_jobs_str}")
 
         if predict_only:
-            raise NotImplementedError("predict_only mode not supported with per-period training")
+            raise NotImplementedError("predict_only mode not supported with per-auction-month training")
 
         # Prepare parameter dictionaries for parallel processing
-        # Each dict contains all kwargs needed for one _process_single_period call
+        # Each dict contains all kwargs needed for one _process_auction_month call
+
+        # Pre-load data into shared cache if parallel
+        # Prepare parameter dictionaries for parallel processing
+        # Each dict contains all kwargs needed for one _process_auction_month call
+
         param_dict_list = [
             {
-                'config': self.config,
-                'period_info': (i, auction_month, market_month),
-                'train_only': train_only,
-                'verbose': verbose
+                "config": run_config,
+                "auction_month": auction_month,
+                "market_months": market_months,
+                "train_only": train_only,
+                "verbose": verbose,  # Reduce verbosity in parallel
+                "output_dir": output_dir,
+                "refresh": refresh,
+                "branch_name": branch_name,
+                # "data_cache": None # Cache removed as per user request
             }
-            for i, (auction_month, market_month) in enumerate(self.config.test_periods)
+            for auction_month, market_months in auction_month_groups
         ]
 
-        # Process periods in parallel or sequentially
-        if use_parallel and len(self.config.test_periods) > 1:
+        # Process auction months in parallel or sequentially
+        if use_parallel and len(auction_month_groups) > 1:
             if verbose:
                 print("\n" + "=" * 80)
-                print("[PARALLEL PROCESSING: Training and Predicting for All Periods]")
+                print("[PARALLEL PROCESSING: Training and Predicting for All Auction Months]")
                 print("=" * 80)
 
-            # Use Ray parallel_equal_pool to process all periods in parallel
-            period_results = parallel_equal_pool(
-                func=_process_single_period,
+            # Use Ray parallel_equal_pool to process all auction months in parallel
+            auction_results = parallel_equal_pool(
+                func=_process_auction_month,
                 param_dict_list=param_dict_list,
                 param_serialization="default",
                 n_jobs=n_jobs,  # Configurable number of workers
-                unordered=False,  # Maintain order of results
+                unordered=True,  # Maintain order of results
                 raise_error=True,
-                use_tqdm=True
+                use_tqdm=True,
             )
         else:
-            # Sequential processing (for single period or if parallel disabled)
-            if verbose and len(self.config.test_periods) > 1:
-                print("\n[SEQUENTIAL PROCESSING: Processing Periods One by One]")
+            # Sequential processing (for single auction month or if parallel disabled)
+            if verbose and len(auction_month_groups) > 1:
+                print("\n[SEQUENTIAL PROCESSING: Processing Auction Months One by One]")
 
-            period_results = []
-            for param_dict in param_dict_list:
-                result = _process_single_period(**param_dict)
-                period_results.append(result)
+            auction_results = []
+            for _i, param_dict in enumerate(param_dict_list):
+                result = _process_auction_month(**param_dict)
+                auction_results.append(result)
 
+        if verbose:
+            print("\n" + "=" * 80)
+            print("✅ ALL AUCTION MONTHS TRAINING COMPLETE!")
+            print("=" * 80)
         # Return early if train_only
         if train_only:
-            if verbose:
-                print("\n" + "=" * 80)
-                print("✅ ALL PERIODS TRAINING COMPLETE!")
-                print("=" * 80)
-            return None, None, {}
+            return None, None, {}, None, self.trained_predictors
 
-        # Extract results from period_results
+        # Extract results from auction_results
+        # Each auction_results item is a tuple: (results_list, period_models, train_data)
+        # where results_list is a list of (results_per_outage, final_results, auction_month, market_month)
         all_results_per_outage = []
         all_final_results = []
+        all_train_data = []
 
-        for results_per_outage, final_results, period_idx, auction_month, market_month in period_results:
-            if results_per_outage is not None:
-                all_results_per_outage.append(results_per_outage)
-            if final_results is not None:
-                all_final_results.append(final_results)
+        for auction_result_item in auction_results:
+            # Handle potential wrapping (e.g. if parallel pool returns [result])
+            if isinstance(auction_result_item, list | tuple) and len(auction_result_item) == 1:
+                auction_result_tuple = auction_result_item[0]
+            else:
+                auction_result_tuple = auction_result_item
+
+            # Unpack tuple returned by _process_auction_month
+            results_list, period_models, period_anomaly_detector, train_data, auction_month = auction_result_tuple
+
+            # Store trained models for this auction month
+            if period_models is not None:
+                self.trained_models[auction_month] = period_models
+
+                # Create and store predictor
+                predictor = Predictor(self.config, period_models, period_anomaly_detector)
+                self.trained_predictors[auction_month] = predictor
+
+            if train_data is not None:
+                all_train_data.append(train_data)
+
+            for results_per_outage, final_results, _, _ in results_list:
+                if results_per_outage is not None:
+                    all_results_per_outage.append(results_per_outage)
+                if final_results is not None:
+                    all_final_results.append(final_results)
 
         # Combine results across all periods
         if verbose:
@@ -326,34 +550,51 @@ class ShadowPricePipeline:
             print("[COMBINING RESULTS ACROSS ALL PERIODS]")
             print("=" * 80)
 
-        combined_results_per_outage = pd.concat(all_results_per_outage, axis=0)
-        combined_final_results = pd.concat(all_final_results, axis=0)
+        combined_results_per_outage = (
+            pd.concat(all_results_per_outage, axis=0) if all_results_per_outage else pd.DataFrame()
+        )
+        combined_final_results = pd.concat(all_final_results, axis=0) if all_final_results else pd.DataFrame()
+        combined_train_data = pd.concat(all_train_data, axis=0) if all_train_data else pd.DataFrame()
 
         if verbose:
-            print(f"\n✓ Results Combined")
+            print("\n✓ Results Combined")
             print(f"  Total samples (per-outage): {len(combined_results_per_outage):,}")
             print(f"  Total unique constraints (monthly): {len(combined_final_results):,}")
-            print(f"  Date range: {combined_results_per_outage['outage_date'].min().strftime('%Y-%m-%d')} "
-                  f"to {combined_results_per_outage['outage_date'].max().strftime('%Y-%m-%d')}")
+            if not combined_results_per_outage.empty:
+                print(
+                    f"  Date range: {combined_results_per_outage['outage_date'].min().strftime('%Y-%m-%d')} "
+                    f"to {combined_results_per_outage['outage_date'].max().strftime('%Y-%m-%d')}"
+                )
+            if not combined_train_data.empty:
+                print(f"  Total training samples: {len(combined_train_data):,}")
 
         # Analyze combined results
         if verbose:
-            print(f"\n[ANALYZING COMBINED RESULTS]")
+            print("\n[ANALYZING COMBINED RESULTS]")
 
-        metrics = analyze_results(combined_results_per_outage, combined_final_results, verbose)
+        if not combined_results_per_outage.empty and combined_results_per_outage["actual_shadow_price"].notna().any():
+            metrics = analyze_results(combined_results_per_outage, combined_final_results, verbose)
+        else:
+            if verbose:
+                print("  Skipping metrics calculation (no labels available)")
+            metrics = {}
 
         if verbose:
             print("\n" + "=" * 80)
             print("✅ PIPELINE COMPLETE!")
             print("=" * 80)
 
-        return combined_results_per_outage, combined_final_results, metrics
+        return (
+            combined_results_per_outage,
+            combined_final_results,
+            metrics,
+            combined_train_data,
+            self.trained_predictors,
+        )
 
     def predict_new_data(
-        self,
-        test_data: pd.DataFrame,
-        verbose: bool = True
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        self, test_data: pd.DataFrame, verbose: bool = True
+    ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         """
         Make predictions on new test data using already-trained models.
 
@@ -370,8 +611,10 @@ class ShadowPricePipeline:
             Per-outage-date predictions
         final_results : pd.DataFrame
             Monthly aggregated predictions
+        metrics : dict
+            Evaluation metrics
         """
-        if self.models.clf_default is None:
+        if not self.models.scalers_default:
             raise ValueError("Models not trained. Run pipeline.run() first or set predict_only=False")
 
         return self.predictor.predict(test_data, verbose)

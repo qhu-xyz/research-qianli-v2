@@ -29,60 +29,64 @@ Performance:
 - Use pipeline.run(use_parallel=False) for sequential processing if needed
 """
 
-from .config import (
-    PredictionConfig,
-    FeatureConfig,
-    ModelConfig,
-    ModelSpec,
-    EnsembleConfig,
-    TrainingConfig,
-    ThresholdConfig,
-    AnomalyDetectionConfig,
-    DataPathConfig
+from sklearn.ensemble import (
+    GradientBoostingClassifier,
+    GradientBoostingRegressor,
+    RandomForestClassifier,
+    RandomForestRegressor,
 )
-from .pipeline import ShadowPricePipeline
-from .evaluation import calculate_metrics, analyze_results, print_metrics_report
-
-from .models import StackingModel
-from .tuning import HyperparameterTuner
+from sklearn.linear_model import ElasticNet, LinearRegression, LogisticRegression
 
 # Import model classes for user convenience
 from xgboost import XGBClassifier, XGBRegressor
-from sklearn.linear_model import LogisticRegression, LinearRegression, ElasticNet
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier, GradientBoostingRegressor
+
+from .config import (
+    AnomalyDetectionConfig,
+    EnsembleConfig,
+    FeatureConfig,
+    ModelConfig,
+    ModelSpec,
+    PredictionConfig,
+    ThresholdConfig,
+    TrainingConfig,
+)
+from .evaluation import analyze_results, calculate_metrics, print_metrics_report
+from .iso_configs import DataPathConfig, HorizonGroupConfig, IsoConfig
+from .models import StackingModel
+from .pipeline import ShadowPricePipeline
+from .tuning import HyperparameterTuner
 
 __version__ = "2.0.0"
 
 __all__ = [
     # Main pipeline
-    'ShadowPricePipeline',
-
+    "ShadowPricePipeline",
     # Configuration classes
-    'PredictionConfig',
-    'FeatureConfig',
-    'ModelConfig',
-    'ModelSpec',
-    'EnsembleConfig',
-    'TrainingConfig',
-    'ThresholdConfig',
-    'AnomalyDetectionConfig',
-    'DataPathConfig',
-
+    "PredictionConfig",
+    "FeatureConfig",
+    "ModelConfig",
+    "ModelSpec",
+    "EnsembleConfig",
+    "TrainingConfig",
+    "ThresholdConfig",
+    "AnomalyDetectionConfig",
+    "DataPathConfig",
+    "HorizonGroupConfig",
+    "IsoConfig",
     # Model classes (for convenience)
-    'XGBClassifier',
-    'XGBRegressor',
-    'LogisticRegression',
-    'LinearRegression',
-    'ElasticNet',
-    'RandomForestClassifier',
-    'RandomForestRegressor',
-    'GradientBoostingClassifier',
-    'GradientBoostingRegressor',
-    'StackingModel',
-    'HyperparameterTuner',
-
+    "XGBClassifier",
+    "XGBRegressor",
+    "LogisticRegression",
+    "LinearRegression",
+    "ElasticNet",
+    "RandomForestClassifier",
+    "RandomForestRegressor",
+    "GradientBoostingClassifier",
+    "GradientBoostingRegressor",
+    "StackingModel",
+    "HyperparameterTuner",
     # Evaluation functions
-    'calculate_metrics',
-    'analyze_results',
-    'print_metrics_report',
+    "calculate_metrics",
+    "analyze_results",
+    "print_metrics_report",
 ]

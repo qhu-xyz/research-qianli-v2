@@ -1,19 +1,22 @@
 """
 Hyperparameter tuning module.
 """
+
+from typing import Any
+
 import pandas as pd
-import numpy as np
-from typing import Dict, Any, List, Tuple, Optional
+from sklearn.metrics import fbeta_score, make_scorer
 from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
-from sklearn.metrics import make_scorer, fbeta_score, mean_squared_error
 
 from .config import ModelSpec
 from .models import create_model
+
 
 class HyperparameterTuner:
     """
     Handles hyperparameter optimization for models.
     """
+
     def __init__(self, n_iter: int = 20, cv: int = 3, verbose: int = 1):
         self.n_iter = n_iter
         self.cv = cv
@@ -22,12 +25,12 @@ class HyperparameterTuner:
     def tune_model(
         self,
         model_spec: ModelSpec,
-        X: pd.DataFrame,
+        X: pd.DataFrame,  # noqa: N803
         y: pd.Series,
-        param_distributions: Dict[str, Any],
+        param_distributions: dict[str, Any],
         is_classifier: bool = True,
-        scoring: str = None
-    ) -> Tuple[Any, Dict[str, Any]]:
+        scoring: str | None = None,
+    ) -> tuple[Any, dict[str, Any]]:
         """
         Tune a single model using RandomizedSearchCV.
 
@@ -55,14 +58,14 @@ class HyperparameterTuner:
         """
         # Create base model
         base_model = create_model(model_spec, is_classifier=is_classifier)
-        
+
         # Default scoring
         if scoring is None:
             if is_classifier:
                 # Custom F2 scorer for recall preference
                 scoring = make_scorer(fbeta_score, beta=2)
             else:
-                scoring = 'neg_mean_squared_error'
+                scoring = "neg_mean_squared_error"
 
         # TimeSeriesSplit for temporal data
         tscv = TimeSeriesSplit(n_splits=self.cv)
@@ -74,15 +77,15 @@ class HyperparameterTuner:
             scoring=scoring,
             cv=tscv,
             verbose=self.verbose,
-            n_jobs=-1, # Use all cores
-            random_state=42
+            n_jobs=1,  # Disable internal parallelism to avoid conflicts
+            random_state=42,
         )
 
         if self.verbose:
             print(f"Tuning {model_spec.model_class.__name__}...")
-            
+
         search.fit(X, y)
-        
+
         if self.verbose:
             print(f"Best params: {search.best_params_}")
             print(f"Best score: {search.best_score_:.4f}")
@@ -91,27 +94,23 @@ class HyperparameterTuner:
 
     def tune_ensemble(
         self,
-        model_specs: List[ModelSpec],
-        X: pd.DataFrame,
+        model_specs: list[ModelSpec],
+        X: pd.DataFrame,  # noqa: N803
         y: pd.Series,
-        param_grids: Dict[str, Dict[str, Any]],
-        is_classifier: bool = True
-    ) -> List[Tuple[Any, float]]:
+        param_grids: dict[str, dict[str, Any]],
+        is_classifier: bool = True,
+    ) -> list[tuple[Any, float]]:
         """
         Tune all models in an ensemble specification.
         """
         tuned_ensemble = []
-        
+
         for spec in model_specs:
             model_name = spec.model_class.__name__
-            
+
             if model_name in param_grids:
                 # Tune this model
-                best_model, _ = self.tune_model(
-                    spec, X, y, 
-                    param_grids[model_name], 
-                    is_classifier=is_classifier
-                )
+                best_model, _ = self.tune_model(spec, X, y, param_grids[model_name], is_classifier=is_classifier)
                 tuned_ensemble.append((best_model, spec.weight))
             else:
                 # No tuning grid, just train default
@@ -120,5 +119,5 @@ class HyperparameterTuner:
                 model = create_model(spec, is_classifier=is_classifier)
                 model.fit(X, y)
                 tuned_ensemble.append((model, spec.weight))
-                
+
         return tuned_ensemble

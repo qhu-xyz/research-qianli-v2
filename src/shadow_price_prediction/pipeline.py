@@ -98,8 +98,18 @@ def _process_auction_month(
     period_config = copy.deepcopy(config)
 
     # Initialize components
-    period_data_loader = DataLoader(period_config)
-    period_models = ShadowPriceModels(period_config)
+    from .data_loader import BaseDataLoader
+
+    period_data_loader: BaseDataLoader
+    if config.iso.name == "PJM":
+        from .data_loader import PjmDataLoader
+
+        period_data_loader = PjmDataLoader(period_config)
+    else:
+        from .data_loader import MisoDataLoader
+
+        period_data_loader = MisoDataLoader(period_config)
+
     period_models = ShadowPriceModels(period_config)
     period_anomaly_detector = AnomalyDetector(period_config)
 
@@ -125,7 +135,9 @@ def _process_auction_month(
         train_end,
         # Determine required period types based on CURRENT auction/market months
         # This avoids loading unnecessary data types (e.g. long-term) if we only need short-term
-        required_period_types=DataLoader.get_required_period_types([(auction_month, mm) for mm in market_months]),
+        required_period_types=period_data_loader.get_required_period_types(
+            [(auction_month, mm) for mm in market_months]
+        ),
         branch_name=branch_name,
         verbose=verbose,
         # data_cache=data_cache # Removed
@@ -164,28 +176,19 @@ def _process_auction_month(
     all_test_branches = set()
     test_data_by_month = {}
 
-    for market_month in market_months:
-        # Determine outage dates for this market month
-        outage_dates = period_data_loader.get_outage_dates(market_month)
-        if outage_dates.empty:
-            continue
+    # Load test data for all periods at once
+    all_test_data = period_data_loader.load_test_data(
+        test_periods=[(auction_month, mm) for mm in market_months],
+        branch_name=branch_name,
+        verbose=False,
+    )
 
-        # Load test data for this month (we'll cache it for prediction step)
-        month_test_data = period_data_loader.load_test_data_for_period(
-            auction_month, market_month, branch_name=branch_name, verbose=False
-        )
-        # month_test_data = month_test_data[month_test_data['branch_name'].str.contains('MNTCELO')]
-
-        if month_test_data is not None and not month_test_data.empty:
-            test_data_by_month[market_month] = month_test_data
-            # Extract (branch_name, flow_direction) tuples
-            # Extract (branch_name, flow_direction) tuples
-            # Normalize to ensure we have both as columns
-            temp_df = month_test_data.reset_index()
-
-            if "branch_name" in temp_df.columns and "flow_direction" in temp_df.columns:
-                pairs = temp_df[["branch_name", "flow_direction"]].drop_duplicates().itertuples(index=False, name=None)
-                all_test_branches.update(pairs)
+    if all_test_data is not None and not all_test_data.empty:
+        # Populate test_data_by_month and all_test_branches
+        for market_month, month_df in all_test_data.groupby("market_month"):
+            test_data_by_month[market_month] = month_df
+            pairs = month_df[["branch_name", "flow_direction"]].drop_duplicates().itertuples(index=False, name=None)
+            all_test_branches.update(pairs)
 
     if verbose:
         print(f"  Found {len(all_test_branches)} unique branch-flow pairs in test set.")
@@ -204,12 +207,13 @@ def _process_auction_month(
     # Only process groups that are actually needed for test_periods
     required_groups = period_models._get_required_groups(current_test_periods)
 
-    horizon_filters = {
-        "f0": lambda df: df[df["forecast_horizon"] == 0],
-        "f1": lambda df: df[df["forecast_horizon"] == 1],
-        # "medium": lambda df: df[df["forecast_horizon"].between(2, 3)],
-        "long": lambda df: df[df["forecast_horizon"] >= 2],
-    }
+    horizon_filters = {}
+    for group in config.horizon_groups:
+        # Capture group values in closure
+        def make_filter(min_h, max_h):
+            return lambda df: df[(df["forecast_horizon"] >= min_h) & (df["forecast_horizon"] <= max_h)]
+
+        horizon_filters[group.name] = make_filter(group.min_horizon, group.max_horizon)
 
     for horizon_group in required_groups:
         if horizon_group in horizon_filters:
@@ -258,26 +262,9 @@ def _process_auction_month(
                 results.append((None, None, auction_month, market_month))
                 continue
 
-        # Reload test data (trade-off: I/O vs Memory)
-        # Use cached data if available
-        if market_month in test_data_by_month:
-            test_data = test_data_by_month[market_month]
-        else:
-            test_data = period_data_loader.load_test_data_for_period(auction_month, market_month, verbose=False)
-
-        if test_data is None or test_data.empty:
-            if verbose:
-                print(f"  ⚠️  Skipping {market_month.strftime('%Y-%m')} (no test data)")
-            results.append((None, None, auction_month, market_month))
-            continue
-
+        test_data = test_data_by_month[market_month]
         results_per_outage, final_results, metrics = period_predictor.predict(test_data, verbose=False)
 
-        # end_time = time.time()
-        # duration = end_time - start_time
-        # print(f"[Timing Testing] _process_auction_month Test for {auction_month.strftime('%Y-%m')} took {duration:.2f} seconds")
-
-        # Save results immediately if output_dir is provided
         if output_dir is not None:
             output_path = Path(output_dir)
             auc_month_str = auction_month.strftime("%Y-%m")

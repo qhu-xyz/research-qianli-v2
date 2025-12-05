@@ -315,47 +315,29 @@ class ShadowPriceModels:
         self.config = config
 
         # Scalers by Horizon Group
-        # Scalers by Horizon Group
         # Default model scalers: Dict[horizon_group, StandardScaler]
         self.scalers_default: dict[str, StandardScaler] = {}
         # Branch model scalers: Dict[horizon_group, Dict[(branch_name, flow_direction), StandardScaler]]
-        self.scalers_branch: dict[str, dict[tuple[str, int], StandardScaler]] = {
-            "f0": {},
-            "f1": {},
-            "medium": {},
-            "long": {},
-        }
+        self.scalers_branch: dict[str, dict[tuple[str, int], StandardScaler]] = {}
 
         # Ensembles by Horizon Group: Dict[branch_name, List[Tuple[model, weight]]]
+        self.clf_ensembles: dict[str, dict[tuple[str, int], list[tuple[Any, float]]]] = {}
+        self.reg_ensembles: dict[str, dict[tuple[str, int], list[tuple[Any, float]]]] = {}
+        self.optimal_thresholds: dict[str, dict[tuple[str, int], float]] = {}
 
-        # f0 (horizon = 0)
-        self.clf_ensembles_f0: dict[tuple[str, int], list[tuple[Any, float]]] = {}
-        self.reg_ensembles_f0: dict[tuple[str, int], list[tuple[Any, float]]] = {}
-        self.optimal_thresholds_f0: dict[tuple[str, int], float] = {}
-        self.clf_default_ensemble_f0: list[tuple[Any, float]] = []
-        self.reg_default_ensemble_f0: list[tuple[Any, float]] = []
-        self.optimal_threshold_default_f0: float | None = None
+        self.clf_default_ensembles: dict[str, list[tuple[Any, float]]] = {}
+        self.reg_default_ensembles: dict[str, list[tuple[Any, float]]] = {}
+        self.optimal_threshold_defaults: dict[str, float] = {}
 
-        # f1 (horizon = 1)
-        self.clf_ensembles_f1: dict[tuple[str, int], list[tuple[Any, float]]] = {}
-        self.reg_ensembles_f1: dict[tuple[str, int], list[tuple[Any, float]]] = {}
-        self.optimal_thresholds_f1: dict[tuple[str, int], float] = {}
-        self.clf_default_ensemble_f1: list[tuple[Any, float]] = []
-        self.reg_default_ensemble_f1: list[tuple[Any, float]] = []
-        self.optimal_threshold_default_f1: float | None = None
-
-        # Long Term (Quarterly: horizon > 3)
-        self.clf_ensembles_long: dict[tuple[str, int], list[tuple[Any, float]]] = {}
-        self.reg_ensembles_long: dict[tuple[str, int], list[tuple[Any, float]]] = {}
-        self.optimal_thresholds_long: dict[tuple[str, int], float] = {}
-        self.clf_default_ensemble_long: list[tuple[Any, float]] = []
-        self.reg_default_ensemble_long: list[tuple[Any, float]] = []
-        self.optimal_threshold_default_long: float | None = None
-
-        # Legacy/Generic accessors (mapped to f0 for backward compatibility if needed)
-        self.clf_ensembles = self.clf_ensembles_f0
-        self.reg_ensembles = self.reg_ensembles_f0
-        self.optimal_thresholds = self.optimal_thresholds_f0
+        # Initialize containers for each horizon group
+        for group in self.config.horizon_groups:
+            self.scalers_branch[group.name] = {}
+            self.clf_ensembles[group.name] = {}
+            self.reg_ensembles[group.name] = {}
+            self.optimal_thresholds[group.name] = {}
+            self.clf_default_ensembles[group.name] = []
+            self.reg_default_ensembles[group.name] = []
+            self.optimal_threshold_defaults[group.name] = 0.5
 
     def get_ensemble_weights_for_horizon(
         self, horizon: int, model_type: str = "classifier", is_branch: bool = False
@@ -380,7 +362,9 @@ class ShadowPriceModels:
         weights : List[float]
             Normalized ensemble weights
         """
-        return self.config.models.get_ensemble_weights_for_horizon(horizon, model_type, is_branch)
+        return self.config.models.get_ensemble_weights_for_horizon(
+            horizon, self.config.horizon_groups, model_type, is_branch
+        )
 
     def _get_required_groups(self, test_periods: list[tuple[pd.Timestamp, pd.Timestamp]] | None = None) -> set[str]:
         """Determine which horizon groups are required based on test periods."""
@@ -388,21 +372,15 @@ class ShadowPriceModels:
 
         if not test_periods:
             # If no test periods, assume all are needed
-            # return {"f0", "f1", "medium", "long"}
-            return {"f0", "f1", "long"}
+            return {g.name for g in self.config.horizon_groups}
 
         for auction_month, market_month in test_periods:
             # Calculate horizon
             horizon = (market_month.year - auction_month.year) * 12 + (market_month.month - auction_month.month)
 
-            if horizon == 0:
-                required_groups.add("f0")
-            elif horizon == 1:
-                required_groups.add("f1")
-            # elif 2 <= horizon <= 3:
-            #     required_groups.add("medium")
-            elif horizon >= 2:
-                required_groups.add("long")
+            for group in self.config.horizon_groups:
+                if group.min_horizon <= horizon <= group.max_horizon:
+                    required_groups.add(group.name)
 
         return required_groups
 
@@ -417,61 +395,56 @@ class ShadowPriceModels:
         Train a single branch classifier.
         Returns: (branch_name, flow_direction, ensemble, optimal_threshold, scaler)
         """
-        try:
-            # Skip branches with too few samples
-            if len(branch_data) < self.config.training.min_samples_for_branch_model:
-                return branch_name, flow_direction, None, 0.5, None
-
-            # Skip branches with only one class (all 0s or all 1s)
-            y_branch_raw = (branch_data["label"] > self.config.training.label_threshold).astype(int)
-            if len(np.unique(y_branch_raw)) < 2:
-                return branch_name, flow_direction, None, 0.5, None
-
-            # Prepare branch data with BRANCH-SPECIFIC SCALING
-            feature_cols = self.config.features.all_features
-            scaler_branch = MinMaxScaler()
-            branch_data_scaled = branch_data.copy()
-            branch_data_scaled[feature_cols] = scaler_branch.fit_transform(branch_data[feature_cols])
-            # Extract classification features from SCALED data
-            # Note: config.features.step1_features is now a list of tuples (name, constraint)
-            step1_feature_names = [f[0] for f in self.config.features.step1_features]
-            X_branch = branch_data_scaled[step1_feature_names].copy()
-            y_branch_binary = (branch_data_scaled["label"] > self.config.training.label_threshold).astype(int)
-            groups_branch = (
-                branch_data_scaled["auction_month"].values if "auction_month" in branch_data_scaled.columns else None
-            )
-
-            # Construct Monotonic Constraints for XGBoost
-            # Format: "(1,0,-1)" corresponding to feature columns in X_branch
-            constraints = [f[1] for f in self.config.features.step1_features]
-            monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
-
-            # Train branch-specific ensemble
-            clf_ensemble = train_ensemble(
-                self.config.models.branch_classifiers,
-                X_branch,
-                y_branch_binary,
-                is_classifier=True,
-                groups=groups_branch,
-                monotone_constraints=monotone_constraints,
-            )
-
-            # Optimize threshold using ensemble predictions
-            y_proba_train_branch = predict_ensemble(
-                clf_ensemble, X_branch, predict_proba=True, weight_overrides=weight_overrides
-            )
-            optimal_threshold_branch, _ = find_optimal_threshold(
-                y_branch_binary,
-                y_proba_train_branch,
-                self.config.threshold.threshold_beta,
-                self.config.threshold.threshold_scaling_factor,
-            )
-
-            return branch_name, flow_direction, clf_ensemble, optimal_threshold_branch, scaler_branch
-
-        except Exception as e:
-            print(f"    ⚠️ Failed to train classifier for branch {branch_name} (flow {flow_direction}): {e}")
+        # Skip branches with too few samples
+        if len(branch_data) < self.config.training.min_samples_for_branch_model:
             return branch_name, flow_direction, None, 0.5, None
+
+        # Skip branches with only one class (all 0s or all 1s)
+        y_branch_raw = (branch_data["label"] > self.config.training.label_threshold).astype(int)
+        if len(np.unique(y_branch_raw)) < 2:
+            return branch_name, flow_direction, None, 0.5, None
+
+        # Prepare branch data with BRANCH-SPECIFIC SCALING
+        feature_cols = self.config.features.all_features
+        scaler_branch = MinMaxScaler()
+        branch_data_scaled = branch_data.copy()
+        branch_data_scaled[feature_cols] = scaler_branch.fit_transform(branch_data[feature_cols])
+        # Extract classification features from SCALED data
+        # Note: config.features.step1_features is now a list of tuples (name, constraint)
+        step1_feature_names = [f[0] for f in self.config.features.step1_features]
+        X_branch = branch_data_scaled[step1_feature_names].copy()
+        y_branch_binary = (branch_data_scaled["label"] > self.config.training.label_threshold).astype(int)
+        groups_branch = (
+            branch_data_scaled["auction_month"].values if "auction_month" in branch_data_scaled.columns else None
+        )
+
+        # Construct Monotonic Constraints for XGBoost
+        # Format: "(1,0,-1)" corresponding to feature columns in X_branch
+        constraints = [f[1] for f in self.config.features.step1_features]
+        monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
+
+        # Train branch-specific ensemble
+        clf_ensemble = train_ensemble(
+            self.config.models.branch_classifiers,
+            X_branch,
+            y_branch_binary,
+            is_classifier=True,
+            groups=groups_branch,
+            monotone_constraints=monotone_constraints,
+        )
+
+        # Optimize threshold using ensemble predictions
+        y_proba_train_branch = predict_ensemble(
+            clf_ensemble, X_branch, predict_proba=True, weight_overrides=weight_overrides
+        )
+        optimal_threshold_branch, _ = find_optimal_threshold(
+            y_branch_binary,
+            y_proba_train_branch,
+            self.config.threshold.threshold_beta,
+            self.config.threshold.threshold_scaling_factor,
+        )
+
+        return branch_name, flow_direction, clf_ensemble, optimal_threshold_branch, scaler_branch
 
     def _train_single_branch_regressor(
         self, branch_name: str, flow_direction: int, branch_data: pd.DataFrame
@@ -480,52 +453,47 @@ class ShadowPriceModels:
         Train a single branch regressor.
         Returns: (branch_name, flow_direction, ensemble, scaler)
         """
-        try:
-            # Skip branches with too few samples
-            if len(branch_data) < self.config.training.min_samples_for_branch_model:
-                return branch_name, flow_direction, None, None
-
-            # Prepare branch data with BRANCH-SPECIFIC SCALING
-            feature_cols = self.config.features.all_features
-            scaler_branch = MinMaxScaler()
-            branch_data_scaled = branch_data.copy()
-            branch_data_scaled[feature_cols] = scaler_branch.fit_transform(branch_data[feature_cols])
-
-            # Filter for binding constraints (label > 0)
-            # Extract regression features from SCALED data
-            # Note: config.features.step2_features is now a list of tuples (name, constraint)
-            step2_feature_names = [f[0] for f in self.config.features.step2_features]
-            binding_mask = branch_data_scaled["label"] > 0
-            X_branch_reg = branch_data_scaled.loc[binding_mask, step2_feature_names].copy()
-            y_branch_reg = np.log1p(branch_data_scaled.loc[binding_mask, "label"].copy())
-            groups_branch_reg = (
-                branch_data_scaled.loc[binding_mask, "auction_month"].values
-                if "auction_month" in branch_data_scaled.columns
-                else None
-            )
-
-            if len(X_branch_reg) < self.config.training.min_binding_samples_for_regression:
-                return branch_name, flow_direction, None, None
-
-            # Construct Monotonic Constraints for XGBoost
-            constraints = [f[1] for f in self.config.features.step2_features]
-            monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
-
-            # Train branch-specific ensemble
-            reg_ensemble = train_ensemble(
-                self.config.models.branch_regressors,
-                X_branch_reg,
-                y_branch_reg,
-                is_classifier=False,
-                groups=groups_branch_reg,
-                monotone_constraints=monotone_constraints,
-            )
-
-            return branch_name, flow_direction, reg_ensemble, scaler_branch
-
-        except Exception as e:
-            print(f"    ⚠️ Failed to train regressor for branch {branch_name} (flow {flow_direction}): {e}")
+        # Skip branches with too few samples
+        if len(branch_data) < self.config.training.min_samples_for_branch_model:
             return branch_name, flow_direction, None, None
+
+        # Prepare branch data with BRANCH-SPECIFIC SCALING
+        feature_cols = self.config.features.all_features
+        scaler_branch = MinMaxScaler()
+        branch_data_scaled = branch_data.copy()
+        branch_data_scaled[feature_cols] = scaler_branch.fit_transform(branch_data[feature_cols])
+
+        # Filter for binding constraints (label > 0)
+        # Extract regression features from SCALED data
+        # Note: config.features.step2_features is now a list of tuples (name, constraint)
+        step2_feature_names = [f[0] for f in self.config.features.step2_features]
+        binding_mask = branch_data_scaled["label"] > 0
+        X_branch_reg = branch_data_scaled.loc[binding_mask, step2_feature_names].copy()
+        y_branch_reg = np.log1p(branch_data_scaled.loc[binding_mask, "label"].copy())
+        groups_branch_reg = (
+            branch_data_scaled.loc[binding_mask, "auction_month"].values
+            if "auction_month" in branch_data_scaled.columns
+            else None
+        )
+
+        if len(X_branch_reg) < self.config.training.min_binding_samples_for_regression:
+            return branch_name, flow_direction, None, None
+
+        # Construct Monotonic Constraints for XGBoost
+        constraints = [f[1] for f in self.config.features.step2_features]
+        monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
+
+        # Train branch-specific ensemble
+        reg_ensemble = train_ensemble(
+            self.config.models.branch_regressors,
+            X_branch_reg,
+            y_branch_reg,
+            is_classifier=False,
+            groups=groups_branch_reg,
+            monotone_constraints=monotone_constraints,
+        )
+
+        return branch_name, flow_direction, reg_ensemble, scaler_branch
 
     def train_classifiers(
         self,
@@ -553,32 +521,7 @@ class ShadowPriceModels:
             print("-" * 80)
 
         # Define horizon groups and their associated attributes
-        horizon_group_configs = {
-            "f0": (
-                0,
-                0,
-                self.clf_ensembles_f0,
-                "clf_default_ensemble_f0",
-                "optimal_threshold_default_f0",
-                self.optimal_thresholds_f0,
-            ),
-            "f1": (
-                1,
-                1,
-                self.clf_ensembles_f1,
-                "clf_default_ensemble_f1",
-                "optimal_threshold_default_f1",
-                self.optimal_thresholds_f1,
-            ),
-            "long": (
-                2,
-                999,
-                self.clf_ensembles_long,
-                "clf_default_ensemble_long",
-                "optimal_threshold_default_long",
-                self.optimal_thresholds_long,
-            ),
-        }
+        horizon_group_configs = {g.name: (g.min_horizon, g.max_horizon) for g in self.config.horizon_groups}
 
         # Determine required groups
         required_groups = self._get_required_groups(test_periods)
@@ -588,27 +531,15 @@ class ShadowPriceModels:
             if skipped_groups:
                 print(f"  Skipping groups not in test periods: {', '.join(sorted(skipped_groups))}")
 
-        for group_name, (
-            min_h,
-            max_h,
-            branch_ensembles,
-            default_ensemble_attr,
-            default_threshold_attr,
-            branch_thresholds,
-        ) in horizon_group_configs.items():
+        for group_name, (min_h, max_h) in horizon_group_configs.items():
             if group_name not in required_groups:
                 continue
 
             if verbose:
                 print(f"\nProcessing {group_name.upper()} TERM models...")
 
-            # Determine weight overrides for this group
-            if group_name in ["f0", "f1"]:
-                weight_overrides = self.config.models.short_term_clf_weights
-            elif group_name == "long":
-                weight_overrides = self.config.models.long_term_clf_weights
-            else:
-                weight_overrides = None
+            # Get weight overrides for this group
+            weight_overrides = self.config.models.clf_weights.get(group_name)
 
             # Filter data for this horizon group
             group_data = train_data[
@@ -654,7 +585,7 @@ class ShadowPriceModels:
                 groups=groups_all,
                 monotone_constraints=monotone_constraints,
             )
-            setattr(self, default_ensemble_attr, default_ensemble)
+            self.clf_default_ensembles[group_name] = default_ensemble
 
             if verbose:
                 n_models = len(default_ensemble)
@@ -675,7 +606,7 @@ class ShadowPriceModels:
                 beta=self.config.threshold.threshold_beta,
                 scaling_factor=self.config.threshold.threshold_scaling_factor,
             )
-            setattr(self, default_threshold_attr, optimal_threshold)
+            self.optimal_threshold_defaults[group_name] = optimal_threshold
 
             if verbose:
                 print(f"    ✓ Optimal threshold: {optimal_threshold:.3f} (F-beta={max_f1:.3f})")
@@ -704,7 +635,7 @@ class ShadowPriceModels:
                     "branch_name": branch_name,
                     "flow_direction": flow_direction,
                     "branch_data": branch_data,
-                    "weight_overrides": weight_overrides,
+                    "weight_overrides": self.config.models.reg_weights.get(group_name),
                 }
                 for (branch_name, flow_direction), branch_data in train_data_by_branch.items()
             ]
@@ -719,8 +650,8 @@ class ShadowPriceModels:
 
             for branch_name, flow_direction, ensemble, threshold, scaler in results:
                 if ensemble is not None and threshold is not None:
-                    branch_ensembles[(branch_name, flow_direction)] = ensemble
-                    branch_thresholds[(branch_name, flow_direction)] = threshold
+                    self.clf_ensembles[group_name][(branch_name, flow_direction)] = ensemble
+                    self.optimal_thresholds[group_name][(branch_name, flow_direction)] = threshold
                     self.scalers_branch[group_name][(branch_name, flow_direction)] = scaler
                     trained_count += 1
                 else:
@@ -758,11 +689,7 @@ class ShadowPriceModels:
             print("-" * 80)
 
         # Define horizon groups and their associated attributes
-        horizon_group_configs = {
-            "f0": (0, 0, self.reg_ensembles_f0, "reg_default_ensemble_f0"),
-            "f1": (1, 1, self.reg_ensembles_f1, "reg_default_ensemble_f1"),
-            "long": (2, 999, self.reg_ensembles_long, "reg_default_ensemble_long"),
-        }
+        horizon_group_configs = {g.name: (g.min_horizon, g.max_horizon) for g in self.config.horizon_groups}
 
         # Determine required groups
         required_groups = self._get_required_groups(test_periods)
@@ -772,7 +699,7 @@ class ShadowPriceModels:
             if skipped_groups:
                 print(f"  Skipping groups not in test periods: {', '.join(sorted(skipped_groups))}")
 
-        for group_name, (min_h, max_h, branch_ensembles, default_ensemble_attr) in horizon_group_configs.items():
+        for group_name, (min_h, max_h) in horizon_group_configs.items():
             if group_name not in required_groups:
                 continue
 
@@ -820,7 +747,7 @@ class ShadowPriceModels:
                     is_classifier=False,
                     groups=groups_reg_all,
                 )
-                setattr(self, default_ensemble_attr, default_ensemble)
+                self.reg_default_ensembles[group_name] = default_ensemble
 
                 if verbose:
                     n_models = len(default_ensemble)
@@ -829,7 +756,7 @@ class ShadowPriceModels:
             else:
                 if verbose:
                     print("    ⚠️  Insufficient binding samples for default regressor. Skipping.")
-                setattr(self, default_ensemble_attr, [])
+                self.reg_default_ensembles[group_name] = []
 
             # Train branch-specific regressors
             if verbose:
@@ -870,7 +797,7 @@ class ShadowPriceModels:
 
             for branch_name, flow_direction, ensemble, scaler in results:
                 if ensemble is not None:
-                    branch_ensembles[(branch_name, flow_direction)] = ensemble
+                    self.reg_ensembles[group_name][(branch_name, flow_direction)] = ensemble
                     self.scalers_branch[group_name][(branch_name, flow_direction)] = scaler
                     trained_count += 1
                 else:
@@ -890,24 +817,22 @@ class ShadowPriceModels:
         Returns: (ensemble, threshold, scaler)
         """
         # Determine horizon group
-        if horizon == 0:
-            group = "f0"
-            ensembles = self.clf_ensembles_f0
-            thresholds = self.optimal_thresholds_f0
-            default_ensemble = self.clf_default_ensemble_f0
-            default_threshold = self.optimal_threshold_default_f0
-        elif horizon == 1:
-            group = "f1"
-            ensembles = self.clf_ensembles_f1
-            thresholds = self.optimal_thresholds_f1
-            default_ensemble = self.clf_default_ensemble_f1
-            default_threshold = self.optimal_threshold_default_f1
-        else:
-            group = "long"
-            ensembles = self.clf_ensembles_long
-            thresholds = self.optimal_thresholds_long
-            default_ensemble = self.clf_default_ensemble_long
-            default_threshold = self.optimal_threshold_default_long
+        # Determine horizon group
+        group = None
+        for g in self.config.horizon_groups:
+            if g.min_horizon <= horizon <= g.max_horizon:
+                group = g.name
+                break
+
+        if group is None:
+            # Fallback if no group covers this horizon (shouldn't happen if config is complete)
+            # Return default/empty
+            return [], 0.5, None
+
+        ensembles = self.clf_ensembles.get(group, {})
+        thresholds = self.optimal_thresholds.get(group, {})
+        default_ensemble = self.clf_default_ensembles.get(group, [])
+        default_threshold = self.optimal_threshold_defaults.get(group)
 
         # Get scaler
         scaler = self.scalers_branch[group].get((branch_name, flow_direction))
@@ -931,18 +856,18 @@ class ShadowPriceModels:
         Returns: (ensemble, scaler)
         """
         # Determine horizon group
-        if horizon == 0:
-            group = "f0"
-            ensembles = self.reg_ensembles_f0
-            default_ensemble = self.reg_default_ensemble_f0
-        elif horizon == 1:
-            group = "f1"
-            ensembles = self.reg_ensembles_f1
-            default_ensemble = self.reg_default_ensemble_f1
-        else:
-            group = "long"
-            ensembles = self.reg_ensembles_long
-            default_ensemble = self.reg_default_ensemble_long
+        # Determine horizon group
+        group = None
+        for g in self.config.horizon_groups:
+            if g.min_horizon <= horizon <= g.max_horizon:
+                group = g.name
+                break
+
+        if group is None:
+            return [], None
+
+        ensembles = self.reg_ensembles.get(group, {})
+        default_ensemble = self.reg_default_ensembles.get(group, [])
 
         # Get scaler
         scaler = self.scalers_branch[group].get((branch_name, flow_direction))
@@ -1019,12 +944,15 @@ class ShadowPriceModels:
 
         for (h, b, f), indices in group_df.groupby(["h", "b", "f"]).groups.items():
             # Determine horizon group
-            if h == 0:
-                h_group = "f0"
-            elif h == 1:
-                h_group = "f1"
-            else:
-                h_group = "long"
+            # Determine horizon group
+            h_group = None
+            for g in self.config.horizon_groups:
+                if g.min_horizon <= h <= g.max_horizon:
+                    h_group = g.name
+                    break
+
+            if h_group is None:
+                continue
 
             # Get scaler
             scaler = self.scalers_branch[h_group].get((b, f))

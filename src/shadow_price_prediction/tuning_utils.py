@@ -36,38 +36,35 @@ def load_previous_params(save_dir: Path) -> set[tuple]:
     print(f"Found {len(metric_files)} previous metric files. Loading parameters...")
 
     for file in metric_files:
-        try:
-            df = pd.read_parquet(file)
-            if len(df) > 0:
-                # Extract parameter columns (exclude metrics)
-                param_cols = [
-                    col
-                    for col in df.columns
-                    if col
-                    not in [
-                        "F1",
-                        "Precision",
-                        "Recall",
-                        "MAE",
-                        "RMSE",
-                        "R2",
-                        "iteration",
-                        "timestamp",
-                        "run_id",
-                        "metrics_file",
-                        "per_outage_file",
-                        "agg_file",
-                    ]
+        df = pd.read_parquet(file)
+        if len(df) > 0:
+            # Extract parameter columns (exclude metrics)
+            param_cols = [
+                col
+                for col in df.columns
+                if col
+                not in [
+                    "F1",
+                    "Precision",
+                    "Recall",
+                    "MAE",
+                    "RMSE",
+                    "R2",
+                    "iteration",
+                    "timestamp",
+                    "run_id",
+                    "metrics_file",
+                    "per_outage_file",
+                    "agg_file",
                 ]
+            ]
 
-                # Get the parameter values
-                params = df[param_cols].iloc[0].to_dict()
+            # Get the parameter values
+            params = df[param_cols].iloc[0].to_dict()
 
-                # Convert to hashable tuple
-                param_tuple = tuple(sorted(params.items()))
-                seen_params.add(param_tuple)
-        except Exception as e:
-            print(f"Warning: Could not load {file.name}: {e}")
+            # Convert to hashable tuple
+            param_tuple = tuple(sorted(params.items()))
+            seen_params.add(param_tuple)
 
     print(f"Loaded {len(seen_params)} previously searched parameter combinations.")
     return seen_params
@@ -160,27 +157,12 @@ def update_config_with_params(config, params):
         "eval_metric": "logloss",
     }
 
-    # --- Update Logistic Regression Parameters ---
-    # (Currently disabled in ensemble config but kept for reference)
-    _lr_params = {
-        "penalty": params["lr_penalty"],
-        "C": params["lr_C"],
-        "max_iter": 1000,
-        "class_weight": "balanced",
-        "random_state": 42,
-        "n_jobs": base_n_jobs,
-        "solver": "lbfgs",
-    }
-    _ = _lr_params  # Suppress unused warning
-
     # Update Ensemble Config (Classifiers)
     config.models.default_classifiers = [
         ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), params["clf_xgb_thres"]),
-        # ModelSpec(LogisticRegression, ModelConfig(lr_params), params["clf_xgb_thres"]),
     ]
     config.models.branch_classifiers = [
         ModelSpec(XGBClassifier, ModelConfig(xgb_clf_params), params["clf_xgb_thres"]),
-        # ModelSpec(LogisticRegression, ModelConfig(lr_params), params["clf_xgb_thres"]),
     ]
 
     # --- Update XGBoost Regressor Parameters ---
@@ -199,37 +181,58 @@ def update_config_with_params(config, params):
         "objective": "reg:squarederror",
     }
 
-    # --- Update ElasticNet Parameters ---
-    # (Currently disabled in ensemble config but kept for reference)
-    _enet_params = {
-        "alpha": params["enet_alpha"],
-        "l1_ratio": params["enet_l1_ratio"],
-        "max_iter": 1000,
-        "fit_intercept": True,
-    }
-    _ = _enet_params  # Suppress unused warning
-
     # Update Ensemble Config (Regressors)
     config.models.default_regressors = [
         ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), params["reg_xgb_thres"]),
-        # ModelSpec(ElasticNet, ModelConfig(enet_params), params["reg_xgb_thres"]),
     ]
     config.models.branch_regressors = [
         ModelSpec(XGBRegressor, ModelConfig(xgb_reg_params), params["reg_xgb_thres"]),
-        # ModelSpec(ElasticNet, ModelConfig(enet_params), params["reg_xgb_thres"]),
     ]
-    # config.models.short_term_clf_weights = [params["short_term_clf_xgb_w"], 1 - params["short_term_clf_xgb_w"]]
-    # config.models.short_term_reg_weights = [params["short_term_reg_xgb_w"], 1 - params["short_term_reg_xgb_w"]]
-    # config.models.medium_term_clf_weights = [params["medium_term_clf_xgb_w"], 1 - params["medium_term_clf_xgb_w"]]
-    # config.models.medium_term_reg_weights = [params["medium_term_reg_xgb_w"], 1 - params["medium_term_reg_xgb_w"]]
-    # config.models.long_term_clf_weights = [params["long_term_clf_xgb_w"], 1 - params["long_term_clf_xgb_w"]]
-    # config.models.long_term_reg_weights = [params["long_term_reg_xgb_w"], 1 - params["long_term_reg_xgb_w"]]
-    config.models.short_term_clf_weights = [1]
-    config.models.short_term_reg_weights = [1]
-    config.models.medium_term_clf_weights = [1]
-    config.models.medium_term_reg_weights = [1]
-    config.models.long_term_clf_weights = [1]
-    config.models.long_term_reg_weights = [1]
+
+    # --- Update Horizon-Specific Weights ---
+    # We iterate over configured horizon groups and look for corresponding weight params
+    # Expected param format: "{group_name}_clf_xgb_w" and "{group_name}_reg_xgb_w"
+    # Fallback to old "short_term"/"long_term" params if specific ones missing (for backward compat)
+
+    n_classifiers = len(config.models.default_classifiers)
+    n_regressors = len(config.models.default_regressors)
+
+    for group in config.horizon_groups:
+        # Classifier weights
+        clf_w_param = f"{group.name}_clf_xgb_w"
+        if clf_w_param in params:
+            xgb_w = params[clf_w_param]
+        elif group.weight_config_name == "short_term" and "short_term_clf_xgb_w" in params:
+            xgb_w = params["short_term_clf_xgb_w"]
+        elif group.weight_config_name == "long_term" and "long_term_clf_xgb_w" in params:
+            xgb_w = params["long_term_clf_xgb_w"]
+        else:
+            xgb_w = 1.0 if n_classifiers == 1 else 0.5  # Default
+
+        if n_classifiers == 1:
+            config.models.clf_weights[group.name] = [1.0]
+        else:
+            # Distribute remaining weight equally among other models
+            other_w = (1.0 - xgb_w) / (n_classifiers - 1)
+            config.models.clf_weights[group.name] = [xgb_w] + [other_w] * (n_classifiers - 1)
+
+        # Regressor weights
+        reg_w_param = f"{group.name}_reg_xgb_w"
+        if reg_w_param in params:
+            xgb_w = params[reg_w_param]
+        elif group.weight_config_name == "short_term" and "short_term_reg_xgb_w" in params:
+            xgb_w = params["short_term_reg_xgb_w"]
+        elif group.weight_config_name == "long_term" and "long_term_reg_xgb_w" in params:
+            xgb_w = params["long_term_reg_xgb_w"]
+        else:
+            xgb_w = 1.0 if n_regressors == 1 else 0.5  # Default
+
+        if n_regressors == 1:
+            config.models.reg_weights[group.name] = [1.0]
+        else:
+            # Distribute remaining weight equally among other models
+            other_w = (1.0 - xgb_w) / (n_regressors - 1)
+            config.models.reg_weights[group.name] = [xgb_w] + [other_w] * (n_regressors - 1)
 
     # --- Update Threshold Config ---
     config.threshold.threshold_beta = params["threshold_beta"]
@@ -240,7 +243,7 @@ def update_config_with_params(config, params):
     return config
 
 
-def run_single_experiment(iteration, params, test_periods, save_dir):
+def run_single_experiment(iteration, params, test_periods, save_dir, iso_name="MISO"):
     """
     Run a single hyperparameter experiment. This function is designed to be
     called by parallel_equal_pool with PRE-SAMPLED parameters.
@@ -250,77 +253,87 @@ def run_single_experiment(iteration, params, test_periods, save_dir):
         params: Pre-sampled parameters (dict)
         test_periods: List of test periods for the pipeline
         save_dir: Directory to save results
+        iso_name: Name of the ISO to run for (default: "MISO")
 
     Returns:
         Dictionary with iteration number, status, and file paths
     """
     import time
-    import traceback
 
     from shadow_price_prediction.config import PredictionConfig
+    from shadow_price_prediction.iso_configs import (
+        MISO_HORIZON_GROUPS,
+        MISO_ISO_CONFIG,
+        PJM_HORIZON_GROUPS,
+        PJM_ISO_CONFIG,
+    )
     from shadow_price_prediction.pipeline import ShadowPricePipeline
 
-    try:
-        # Load and update config
-        config = PredictionConfig()
-        config = update_config_with_params(config, params)
+    # Load and update config
+    config = PredictionConfig()
 
-        # Initialize pipeline
-        pipeline = ShadowPricePipeline(config)
+    # Apply ISO configuration
+    if iso_name == "PJM":
+        config.iso = PJM_ISO_CONFIG
+        config.horizon_groups = PJM_HORIZON_GROUPS
+    else:
+        config.iso = MISO_ISO_CONFIG
+        config.horizon_groups = MISO_HORIZON_GROUPS
 
-        # Run pipeline (use_parallel=False to avoid nested Ray contexts)
-        # Also set n_jobs=1 to prevent inner model training from trying to use Ray pool
-        results_per_outage, final_results, metrics, _, _ = pipeline.run(
-            test_periods=test_periods, verbose=False, use_parallel=False, n_jobs=1
-        )
+    config = update_config_with_params(config, params)
+    config = update_config_with_params(config, params)
 
-        # Generate unique ID for this run
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        run_id = random.randint(1000, 9999)
-        base_name = f"iter_{iteration}_{timestamp}_{run_id}"
+    # Initialize pipeline
+    pipeline = ShadowPricePipeline(config)
 
-        # Save per_outage results
-        per_outage_dir = save_dir / "per_outage"
-        per_outage_dir.mkdir(parents=True, exist_ok=True)
-        per_outage_file = per_outage_dir / f"{base_name}.parquet"
-        results_per_outage.to_parquet(per_outage_file)
+    # Run pipeline (use_parallel=False to avoid nested Ray contexts)
+    # Also set n_jobs=1 to prevent inner model training from trying to use Ray pool
+    results_per_outage, final_results, metrics, _, _ = pipeline.run(
+        test_periods=test_periods, verbose=False, use_parallel=False, n_jobs=1
+    )
 
-        # Save aggregated results
-        agg_dir = save_dir / "agg"
-        agg_dir.mkdir(parents=True, exist_ok=True)
-        agg_file = agg_dir / f"{base_name}.parquet"
-        final_results.to_parquet(agg_file)
+    # Generate unique ID for this run
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    run_id = random.randint(1000, 9999)
+    base_name = f"iter_{iteration}_{timestamp}_{run_id}"
 
-        # Save metrics with parameters
-        metrics_dir = save_dir / "metrics"
-        metrics_dir.mkdir(parents=True, exist_ok=True)
-        metrics_file = metrics_dir / f"{base_name}.parquet"
+    # Save per_outage results
+    per_outage_dir = save_dir / "per_outage"
+    per_outage_dir.mkdir(parents=True, exist_ok=True)
+    per_outage_file = per_outage_dir / f"{base_name}.parquet"
+    results_per_outage.to_parquet(per_outage_file)
 
-        # Create metrics DataFrame with parameters
-        # Using ** unpacking to split params and metrics into separate columns
-        metrics_data = {
-            "iteration": iteration,
-            "timestamp": timestamp,
-            "run_id": run_id,
-            **params,  # Unpack all sampled parameters as separate columns
-            **(metrics["monthly"]),  # Unpack all metrics as separate columns
-            "metrics_file": str(metrics_file),
-            "per_outage_file": str(per_outage_file),
-            "agg_file": str(agg_file),
-        }
-        metrics_df = pd.DataFrame([metrics_data])
-        metrics_df.to_parquet(metrics_file)
+    # Save aggregated results
+    agg_dir = save_dir / "agg"
+    agg_dir.mkdir(parents=True, exist_ok=True)
+    agg_file = agg_dir / f"{base_name}.parquet"
+    final_results.to_parquet(agg_file)
 
-        return {
-            "iteration": iteration,
-            "status": "success",
-            "metrics": metrics,
-            "metrics_file": str(metrics_file),
-            "per_outage_file": str(per_outage_file),
-            "agg_file": str(agg_file),
-        }
+    # Save metrics with parameters
+    metrics_dir = save_dir / "metrics"
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    metrics_file = metrics_dir / f"{base_name}.parquet"
 
-    except Exception as e:
-        error_msg = f"Error in iteration {iteration}: {str(e)}\n{traceback.format_exc()}"
-        print(error_msg)
-        return {"iteration": iteration, "status": "failed", "error": error_msg}
+    # Create metrics DataFrame with parameters
+    # Using ** unpacking to split params and metrics into separate columns
+    metrics_data = {
+        "iteration": iteration,
+        "timestamp": timestamp,
+        "run_id": run_id,
+        **params,  # Unpack all sampled parameters as separate columns
+        **(metrics["monthly"]),  # Unpack all metrics as separate columns
+        "metrics_file": str(metrics_file),
+        "per_outage_file": str(per_outage_file),
+        "agg_file": str(agg_file),
+    }
+    metrics_df = pd.DataFrame([metrics_data])
+    metrics_df.to_parquet(metrics_file)
+
+    return {
+        "iteration": iteration,
+        "status": "success",
+        "metrics": metrics,
+        "metrics_file": str(metrics_file),
+        "per_outage_file": str(per_outage_file),
+        "agg_file": str(agg_file),
+    }

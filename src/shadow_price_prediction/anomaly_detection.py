@@ -14,8 +14,8 @@ class AnomalyDetector:
     def __init__(self, config: PredictionConfig):
         self.config = config
         # Per-horizon storage for never-binding branches and flow stats
-        self.never_binding_branches: dict[str, set[str]] = {"f0": set(), "f1": set(), "medium": set(), "long": set()}
-        self.flow_stats: dict[str, dict[str, dict[str, float]]] = {"f0": {}, "f1": {}, "medium": {}, "long": {}}
+        self.never_binding_branches: dict[str, set[str]] = {g.name: set() for g in config.horizon_groups}
+        self.flow_stats: dict[str, dict[str, dict[str, float]]] = {g.name: {} for g in config.horizon_groups}
 
     def characterize_never_binding_branches(
         self, train_data: pd.DataFrame, horizon_group: str, verbose: bool = True
@@ -85,7 +85,7 @@ class AnomalyDetector:
             # Show examples
             if len(self.flow_stats[horizon_group]) > 0:
                 print("\n  Example Flow Statistics (first 5 branches):")
-                for i, (branch, stats) in enumerate(list(self.flow_stats[horizon_group].items())[:5]):
+                for _i, (branch, stats) in enumerate(list(self.flow_stats[horizon_group].items())[:5]):
                     print(
                         f"    {branch[:45]:45s}: mean={stats['mean']:.4f}, "
                         f"P95={stats['P95']:.4f}, P99={stats['P99']:.4f}, "

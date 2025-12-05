@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 
 from xgboost import XGBClassifier, XGBRegressor
 
+from .iso_configs import (
+    MISO_HORIZON_GROUPS,
+    MISO_ISO_CONFIG,
+    HorizonGroupConfig,
+    IsoConfig,
+)
+
 
 @dataclass
 class FeatureConfig:
@@ -75,24 +82,6 @@ class FeatureConfig:
         s1_names = [f[0] for f in self.step1_features]
         s2_names = [f[0] for f in self.step2_features]
         self.all_features = list(set(s1_names + s2_names))
-
-
-# MISO FTR Auction Schedule (Planning Year: Jun - May)
-# Maps Auction Month (1-12) to available period types
-AUCTION_SCHEDULE = {
-    6: ["f0"],
-    7: ["f0", "f1", "q2", "q3", "q4"],
-    8: ["f0", "f1", "f2", "f3"],
-    9: ["f0", "f1", "f2"],
-    10: ["f0", "f1", "q3", "q4"],
-    11: ["f0", "f1", "f2", "f3"],
-    12: ["f0", "f1", "f2"],
-    1: ["f0", "f1", "q4"],
-    2: ["f0", "f1", "f2", "f3"],
-    3: ["f0", "f1", "f2"],
-    4: ["f0", "f1"],
-    5: ["f0"],
-}
 
 
 # Period Type to Market Month Offset Mapping
@@ -284,21 +273,13 @@ class EnsembleConfig:
     )
 
     # Horizon-stratified ensemble weights
-    # These override the model-level weights based on forecast horizon
-    # Format: [xgboost_weight, linear_model_weight]
+    # Format: {group_name: [xgboost_weight, linear_model_weight]}
+    # Default: Equal weights for all groups
+    clf_weights: dict[str, list[float]] = field(default_factory=dict)
+    reg_weights: dict[str, list[float]] = field(default_factory=dict)
 
-    # Short-term horizons (0-1 months): f0, f1
-    # Both models contribute equally - abundant data, stable patterns
-    short_term_clf_weights: list[float] = field(default_factory=lambda: [0.5, 0.5])
-    short_term_reg_weights: list[float] = field(default_factory=lambda: [0.5, 0.5])
-
-    # Long-term horizons (4+ months): q2, q3, q4
-    # Heavily favor XGBoost - scarce data, need horizon-aware model
-    long_term_clf_weights: list[float] = field(default_factory=lambda: [0.7, 0.3])
-    long_term_reg_weights: list[float] = field(default_factory=lambda: [0.7, 0.3])
-
-    # Horizon thresholds for weight selection
-    short_term_max_horizon: int = 1  # horizon <= 1
+    # Horizon thresholds for weight selection (Deprecated but kept for compatibility if needed)
+    short_term_max_horizon: int = 1
 
     def __post_init__(self):
         """Normalize weights to sum to 1.0 for each ensemble."""
@@ -323,7 +304,11 @@ class EnsembleConfig:
             spec.weight /= total_weight
 
     def get_ensemble_weights_for_horizon(
-        self, horizon: int, model_type: str = "classifier", is_branch: bool = False
+        self,
+        horizon: int,
+        horizon_groups: list["HorizonGroupConfig"],
+        model_type: str = "classifier",
+        is_branch: bool = False,
     ) -> list[float]:
         """
         Get ensemble weights based on forecast horizon.
@@ -332,6 +317,8 @@ class EnsembleConfig:
         -----------
         horizon : int
             Forecast horizon in months (0 for f0, 1 for f1, etc.)
+        horizon_groups : list[HorizonGroupConfig]
+            List of configured horizon groups to resolve the correct group
         model_type : str
             'classifier' or 'regressor'
         is_branch : bool
@@ -342,14 +329,35 @@ class EnsembleConfig:
         weights : List[float]
             Normalized weights for the ensemble models
         """
-        # Select weights based on horizon
-        if horizon <= self.short_term_max_horizon:
-            weights = self.short_term_clf_weights if model_type == "classifier" else self.short_term_reg_weights
+        # Determine default weights based on configured models
+        if model_type == "classifier":
+            model_list = self.branch_classifiers if is_branch else self.default_classifiers
         else:
-            weights = self.long_term_clf_weights if model_type == "classifier" else self.long_term_reg_weights
+            model_list = self.branch_regressors if is_branch else self.default_regressors
+
+        n_models = len(model_list)
+        default_weights = [1.0 / n_models] * n_models if n_models > 0 else []
+
+        # Find matching group
+        group_name = None
+        for g in horizon_groups:
+            if g.min_horizon <= horizon <= g.max_horizon:
+                group_name = g.name
+                break
+
+        if group_name is None:
+            # Fallback if no group covers this horizon
+            return default_weights
+
+        if model_type == "classifier":
+            weights = self.clf_weights.get(group_name, default_weights)
+        else:
+            weights = self.reg_weights.get(group_name, default_weights)
 
         # Normalize to sum to 1.0
         total = sum(weights)
+        if total == 0:
+            return default_weights
         return [w / total for w in weights]
 
 
@@ -389,24 +397,14 @@ class AnomalyDetectionConfig:
 
 
 @dataclass
-class DataPathConfig:
-    """Data path templates."""
-
-    density_path_template: str = (
-        "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density/"
-        "auction_month={auction_month}/market_month={market_month}/"
-        "market_round={market_round}/outage_date={outage_date}"
-    )
-    constraint_path_template: str = (
-        "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/constraint_info/"
-        "auction_month={auction_month}/market_round={market_round}/"
-        "period_type={period_type}/class_type={class_type}"
-    )
-
-
-@dataclass
 class PredictionConfig:
     """Overall prediction pipeline configuration."""
+
+    # ISO Configuration
+    iso: IsoConfig = field(default_factory=lambda: MISO_ISO_CONFIG)
+
+    # Horizon Groups
+    horizon_groups: list[HorizonGroupConfig] = field(default_factory=lambda: MISO_HORIZON_GROUPS)
 
     # Market parameters
     period_type: str = "f0"
@@ -414,7 +412,8 @@ class PredictionConfig:
     market_round: int = 1
 
     # Path configuration
-    paths: DataPathConfig = field(default_factory=DataPathConfig)
+    # Path configuration
+    # paths: DataPathConfig = field(default_factory=DataPathConfig) # Moved to IsoConfig
 
     # Feature configuration
     features: FeatureConfig = field(default_factory=FeatureConfig)
@@ -432,5 +431,5 @@ class PredictionConfig:
     anomaly_detection: AnomalyDetectionConfig = field(default_factory=AnomalyDetectionConfig)
 
     # Data loading parameters
-    run_at_day: int = 10
-    outage_freq: str = "3D"  # Outage date frequency
+    # run_at_day: int = 10 # Moved to IsoConfig
+    # outage_freq: str = "3D"  # Moved to IsoConfig

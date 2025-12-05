@@ -153,14 +153,14 @@ class Predictor:
             # Determine horizon group for this branch
             # All samples in test_data have the same forecast_horizon (calculated earlier)
             # Map to horizon group
-            if forecast_horizon == 0:
-                horizon_group = "f0"
-            elif forecast_horizon == 1:
-                horizon_group = "f1"
-            # elif 2 <= forecast_horizon <= 3:
-            #     horizon_group = "medium"
-            else:
-                horizon_group = "long"
+            # Determine horizon group for this branch
+            # All samples in test_data have the same forecast_horizon (calculated earlier)
+            # Map to horizon group
+            horizon_group = "f0"  # Default
+            for g in self.config.horizon_groups:
+                if g.min_horizon <= forecast_horizon <= g.max_horizon:
+                    horizon_group = g.name
+                    break
 
             # Skip if branch has no samples
             if n_samples_in_branch == 0:
@@ -210,7 +210,11 @@ class Predictor:
                                 feature_cols = self.config.features.all_features
                                 sample_df[feature_cols] = reg_scaler_anom.transform(sample_df[feature_cols])
                                 # Clip to prevent explosion from near-constant features
-                                if self.config.models.short_term_reg_weights[0] > 0:
+                                # Check if regressor weight > 0
+                                reg_weights_check = self.models.get_ensemble_weights_for_horizon(
+                                    forecast_horizon, "regressor", is_branch=False
+                                )
+                                if reg_weights_check[0] > 0:
                                     step2_names = [f[0] for f in self.config.features.step2_features]
                                     test_sample_reg = sample_df[step2_names]
                             else:
@@ -308,16 +312,9 @@ class Predictor:
             # Re-check logic:
             is_branch_model = False
             # Check if we have a specific model for this branch/flow
-            if forecast_horizon == 0:
-                if (branch_name, flow_direction) in self.models.clf_ensembles_f0:
-                    is_branch_model = True
-            elif forecast_horizon == 1:
-                if (branch_name, flow_direction) in self.models.clf_ensembles_f1:
-                    is_branch_model = True
-
-            else:
-                if (branch_name, flow_direction) in self.models.clf_ensembles_long:
-                    is_branch_model = True
+            # Check if we have a specific model for this branch/flow
+            if (branch_name, flow_direction) in self.models.clf_ensembles.get(horizon_group, {}):
+                is_branch_model = True
 
             if is_branch_model:
                 used_branch_clf_count += n_samples_in_branch
@@ -413,17 +410,10 @@ class Predictor:
 
                     # Check if branch model
                     is_branch_reg_model = False
-                    if forecast_horizon == 0:
-                        if (branch_name, flow_direction) in self.models.reg_ensembles_f0:
-                            is_branch_reg_model = True
-                    elif forecast_horizon == 1:
-                        if (branch_name, flow_direction) in self.models.reg_ensembles_f1:
-                            is_branch_reg_model = True
-                    # elif 2 <= forecast_horizon <= 3:
-                    #     if (branch_name, flow_direction) in self.models.reg_ensembles_medium: is_branch_reg_model = True
-                    else:
-                        if (branch_name, flow_direction) in self.models.reg_ensembles_long:
-                            is_branch_reg_model = True
+                    # Check if branch model
+                    is_branch_reg_model = False
+                    if (branch_name, flow_direction) in self.models.reg_ensembles.get(horizon_group, {}):
+                        is_branch_reg_model = True
 
                     if is_branch_reg_model:
                         used_branch_reg_count += binding_mask_local.sum()
@@ -568,7 +558,16 @@ class Predictor:
 
         # Create per-outage results
         results_per_outage = test_data[
-            self.config.features.all_features + ["label", "branch_name", "outage_date", "auction_month", "market_month"]
+            self.config.features.all_features
+            + [
+                "constraint_id",
+                "flow_direction",
+                "label",
+                "branch_name",
+                "outage_date",
+                "auction_month",
+                "market_month",
+            ]
         ].copy()
         results_per_outage["predicted_shadow_price"] = y_pred_shadow_price
         results_per_outage["binding_probability"] = y_pred_proba
@@ -589,7 +588,7 @@ class Predictor:
 
         # Aggregate by constraint_id (sum across all outage dates)
         final_results = (
-            results_per_outage.groupby(level=[0, 1])
+            results_per_outage.groupby(["constraint_id", "flow_direction"])
             .agg(
                 {
                     "branch_name": "first",

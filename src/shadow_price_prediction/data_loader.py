@@ -32,7 +32,7 @@ class BaseDataLoader(ABC):
         self.aptools = ap_tools_class()
 
     @abstractmethod
-    def fetch_da_shadow_wrapper(self, st, et, peak_type):
+    def fetch_da_shadow_wrapper(self, st, et, class_type):
         """Wrapper for fetching DA shadow prices with RTO-specific column renaming."""
         pass
 
@@ -49,6 +49,12 @@ class BaseDataLoader(ABC):
         Determine the period type (e.g., 'f0', 'f1', 'q2') for a given auction and market month.
         """
         pass
+
+    def fetch_da_shadow(self, st, et, class_type, remove_noise_floor: bool = True):
+        da_shadow = self.fetch_da_shadow_wrapper(st, et, class_type)
+        if remove_noise_floor:
+            da_shadow = da_shadow[da_shadow["shadow_price"].abs() >= self.config.labeling.noise_floor]
+        return da_shadow
 
     def get_required_period_types(self, test_periods: list[tuple[pd.Timestamp, pd.Timestamp]] | None) -> set:
         """
@@ -146,10 +152,10 @@ class BaseDataLoader(ABC):
             for tmp_market_month in sorted(month_list, reverse=True):
                 st = tmp_market_month
                 et = tmp_market_month + pd.offsets.MonthBegin()
-                tmp_sp = self.fetch_da_shadow_wrapper(
+                tmp_sp = self.fetch_da_shadow(
                     st=st,
                     et=et,
-                    peak_type=class_type,
+                    class_type=class_type,
                 )
                 tmp_sp.index = tmp_sp.index.tz_localize(None)
                 if tmp_market_month == cutoff_month:
@@ -158,8 +164,14 @@ class BaseDataLoader(ABC):
             da = pd.concat(list_da)
             return da
 
+        recent_da_hist_discount = 1.3
+        season_da_hist_discount = {1: 1.0, 2: 0.8, 3: 0.6}
         recent_da = get_da(recent_month_list)
-        recent_da = recent_da.groupby("constraint_id")["shadow_price"].sum().abs() / len(recent_month_list)
+        recent_da = (
+            recent_da.groupby("constraint_id")["shadow_price"].sum().abs()
+            / len(recent_month_list)
+            * recent_da_hist_discount
+        )
         season_da = get_da(season_list)
         season_da["planning_year"] = season_da.index.year + np.where(season_da.index.month < 6, -1, 0)
         season_da = season_da.groupby(["constraint_id", "planning_year"])["shadow_price"].sum().abs().reset_index()
@@ -168,11 +180,12 @@ class BaseDataLoader(ABC):
             planning_year -= 1
         season_da["planning_year"] = planning_year - season_da["planning_year"]
         season_da["month_count"] = season_da["planning_year"].map(season_month_dict)
-        season_da["shadow_price"] /= season_da["month_count"]
+        season_da["shadow_discount"] = season_da["planning_year"].map(season_da_hist_discount)
+        season_da["shadow_price"] *= season_da["shadow_discount"] / season_da["month_count"]
         season_da["planning_year"] = "season_hist_da_" + season_da["planning_year"].astype(str)
         season_da = season_da.pivot(index="constraint_id", columns="planning_year", values="shadow_price").fillna(0)
-        recent_da = np.log1p(recent_da)
-        season_da = np.log1p(season_da)
+        # recent_da = np.log1p(recent_da)
+        # season_da = np.log1p(season_da)
 
         # Use path template from config
         cons_path = Path(
@@ -261,20 +274,21 @@ class BaseDataLoader(ABC):
 
             # Load density data
         density_df = pd.read_parquet(density_path / "density.parquet")
+        try:
+            density_multi_df = pd.read_parquet(density_path / "density_multi.parquet")
+            density_df = pd.concat([density_df, density_multi_df], axis=0)
+        except FileNotFoundError:
+            pass
         # density_df = density_df.loc[['278858']]
 
         # Identify available flow points (columns)
         # Filter out non-numeric columns
         flow_points = []
         for col in density_df.columns:
-            # Convert to float first to handle "100.0", then int
-            val = int(float(col))
-            flow_points.append(val)
+            flow_points.append(int(col) / 100)
 
         if not flow_points:
             raise ValueError(f"No valid flow points found in {density_path}")
-
-        flow_points = sorted(flow_points)
 
         # Define helper to calculate features for a given direction
         def calculate_direction_features(df, direction):
@@ -287,48 +301,6 @@ class BaseDataLoader(ABC):
 
             # Define the mapping from standard feature name (e.g., 110) to actual column (e.g., 110 or -110)
             # and the range for integration
-
-            # We want features: 110, 105, 100, 95, 90, 85, 80, 70, 60
-            # And diffs: 105_diff (105-110), 100_diff (100-105), etc.
-
-            target_points = [110, 105, 100, 95, 90, 85, 80, 70, 60]
-
-            for p in target_points:
-                col_name = str(p * direction)  # e.g., "110" or "-110"
-                if col_name in df.columns:
-                    res[str(p)] = df[col_name]
-                else:
-                    res[str(p)] = 0.0
-
-            # Calculate Diffs (Probability Mass in intervals)
-            # 105_diff: Mass between 105 and 110 (or -110 and -105)
-            # We always integrate from smaller absolute to larger absolute (or vice versa, area is positive)
-
-            diff_intervals = [
-                ("105_diff", 105, 110),
-                ("100_diff", 100, 105),
-                ("95_diff", 95, 100),
-                ("90_diff", 90, 95),
-                ("85_diff", 85, 90),
-                ("80_diff", 80, 85),
-                ("70_diff", 70, 80),
-                ("60_diff", 60, 70),
-            ]
-
-            for name, start, end in diff_intervals:
-                # For positive: integrate start to end
-                # For negative: integrate -end to -start
-                if direction == 1:
-                    x_range = [x for x in flow_points if start <= x <= end]
-                else:
-                    x_range = [x for x in flow_points if -end <= x <= -start]
-
-                if len(x_range) > 1:
-                    cols = [str(x) for x in x_range]
-                    res[name] = np.trapezoid(y=df[cols].values, x=x_range, axis=1)
-                else:
-                    res[name] = 0.0
-
             # --- Engineered Risk Features ---
 
             # if len(overload_x) > 1:
@@ -341,46 +313,76 @@ class BaseDataLoader(ABC):
             exceed_thresholds = [110, 105, 100, 95, 90, 85, 80]
             for t in exceed_thresholds:
                 feat_name = f"prob_exceed_{t}"
+                feat_name1 = f"prob_below_{t}"
                 if direction == 1:
-                    x_range = [x for x in flow_points if x >= t]
+                    x_range = [x for x in flow_points if x >= t / 100]
                 else:
-                    x_range = [x for x in flow_points if x <= -t]
+                    x_range = [x for x in flow_points if x <= -t / 100]
 
                 if len(x_range) > 1:
-                    cols = [str(x) for x in x_range]
+                    cols = [str(int(round(x * 100))) for x in x_range]
                     res[feat_name] = np.trapezoid(y=df[cols].values, x=x_range, axis=1)
+                    res[feat_name1] = 1 - res[feat_name]
                 else:
                     res[feat_name] = 0.0
+                    res[feat_name1] = 0.0
 
-            # Safe Mass (80 to 90)
-            if direction == 1:
-                safe_x = [x for x in flow_points if 80 <= x <= 90]
+            # --- Density Moments ---
+            # Use all flow points to calculate full distribution moments
+            # Assuming flow_points covers the range of interest for this direction
+            # For moments, we use the density values over the whole range of x_range
+
+            # Use full range of points available in df
+            # Note: df cols are strings of flow_points.
+            # We should use all flow_points available to capture full distribution
+            moments_x = np.array(flow_points)
+            moments_cols = [str(int(round(x * 100))) for x in moments_x]
+
+            # Filter cols that exist in df
+            existing_indices = [i for i, c in enumerate(moments_cols) if c in df.columns]
+            if len(existing_indices) > 1:
+                moments_x = moments_x[existing_indices]
+                moments_cols = [moments_cols[i] for i in existing_indices]
+
+                x_vals = moments_x
+                y_vals = df[moments_cols].values
+
+                # Broadcats x for integration
+                # x_vals shape: (N_points,)
+                # y_vals shape: (N_samples, N_points)
+
+                # 1. Expectation (Mean)
+                # Int x * f(x) dx
+                # Multiply by direction so positive mean always implies "towards overload"
+                density_mean = np.trapezoid(y=x_vals * y_vals, x=x_vals, axis=1)
+                res["density_mean"] = density_mean * direction
+
+                # 2. Variance
+                # Int (x - mu)^2 * f(x) dx
+                mu = density_mean.reshape(-1, 1)
+                # Reshape x to broadcast properly against y if needed, but numpy broadcasts x (N,) against y (M,N) OK.
+                # But (x - mu) is (N,) - (M,1) -> (M,N). Correct.
+                variance = np.trapezoid(y=((x_vals - mu) ** 2) * y_vals, x=x_vals, axis=1)
+                res["density_variance"] = variance
+
+                # 3. Skewness
+                # Int ((x - mu)/sigma)^3 * f(x) dx
+                # Multiply by direction:
+                # Direction 1: Positive skew -> Tail to right (overload). Keep as is.
+                # Direction -1: Negative skew -> Tail to left (overload). Flip to positive.
+                sigma = np.sqrt(variance).reshape(-1, 1) + 1e-9
+                skewness = np.trapezoid(y=((x_vals - mu) ** 3 / sigma**3) * y_vals, x=x_vals, axis=1)
+                res["density_skewness"] = skewness * direction
+
+                # 4. Kurtosis
+                # Int ((x - mu)/sigma)^4 * f(x) dx
+                kurtosis = np.trapezoid(y=((x_vals - mu) ** 4 / sigma**4) * y_vals, x=x_vals, axis=1)
+                res["density_kurtosis"] = kurtosis
             else:
-                safe_x = [x for x in flow_points if -90 <= x <= -80]
-
-            if len(safe_x) > 1:
-                cols = [str(x) for x in safe_x]
-                safe_mass = np.trapezoid(y=df[cols].values, x=safe_x, axis=1)
-            else:
-                safe_mass = 0.0
-
-            res["risk_ratio"] = res["prob_exceed_100"] / (safe_mass + 1e-6)
-
-            # Curvature at 100
-            # (d110 - d100) - (d100 - d90)
-            # For negative: (d-110 - d-100) - (d-100 - d-90) ??
-            # Or just use the mapped columns: (res['110'] - res['100']) - (res['100'] - res['90'])
-            res["curvature_100"] = (res["110"] - res["100"]) - (res["100"] - res["90"])
-
-            # Log Density
-            res["log_density_100"] = np.log1p(res["prob_exceed_100"])
-
-            # --- Interaction Features (1.B) ---
-            # risk_ratio * prob_exceed_100: Amplifies high-risk high-probability events
-            res["interaction_risk_overload"] = res["risk_ratio"] * res["prob_exceed_100"]
-
-            # curvature * prob_exceed_100: Distinguishes between "sharp" peaks and "flat" plateaus
-            res["interaction_curvature_exceed"] = res["curvature_100"] * res["prob_exceed_100"]
+                res["density_mean"] = 0.0
+                res["density_variance"] = 0.0
+                res["density_skewness"] = 0.0
+                res["density_kurtosis"] = 0.0
 
             return res
 
@@ -396,16 +398,78 @@ class BaseDataLoader(ABC):
         outage_et = outage_date + pd.Timedelta(days=4)
 
         da_label_chunk = None
-        if require_label:
+        if da_label is not None or require_label:
             # Use cached function for current month labels
             if da_label is None:
-                raise ValueError("da_label is None")
-            da_label = da_label.copy()  # Copy to avoid modifying cached object
-            da_label.index = da_label.index.tz_localize(None)
+                if require_label:
+                    raise ValueError("da_label is None")
+            else:
+                da_label = da_label.copy()  # Copy to avoid modifying cached object
+                if da_label.index.tz is not None:
+                    da_label.index = da_label.index.tz_localize(None)
 
-            # Aggregate shadow prices for this outage period (SUM)
-            da_filtered = da_label.loc[(da_label.index >= outage_st) & (da_label.index < outage_et)]
-            da_label_chunk = da_filtered.groupby("constraint_id")["shadow_price"].sum().abs()
+                # --- Core + Decayed Context Labeling Strategy ---
+                # Core Window: outage_st to outage_et (4 days) - Weight 1.0
+                # Context Window: +/- config.labeling.context_window_days days around Core - Linear Decay
+
+                context_window_days = self.config.labeling.context_window_days
+                decay_end_weight = self.config.labeling.decay_end_weight
+
+                # Ensure outage dates are naive for comparison
+                outage_st_naive = outage_st.tz_localize(None) if outage_st.tzinfo else outage_st
+                outage_et_naive = outage_et.tz_localize(None) if outage_et.tzinfo else outage_et
+
+                # Define Windows
+
+                context_st = outage_st_naive - pd.Timedelta(days=context_window_days)
+                context_et = outage_et_naive + pd.Timedelta(days=context_window_days)
+
+                # Get relevant data slice
+                da_slice = da_label.loc[(da_label.index >= context_st) & (da_label.index < context_et)].copy()
+
+                if not da_slice.empty:
+                    # Calculate Weights
+                    da_slice["weight"] = 0.0
+
+                    # Vectorized weight calculation
+                    # Core
+                    is_core = (da_slice.index >= outage_st_naive) & (da_slice.index < outage_et_naive)
+                    da_slice.loc[is_core, "weight"] = 1.0
+
+                    # Context
+                    unique_dates = da_slice.index.unique()
+                    date_weights = {}
+                    for d in unique_dates:
+                        if outage_st_naive <= d < outage_et_naive:
+                            date_weights[d] = 1.0
+                        else:
+                            # Calculate distance to nearest core boundary
+                            # Dist is 1-based index (adjacent = 1)
+                            if d < outage_st_naive:
+                                dist = (outage_st_naive - d).days
+                            else:
+                                dist = (d - (outage_et_naive - pd.Timedelta(days=1))).days
+
+                            # Linear decay map
+                            # Dist 0 (Virtual Core Edge) -> 1.0
+                            # Dist window -> decay_end_weight
+
+                            if context_window_days > 0:
+                                # y = 1.0 - slope * dist
+                                # slope = (1.0 - end) / window
+                                slope = (1.0 - decay_end_weight) / context_window_days
+                                date_weights[d] = 1.0 - slope * dist
+                            else:
+                                date_weights[d] = decay_end_weight
+
+                    # Map weights
+                    da_slice["weight"] = da_slice.index.map(date_weights)
+
+                    # Weighted Sum
+                    da_slice["weighted_shadow"] = da_slice["shadow_price"].abs() * da_slice["weight"]
+                    da_label_chunk = da_slice.groupby("constraint_id")["weighted_shadow"].sum()
+                else:
+                    da_label_chunk = None
 
             # Create mapping for label branch names
             # da_label_constraint_id_branch_map = self.get_branch_map(da_filtered)
@@ -418,15 +482,6 @@ class BaseDataLoader(ABC):
         if da_label_chunk is not None:
             da_label_chunk = self.map_constraints_to_branches(da_label_chunk, spice_map)
 
-        # recent_hist_da_index = pd.Series(recent_hist_da.index.map(spice_map), index=recent_hist_da.index)
-        # recent_hist_da_index = recent_hist_da_index.fillna(recent_hist_da_branch)
-        # recent_hist_da.index = recent_hist_da_index.values
-        # recent_hist_da = recent_hist_da.groupby(level=0).sum()
-        # season_hist_da_index = pd.Series(season_hist_da.index.map(spice_map), index=season_hist_da.index)
-        # season_hist_da_index = season_hist_da_index.fillna(season_hist_da_branch)
-        # season_hist_da.index = season_hist_da_index.values
-        # season_hist_da = season_hist_da.groupby(level=0).sum()
-
         # Assign labels
         if da_label_chunk is not None:
             full_df["label"] = full_df["branch_name"].map(da_label_chunk).fillna(0)
@@ -436,7 +491,7 @@ class BaseDataLoader(ABC):
         full_df = full_df.merge(season_hist_da, left_on="branch_name", right_index=True, how="left")
         cols = full_df.filter(like="season_hist_da_").columns
         full_df[cols] = full_df[cols].fillna(0)
-        full_df["hist_da"] = full_df["recent_hist_da"] + full_df[cols].sum(axis=1)
+        full_df["hist_da"] = np.log1p(full_df["recent_hist_da"] + full_df[cols].sum(axis=1))
 
         # Sort by risk metrics
         full_df = full_df.sort_values(
@@ -513,13 +568,19 @@ class BaseDataLoader(ABC):
                         auction_month, market_month, p_type, self.config.class_type
                     )
 
-                    # Load Labels (DA Shadow Price) for the whole month
-                    da_label = self.fetch_da_shadow_wrapper(
-                        st=market_month,
-                        et=market_month + pd.offsets.MonthBegin(1),
-                        peak_type=self.config.class_type,
+                    # Load Labels (DA Shadow Price)
+                    # Extend fetch range by context window to ensure labels can be calculated for outages near month boundaries
+                    pad_days = self.config.labeling.context_window_days
+                    fetch_st = market_month - pd.Timedelta(days=pad_days)
+                    fetch_et = market_month + pd.offsets.MonthBegin(1)  # + pd.Timedelta(days=pad_days)
+
+                    da_label = self.fetch_da_shadow(
+                        st=fetch_st,
+                        et=fetch_et,
+                        class_type=self.config.class_type,
                     )
-                    da_label.index = da_label.index.tz_localize(None)
+                    if da_label.index.tz is not None:
+                        da_label.index = da_label.index.tz_localize(None)
 
                     # Iterate through outage dates in this market month
                     for outage_date in self.get_outage_dates(market_month):
@@ -577,6 +638,21 @@ class BaseDataLoader(ABC):
 
         # Load Labels (Optional, for evaluation)
         da_label = None
+        try:
+            da_label = self.fetch_da_shadow(
+                st=market_month,
+                et=market_month + pd.offsets.MonthBegin(1),
+                class_type=self.config.class_type,
+                remove_noise_floor=False,
+            )
+            if da_label is not None:
+                da_label.index = da_label.index.tz_localize(None)
+                if verbose:
+                    print(f"  Loaded labels for evaluation (Test Data): {len(da_label)} records")
+        except Exception as e:
+            if verbose:
+                print(f"  Note: Could not load labels for {market_month.strftime('%Y-%m')}: {e}")
+            da_label = None
 
         period_data = []
         for outage_date in self.get_outage_dates(market_month):
@@ -677,11 +753,11 @@ class BaseDataLoader(ABC):
 class MisoDataLoader(BaseDataLoader):
     """DataLoader implementation for MISO."""
 
-    def fetch_da_shadow_wrapper(self, st, et, peak_type):
+    def fetch_da_shadow_wrapper(self, st, et, class_type):
         return self.aptools.tools.get_da_shadow_by_peaktype(
             st=st,
             et_ex=et,
-            peak_type=peak_type,
+            peak_type=class_type,
             offpeak_hrs=None,
         ).rename(columns={"monitored_facility": "constraint_id"})
 
@@ -738,8 +814,8 @@ class PjmDataLoader(BaseDataLoader):
         assert map_nodup_consid["constraint_id"].value_counts().max() == 1, (
             "one 'branch_name' has multiple 'constraint_id'"
         )
-        map_nodup_moni = spice_map.drop_duplicates(subset=["branch_name", "monitored_facility"]).drop_duplicates(
-            subset=["monitored_facility"]
+        map_nodup_moni = spice_map.drop_duplicates(subset=["branch_name", "match_str"]).drop_duplicates(
+            subset=["match_str"]
         )
 
         data["match_str"] = data.index.str.upper()
@@ -753,7 +829,7 @@ class PjmDataLoader(BaseDataLoader):
         interface_moni["branch_name"] = interface_moni["interface_monitored_facility"].map(
             interface.set_index("match_str")["branch_name"]
         )
-        data["branch_name"] = data["match_str"].map(map_nodup_moni.set_index("monitored_facility")["branch_name"])
+        data["branch_name"] = data["match_str"].map(map_nodup_moni.set_index("match_str")["branch_name"])
         data["interface_branch_name"] = data["match_str"].map(interface_moni.set_index("match_str")["branch_name"])
         data["branch_name"] = data["branch_name"].fillna(data["interface_branch_name"])
         data_by_branch = data.groupby("branch_name")[data_ori_cols].sum().squeeze()

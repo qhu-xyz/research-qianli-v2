@@ -9,7 +9,6 @@ import pandas as pd
 
 from .anomaly_detection import AnomalyDetector
 from .config import PredictionConfig
-from .evaluation import analyze_results
 from .models import ShadowPriceModels, predict_ensemble
 
 
@@ -148,6 +147,27 @@ class Predictor:
             branch_indices = np.where(branch_mask)[0]  # Get positional indices
 
             X_branch_all = X_test.iloc[branch_indices]
+
+            # --- Pre-Processing: Force Unbind Rule ---
+            # Exclude samples that satisfy the unbind rule from further processing
+            # They will remain 0 (default initialization) and be marked "Force Unbind"
+            test_unbind_rule = self.config.training.test_unbind_rule
+            if test_unbind_rule is not None:
+                feat_name, threshold = test_unbind_rule
+                if feat_name in X_branch_all.columns:
+                    mask_unbind_local = (X_branch_all[feat_name] < threshold).values
+
+                    if np.any(mask_unbind_local):
+                        # Mark excluded samples
+                        unbind_indices_global = branch_indices[mask_unbind_local]
+                        for idx in unbind_indices_global:
+                            model_used[idx] = "Force Unbind"
+
+                        # Keep only valid samples
+                        mask_valid_local = ~mask_unbind_local
+                        X_branch_all = X_branch_all[mask_valid_local]
+                        branch_indices = branch_indices[mask_valid_local]
+
             n_samples_in_branch = len(X_branch_all)
 
             # Determine horizon group for this branch
@@ -191,7 +211,7 @@ class Predictor:
                     if is_anomaly:
                         # Predict binding due to anomaly
                         y_pred_binary[idx] = 1
-                        y_pred_proba[idx] = 0.5 + 0.5 * confidence
+                        y_pred_proba[idx] = confidence
                         y_pred_proba_scaled[idx] = y_pred_proba[idx]  # Scaled prob = prob since threshold is 0.5
                         y_pred_threshold[idx] = 0.5  # Default threshold for anomaly
 
@@ -202,6 +222,11 @@ class Predictor:
                         )
 
                         if len(reg_ensemble_anom) > 0:
+                            # Get expected features for default regressor
+                            feats = self.models.reg_default_features.get(horizon_group)
+                            if not feats:
+                                feats = [f[0] for f in self.config.features.step2_features]
+
                             # Scale features if scaler is available
                             if reg_scaler_anom:
                                 # Need to scale all features first
@@ -209,17 +234,13 @@ class Predictor:
                                 sample_df = test_sample_all.to_frame().T
                                 feature_cols = self.config.features.all_features
                                 sample_df[feature_cols] = reg_scaler_anom.transform(sample_df[feature_cols])
-                                # Clip to prevent explosion from near-constant features
-                                # Check if regressor weight > 0
-                                reg_weights_check = self.models.get_ensemble_weights_for_horizon(
-                                    forecast_horizon, "regressor", is_branch=False
-                                )
-                                if reg_weights_check[0] > 0:
-                                    step2_names = [f[0] for f in self.config.features.step2_features]
-                                    test_sample_reg = sample_df[step2_names]
+
+                                # Use valid features
+                                valid_feats = [f for f in feats if f in sample_df.columns]
+                                test_sample_reg = sample_df[valid_feats]
                             else:
-                                step2_names = [f[0] for f in self.config.features.step2_features]
-                                test_sample_reg = test_sample_all[step2_names].to_frame().T
+                                valid_feats = [f for f in feats if f in test_sample_all.index]
+                                test_sample_reg = test_sample_all[valid_feats].to_frame().T
 
                             # Get horizon-specific weights for default regressor
                             reg_weights_anom = self.models.get_ensemble_weights_for_horizon(
@@ -295,6 +316,20 @@ class Predictor:
                 step1_names = [f[0] for f in self.config.features.step1_features]
                 X_branch_clf = X_branch_all[step1_names]
 
+            # Use selected features if available
+            selected_features = None
+            # Check for branch specific selected features
+            if (branch_name, flow_direction) in self.models.clf_branch_features.get(horizon_group, {}):
+                selected_features = self.models.clf_branch_features[horizon_group][(branch_name, flow_direction)]
+            # Check for default selected features
+            elif horizon_group in self.models.clf_default_features:
+                selected_features = self.models.clf_default_features[horizon_group]
+
+            if selected_features:
+                # Ensure we only pick features that exist (they should, but safe check)
+                valid_feats = [f for f in selected_features if f in X_branch_clf.columns]
+                X_branch_clf = X_branch_clf[valid_feats]
+
             # Determine if we are using a branch-specific model (for logging/weights)
             # Note: get_classifier_ensemble returns branch specific if available, else default
             # We can check if branch_name is in the ensemble dict to know for sure,
@@ -336,6 +371,47 @@ class Predictor:
             y_proba_branch = predict_ensemble(
                 clf_ensemble_to_use, X_branch_clf, predict_proba=True, weight_overrides=clf_weights
             )
+
+            # --- Fallback & Blending Logic ---
+            if not is_branch_model:
+                # Default Model Validity Check
+                if not self.models.clf_default_valid.get(horizon_group, True):
+                    y_proba_branch = np.zeros_like(y_proba_branch)
+
+            elif is_branch_model:
+                # Branch Model Fallback Check (Blending)
+                if self.models.clf_branch_fallback.get(horizon_group, {}).get((branch_name, flow_direction), False):
+                    # Calculate Probability from Default Model for Blending
+                    prob_default = np.zeros_like(y_proba_branch)
+
+                    if self.models.clf_default_valid.get(horizon_group, True):
+                        # Use default ensemble
+                        default_ens = self.models.clf_default_ensembles.get(horizon_group, [])
+                        if default_ens:
+                            # Prepare features for default model
+                            default_feats = self.models.clf_default_features.get(horizon_group, [])
+                            # Use X_branch_scaled_all if available (from scaler block), else X_branch_all
+                            # We need to re-extract because 'X_branch_clf' is already filtered for branch model
+                            if "X_branch_scaled_all" in locals():
+                                X_source = X_branch_scaled_all
+                            else:
+                                X_source = X_branch_all
+
+                            valid_default_feats = [f for f in default_feats if f in X_source.columns]
+                            X_default_clf = X_source[valid_default_feats]
+
+                            # Get default weights
+                            default_weights = self.models.get_ensemble_weights_for_horizon(
+                                forecast_horizon, "classifier", is_branch=False
+                            )
+
+                            prob_default = predict_ensemble(
+                                default_ens, X_default_clf, predict_proba=True, weight_overrides=default_weights
+                            )
+
+                    # Blend: w * Branch + (1-w) * Default
+                    w_fallback = self.config.feature_selection.fallback_weight
+                    y_proba_branch = w_fallback * y_proba_branch + (1 - w_fallback) * prob_default
 
             # Store predictions
             y_pred_proba[branch_indices] = y_proba_branch
@@ -390,6 +466,26 @@ class Predictor:
                     # Or reg_scaler might be different if we fell back to default regressor but used branch classifier?
                     # get_regressor_ensemble handles logic.
 
+                    # Check if branch model
+                    is_branch_reg_model = False
+                    if (branch_name, flow_direction) in self.models.reg_ensembles.get(horizon_group, {}):
+                        is_branch_reg_model = True
+
+                    # Determine correct features for the model
+                    if is_branch_reg_model:
+                        # Use features stored during training for this branch
+                        feats = self.models.reg_branch_features.get(horizon_group, {}).get(
+                            (branch_name, flow_direction)
+                        )
+                        if not feats:
+                            # Fallback if not found (shouldn't happen if trained)
+                            feats = [f[0] for f in self.config.features.step2_features]
+                    else:
+                        # Use default model features
+                        feats = self.models.reg_default_features.get(horizon_group)
+                        if not feats:
+                            feats = [f[0] for f in self.config.features.step2_features]
+
                     if reg_scaler:
                         # If we already scaled for classification and it's the SAME scaler, we could reuse
                         # But simpler to just transform again to be safe/robust
@@ -398,22 +494,16 @@ class Predictor:
                             X_branch_scaled_reg_all[feature_cols]
                         )
                         # Extract regression features from SCALED
-                        step2_names = [f[0] for f in self.config.features.step2_features]
-                        X_branch_reg = X_branch_scaled_reg_all[step2_names]
+                        # Ensure features exist in dataframe
+                        valid_feats = [f for f in feats if f in X_branch_scaled_reg_all.columns]
+                        X_branch_reg = X_branch_scaled_reg_all[valid_feats]
                     else:
-                        step2_names = [f[0] for f in self.config.features.step2_features]
-                        X_branch_reg = X_branch_all[step2_names]
+                        valid_feats = [f for f in feats if f in X_branch_all.columns]
+                        X_branch_reg = X_branch_all[valid_feats]
 
                     # Filter for binding samples
                     # We need to subset X_branch_reg using binding_mask_local
                     X_branch_reg_binding = X_branch_reg[binding_mask_local]
-
-                    # Check if branch model
-                    is_branch_reg_model = False
-                    # Check if branch model
-                    is_branch_reg_model = False
-                    if (branch_name, flow_direction) in self.models.reg_ensembles.get(horizon_group, {}):
-                        is_branch_reg_model = True
 
                     if is_branch_reg_model:
                         used_branch_reg_count += binding_mask_local.sum()
@@ -434,6 +524,56 @@ class Predictor:
 
                     # Inverse transform (expm1) and clip to 0
                     shadow_price_pred = np.maximum(0, np.expm1(raw_pred))
+
+                    # --- Fallback & Blending Logic (Regression) ---
+                    if not is_branch_reg_model:
+                        # Default Model Validity Check
+                        if not self.models.reg_default_valid.get(horizon_group, True):
+                            shadow_price_pred = np.zeros_like(shadow_price_pred)
+
+                    elif is_branch_reg_model:
+                        # Branch Model Fallback Check (Blending)
+                        if self.models.reg_branch_fallback.get(horizon_group, {}).get(
+                            (branch_name, flow_direction), False
+                        ):
+                            val_default = np.zeros_like(shadow_price_pred)
+
+                            if self.models.reg_default_valid.get(horizon_group, True):
+                                default_reg_ens = self.models.reg_default_ensembles.get(horizon_group, [])
+                                if default_reg_ens:
+                                    # Prepare features for default model
+                                    # We need original scaled data for default features? No, we need to scale using default scaler.
+                                    # X_branch_all contains unscaled features for this branch subset
+                                    X_branch_binding_raw = X_branch_all.iloc[np.where(binding_mask_local)[0]]
+
+                                    scaler_def = self.models.scalers_default.get(horizon_group)
+                                    if scaler_def:
+                                        X_def_scaled = X_branch_binding_raw.copy()
+                                        # Need to scale all features
+                                        X_def_scaled[self.config.features.all_features] = scaler_def.transform(
+                                            X_def_scaled[self.config.features.all_features]
+                                        )
+
+                                        default_feats = self.models.reg_default_features.get(horizon_group, [])
+                                        # Intersect with available columns (which should be all scaled features)
+                                        valid_feats = [f for f in default_feats if f in X_def_scaled.columns]
+                                        X_def_reg = X_def_scaled[valid_feats]
+
+                                        default_weights = self.models.get_ensemble_weights_for_horizon(
+                                            forecast_horizon, "regressor", is_branch=False
+                                        )
+
+                                        raw_pred_def = predict_ensemble(
+                                            default_reg_ens,
+                                            X_def_reg,
+                                            predict_proba=False,
+                                            weight_overrides=default_weights,
+                                        )
+                                        val_default = np.maximum(0, np.expm1(raw_pred_def))
+
+                            # Blend in Linear Space
+                            w_fallback = self.config.feature_selection.fallback_weight
+                            shadow_price_pred = w_fallback * shadow_price_pred + (1 - w_fallback) * val_default
 
                     # Map back to full array
                     # binding_indices_local are indices within X_branch_all
@@ -477,18 +617,19 @@ class Predictor:
             verbose,
         )
 
-        # Calculate Metrics only if labels are available
-        if results_per_outage["actual_shadow_price"].notna().any():
-            metrics = analyze_results(results_per_outage, final_results, verbose=verbose)
-            if verbose:
-                print("\n[Evaluation Metrics]")
-                for k, v in metrics.items():
-                    print(f"  {k}: {v:.4f}")
-        else:
-            if verbose:
-                print("\n[Evaluation Metrics]")
-                print("  Skipping metrics calculation (no labels available)")
-            metrics = {}
+        # # Calculate Metrics only if labels are available
+        # if results_per_outage["actual_shadow_price"].notna().any():
+        #     metrics = analyze_results(results_per_outage, final_results, verbose=verbose)
+        #     if verbose:
+        #         print("\n[Evaluation Metrics]")
+        #         for k, v in metrics.items():
+        #             print(f"  {k}: {v:.4f}")
+        # else:
+        #     if verbose:
+        #         print("\n[Evaluation Metrics]")
+        #         print("  Skipping metrics calculation (no labels available)")
+        #     metrics = {}
+        metrics = {}
 
         return results_per_outage, final_results, metrics
 
@@ -557,18 +698,17 @@ class Predictor:
             print("=" * 80)
 
         # Create per-outage results
-        results_per_outage = test_data[
-            self.config.features.all_features
-            + [
-                "constraint_id",
-                "flow_direction",
-                "label",
-                "branch_name",
-                "outage_date",
-                "auction_month",
-                "market_month",
-            ]
-        ].copy()
+        features = list(set(self.config.features.all_features + ["hist_da"]))
+        all_cols = features + [
+            "constraint_id",
+            "flow_direction",
+            "label",
+            "branch_name",
+            "outage_date",
+            "auction_month",
+            "market_month",
+        ]
+        results_per_outage = test_data[all_cols].copy()
         results_per_outage["predicted_shadow_price"] = y_pred_shadow_price
         results_per_outage["binding_probability"] = y_pred_proba
         results_per_outage["binding_probability_scaled"] = y_pred_proba_scaled
@@ -588,11 +728,12 @@ class Predictor:
 
         # Aggregate by constraint_id (sum across all outage dates)
         final_results = (
-            results_per_outage.groupby(["constraint_id", "flow_direction"])
+            results_per_outage.sort_values("binding_probability", ascending=False)
+            .groupby(["constraint_id", "flow_direction"])
             .agg(
                 {
                     "branch_name": "first",
-                    **{feat: "mean" for feat in self.config.features.all_features},
+                    **{feat: "mean" for feat in features},
                     "actual_shadow_price": "sum",
                     "predicted_shadow_price": "sum",
                     "binding_probability": "max",

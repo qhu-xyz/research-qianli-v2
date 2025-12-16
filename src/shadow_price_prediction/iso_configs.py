@@ -98,7 +98,7 @@ PJM_ISO_CONFIG = IsoConfig(
         constraint_path_template=(
             "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_pjm/constraint_info/"
             "auction_month={auction_month}/market_round={market_round}/"
-            "period_type={period_type}/class_type={class_type}"
+            "period_type={period_type}/class_type=onpeak"
         ),
     ),
     run_at_day=13,

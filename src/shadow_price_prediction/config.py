@@ -30,26 +30,22 @@ class FeatureConfig:
             ("prob_exceed_90", 1),
             # ("prob_exceed_85", 1),
             # ("prob_exceed_80", 1),
-            ("hist_da", 1),
-            # ("105_diff", 0),
-            # ("100_diff", 0),
-            # ("95_diff", 0),
-            # ("90_diff", 0),
-            # ("85_diff", 0),
-            # ("80_diff", 0),
-            # ("70_diff", 0),
-            # ("60_diff", 0),
-            # ("risk_ratio", 1),
-            # ("curvature_100", 1),
-            # ("interaction_risk_overload", 1),
-            # ("interaction_curvature_exceed", 1),
+            # ("prob_below_100", -1),
+            ("prob_below_95", -1),
+            ("prob_below_90", -1),
+            # ("prob_below_85", -1),
+            # ("prob_below_80", -1),
+            # ("density_mean", 1),
+            # ("density_variance", 0),
+            ("density_skewness", 1),
+            # ("density_kurtosis", 0),
+            # ("hist_da", 1),
         ]
     )
 
     # Regression features (raw + derived diffs + engineered)
     step2_features: list[tuple[str, int]] = field(
         default_factory=lambda: [
-            # ("curvature_100", 1),
             ("prob_exceed_110", 1),
             ("prob_exceed_105", 1),
             ("prob_exceed_100", 1),
@@ -57,19 +53,16 @@ class FeatureConfig:
             ("prob_exceed_90", 1),
             # ("prob_exceed_85", 1),
             # ("prob_exceed_80", 1),
-            ("hist_da", 1),
-            # ("105_diff", 0),
-            # ("100_diff", 0),
-            # ("95_diff", 0),
-            # ("90_diff", 0),
-            # ("85_diff", 0),
-            # ("80_diff", 0),
-            # ("70_diff", 0),
-            # ("60_diff", 0),
-            # ("risk_ratio", 1),
-            # ("curvature_100", 1),
-            # ("interaction_risk_overload", 1),
-            # ("interaction_curvature_exceed", 1),
+            # ("prob_below_100", -1),
+            ("prob_below_95", -1),
+            ("prob_below_90", -1),
+            # ("prob_below_85", -1),
+            # ("prob_below_80", -1),
+            # ("density_mean", 1),
+            # ("density_variance", 0),
+            ("density_skewness", 1),
+            # ("density_kurtosis", 0),
+            # ("hist_da", 1),
         ]
     )
 
@@ -368,16 +361,20 @@ class TrainingConfig:
     min_samples_for_branch_model: int = 1
     min_binding_samples_for_regression: int = 1
     train_months_lookback: int = 12  # Number of months to look back for training
-    label_threshold: float = 0.0  # Threshold for binary classification label
+    label_threshold: float = 0  # Threshold for binary classification label
+    min_branch_positive_ratio: float = 0.02  # Minimum ratio of positive samples to train branch model
+    # Rule to modify label to 0 if a feature is below a threshold
+    # Format: (feature_name, threshold)
+    label_modification_rule: tuple[str, float] | None = ("prob_exceed_90", 1e-5)
+    # Rule to modify test prediction to 0 (unbind) if a feature is below a threshold
+    # Format: (feature_name, threshold)
+    test_unbind_rule: tuple[str, float] | None = ("prob_exceed_90", 1e-5)
 
 
 @dataclass
 class ThresholdConfig:
     """Dynamic threshold optimization configuration."""
 
-    threshold_range_start: float = 0.01
-    threshold_range_end: float = 0.99
-    threshold_range_steps: int = 99
     threshold_beta: float = 0.5  # F-beta score beta parameter (0.5 favors precision)
     threshold_scaling_factor: float = 1.0  # Scale factor for optimal threshold (heuristic to avoid overfitting)
 
@@ -392,8 +389,72 @@ class AnomalyDetectionConfig:
 
     enabled: bool = True
     k_multiplier: float = 3.0  # IQR multiplier for anomaly threshold
+    iqr_range_fraction: float = 0.3  # Dynamic floor fraction of (Max-Min) to handle zero-variance
     min_samples_for_stats: int = 10
-    flow_feature: str = "prob_exceed_100"  # Feature to use for anomaly detection
+    # --- Detection Phase ---
+    # Features used to trigger the "Is Anomaly" boolean
+    detection_features: list[str] = field(default_factory=lambda: ["prob_exceed_100", "prob_exceed_95"])
+    detection_weights: dict[str, float] = field(default_factory=lambda: {"prob_exceed_100": 2.0, "prob_exceed_95": 1.0})
+    detection_threshold: float = 0.5  # Weighted Score threshold to trigger anomaly
+
+    # --- Probability Phase ---
+    # Features used to calculate the specific binding probability (if anomaly is detected)
+    probability_features: list[str] = field(
+        default_factory=lambda: ["prob_exceed_100", "prob_exceed_95", "density_skewness"]
+    )
+    probability_weights: dict[str, float] = field(
+        default_factory=lambda: {"prob_exceed_100": 2.0, "prob_exceed_95": 1.5, "density_skewness": 0.7}
+    )
+
+    # Sigmoid parameters for probability mapping
+    # P = 1 / (1 + exp(-alpha * (Score_prob - beta)))
+    sigmoid_alpha: float = 1.0
+    sigmoid_beta: float = 0.5
+
+
+@dataclass
+class FeatureSelectionConfig:
+    """Feature selection based on correlation/AUC with monotonic constraints."""
+
+    method: str = "both"  # 'spearman', 'auc', or 'both'
+    # 'both': Feature must satisfy BOTH Spearman correlation AND AUC directionality checks.
+
+    # Weight for branch model fallback prediction (w * Branch + (1-w) * Default)
+    # Only used if Branch model falls back to "All Features" due to selection failure.
+    fallback_weight: float = 0.5
+
+    # Features with correlation (or AUC-0.5) weaker than this but consistent sign will be kept?
+    # Or features with WRONG sign will be dropped if correlation is stronger than this?
+    # Logic:
+    # If constraint=1 (Expect Positive):
+    #   if corr < -threshold: DROP or FLIP? User said "choose only positive ones"
+    #   so if corr < 0 (+buffer?), DROP.
+    # We will implement a simple consistency check.
+
+    # Threshold for "strong enough to contradict"
+    # If we expect positive, but get negative correlation stronger than this magnitude, we drop it.
+    # If we get negative correlation but weak (noise), we might keep it (or drop it too?).
+    # User said: "choose only positive ones for monotonic 1"
+    # So we should probably drop ANYTHING with wrong sign?
+    # Let's use a small negative threshold to allow for slight noise around 0.
+    min_correlation: float = 0.00  # If constraint=1, must have corr > min_correlation.
+    # If constraint=-1, must have corr < -min_correlation.
+
+    # For AUC:
+    # Constraint=1 => AUC > 0.5 (or min_auc)
+    # Constraint=-1 => AUC < 0.5 (or 1 - min_auc if symmetric? Usually AUC is 0.5 for random)
+    # The requirement is likely "better than random" by some margin.
+    # Default 0.5 means "better than random".
+    auc_threshold: float = 0.5
+
+
+@dataclass
+class LabelingConfig:
+    """Configuration for label assignment strategy."""
+
+    context_window_days: int = 7
+    decay_end_weight: float = 0.1
+    noise_floor: float = 1.0
 
 
 @dataclass
@@ -412,11 +473,14 @@ class PredictionConfig:
     market_round: int = 1
 
     # Path configuration
-    # Path configuration
+    # path configuration
     # paths: DataPathConfig = field(default_factory=DataPathConfig) # Moved to IsoConfig
 
     # Feature configuration
     features: FeatureConfig = field(default_factory=FeatureConfig)
+
+    # Label assignment configuration
+    labeling: LabelingConfig = field(default_factory=LabelingConfig)
 
     # Model ensemble configuration
     models: EnsembleConfig = field(default_factory=EnsembleConfig)
@@ -429,6 +493,9 @@ class PredictionConfig:
 
     # Anomaly detection
     anomaly_detection: AnomalyDetectionConfig = field(default_factory=AnomalyDetectionConfig)
+
+    # Feature selection
+    feature_selection: FeatureSelectionConfig = field(default_factory=FeatureSelectionConfig)
 
     # Data loading parameters
     # run_at_day: int = 10 # Moved to IsoConfig

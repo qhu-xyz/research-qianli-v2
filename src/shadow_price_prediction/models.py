@@ -13,6 +13,63 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from .config import ModelSpec, PredictionConfig
 
 
+class RobustMinMaxScaler:
+    """
+    MinMaxScaler that handles near-zero constant features by setting them to 0
+    instead of aggressively scaling noise to [0, 1].
+    """
+
+    def __init__(self, epsilon=1e-9):
+        self.scaler = MinMaxScaler()
+        self.epsilon = epsilon
+        self.zero_cols = []
+        self.feature_names_in_ = None
+
+    def fit(self, X, y=None):  # noqa: N803
+        if hasattr(X, "columns"):
+            self.feature_names_in_ = X.columns.tolist()
+
+        # Identify near-zero columns
+        # Check max absolute value
+        max_abs = np.max(np.abs(X), axis=0)
+
+        # If input is DataFrame, max_abs is Series
+        if hasattr(max_abs, "values"):
+            self.zero_cols = max_abs.index[max_abs < self.epsilon].tolist()
+        else:
+            # If numpy array
+            self.zero_cols = np.where(max_abs < self.epsilon)[0]
+
+        self.scaler.fit(X, y)
+        return self
+
+    def transform(self, X):
+        X_scaled = self.scaler.transform(X)
+
+        # Zero out identified columns
+        if isinstance(X, pd.DataFrame):
+            # If we have column names, use them
+            if self.zero_cols:
+                # Check intersection of columns (in case specific subset passed)
+                cols_to_zero = [c for c in self.zero_cols if c in X.columns]
+                if cols_to_zero:
+                    # Create DataFrame from scaled array (which is numpy)
+                    # Or modify X_scaled array directly using column indices
+                    # Since X_scaled is numpy, we need indices
+                    col_indices = [X.columns.get_loc(c) for c in cols_to_zero]
+                    X_scaled[:, col_indices] = 0.0
+
+        else:
+            # Numpy array
+            if len(self.zero_cols) > 0:
+                X_scaled[:, self.zero_cols] = 0.0
+
+        return X_scaled
+
+    def fit_transform(self, X, y=None):  # noqa: N803
+        return self.fit(X, y).transform(X)
+
+
 class StackingModel:
     """
     Implements Stacking Ensemble (3.B).
@@ -141,6 +198,145 @@ def create_model(
 
     # Instantiate the model directly with its parameters
     return model_class(**params)
+
+
+def select_features(
+    X: pd.DataFrame,  # noqa: N803
+    y: pd.Series | np.ndarray,
+    features_config: list[tuple[str, int]],
+    selection_config,
+) -> tuple[pd.DataFrame, list[int], list[str], bool]:
+    """
+    Select features based on correlation/AUC and monotonic constraints.
+
+    Parameters:
+    -----------
+    X : pd.DataFrame
+        Input features
+    y : Array-like
+        Target variable
+    features_config : List[Tuple[str, int]]
+        List of (feature_name, constraint) tuples
+    selection_config : FeatureSelectionConfig
+        Configuration for feature selection
+
+    Returns:
+    --------
+    X_selected : pd.DataFrame
+        Selected features
+    selected_constraints : List[int]
+        Corresponding monotonic constraints
+    selected_names : List[str]
+        Names of selected features
+    is_fallback : bool
+        True if selection failed and fell back to all features (or fallback strategy).
+    """
+    if not selection_config or len(X) < 10:  # Skip if too few samples
+        return X, [f[1] for f in features_config], [f[0] for f in features_config], False
+
+    from scipy.stats import spearmanr
+    from sklearn.metrics import roc_auc_score
+
+    def _get_subset(method_name: str) -> tuple[list[str], list[int]]:
+        keep_cols_local = []
+        keep_constraints_local = []
+
+        for feat_name, constraint in features_config:
+            if feat_name not in X.columns:
+                continue
+
+            if constraint == 0:
+                keep_cols_local.append(feat_name)
+                keep_constraints_local.append(constraint)
+                continue
+
+            x_feat = X[feat_name].values
+
+            # Check for constant features (std < 1e-9)
+            if np.std(x_feat) < 1e-9:
+                continue
+
+            is_both = method_name == "both"
+            check_auc = is_both or method_name == "auc"
+            check_spearman = is_both or method_name == "spearman"
+
+            pass_auc = False
+            pass_spearman = False
+
+            # --- AUC Check ---
+            unique_y = np.unique(y)
+            can_calc_auc = len(unique_y) == 2
+
+            if check_auc and can_calc_auc:
+                try:
+                    auc = roc_auc_score(y, x_feat)
+                    if constraint == 1:
+                        if auc > selection_config.auc_threshold:
+                            pass_auc = True
+                    elif constraint == -1:
+                        if auc < selection_config.auc_threshold:
+                            pass_auc = True
+                except ValueError:
+                    pass_auc = False
+            elif check_auc and not can_calc_auc:
+                pass_auc = True  # Treat as N/A -> Pass
+
+            # --- Spearman Check ---
+            if check_spearman:
+                corr, _ = spearmanr(x_feat, y)
+                if np.isnan(corr):
+                    corr = 0.0
+
+                if constraint == 1:
+                    if corr > selection_config.min_correlation:
+                        pass_spearman = True
+                elif constraint == -1:
+                    if corr < -selection_config.min_correlation:
+                        pass_spearman = True
+
+            # --- Final Decision ---
+            valid_pass = False
+            if is_both:
+                if pass_auc and pass_spearman:
+                    valid_pass = True
+            elif method_name == "auc":
+                valid_pass = pass_auc
+            elif method_name == "spearman":
+                valid_pass = pass_spearman
+
+            if valid_pass:
+                keep_cols_local.append(feat_name)
+                keep_constraints_local.append(constraint)
+
+        return keep_cols_local, keep_constraints_local
+
+    # Stage 1: Try configured method
+    keep_cols, keep_constraints = _get_subset(selection_config.method)
+
+    # Stage 2: Fallback to Spearman if 'both' failed to find ANY feature (except constraint 0)
+    # Note: If we have constraint 0 features, keep_cols might not be empty, but we might have lost all predictive features.
+    # The requirement is "what if no features satisfy". Strict interpretation: Result is empty.
+    # But often we have some '0' constraint features? In config they are commented out, but if they exist...
+    # Let's count "monotonic features kept".
+    monotonic_kept = sum(1 for c in keep_constraints if c != 0)
+
+    if monotonic_kept == 0 and selection_config.method == "both":
+        # Fallback to Spearman
+        keep_cols_retry, keep_constraints_retry = _get_subset("spearman")
+        if sum(1 for c in keep_constraints_retry if c != 0) > 0:
+            keep_cols = keep_cols_retry
+            keep_constraints = keep_constraints_retry
+
+    # Stage 3: Fallback to All Features if still empty OR only has non-monotonic (0) features
+    # User requirement: "if the left features only have (feature_name, 0)... this is also invalid"
+    monotonic_final = sum(1 for c in keep_constraints if c != 0)
+
+    is_fallback = False
+    if not keep_cols or monotonic_final == 0:
+        is_fallback = True
+        return X, [f[1] for f in features_config], [f[0] for f in features_config], is_fallback
+
+    return X[keep_cols], keep_constraints, keep_cols, is_fallback
 
 
 def train_ensemble(
@@ -298,8 +494,9 @@ def find_optimal_threshold(
     p, r = precision[:-1], recall[:-1]
     fbeta = (1 + beta**2) * p * r / (beta**2 * p + r)
     optimal_idx = np.argmax(fbeta)
-    prev_idx = max(optimal_idx - 1, 0)
-    optimal_threshold = (thresholds[optimal_idx] + thresholds[prev_idx]) / 2
+
+    # optimal_threshold = (thresholds[optimal_idx] + thresholds[prev_idx]) / 2
+    optimal_threshold = thresholds[optimal_idx]
     max_fbeta = fbeta[optimal_idx]
 
     # Apply scaling factor (heuristic to avoid overfitting)
@@ -329,6 +526,26 @@ class ShadowPriceModels:
         self.reg_default_ensembles: dict[str, list[tuple[Any, float]]] = {}
         self.optimal_threshold_defaults: dict[str, float] = {}
 
+        # Selected Features Storage
+        # Default models: Dict[horizon_group, List[str]]
+        self.clf_default_features: dict[str, list[str]] = {}
+        self.reg_default_features: dict[str, list[str]] = {}
+        # Branch models: Dict[horizon_group, Dict[(branch_name, flow_direction), List[str]]]
+        # We store the selected features so we can filter X during prediction
+        self.clf_branch_features: dict[str, dict[tuple[str, int], list[str]]] = {}
+        self.reg_branch_features: dict[str, dict[tuple[str, int], list[str]]] = {}
+
+        # Fallback Status Storage
+        # Default models: True if model is valid (did NOT fall back to empty/all)
+        # If is_fallback=True for default, the model is considered INVALID (Predict 0)
+        self.clf_default_valid: dict[str, bool] = {}
+        self.reg_default_valid: dict[str, bool] = {}
+
+        # Branch models: True if model triggered fallback (is using ALL features but blended)
+        # If is_fallback=True, we use Weighted Blend (Branch + Default)
+        self.clf_branch_fallback: dict[str, dict[tuple[str, int], bool]] = {}
+        self.reg_branch_fallback: dict[str, dict[tuple[str, int], bool]] = {}
+
         # Initialize containers for each horizon group
         for group in self.config.horizon_groups:
             self.scalers_branch[group.name] = {}
@@ -336,8 +553,15 @@ class ShadowPriceModels:
             self.reg_ensembles[group.name] = {}
             self.optimal_thresholds[group.name] = {}
             self.clf_default_ensembles[group.name] = []
+
+            # Initialize fallback dicts
+            self.clf_branch_fallback[group.name] = {}
+            self.reg_branch_fallback[group.name] = {}
             self.reg_default_ensembles[group.name] = []
             self.optimal_threshold_defaults[group.name] = 0.5
+
+            self.clf_branch_features[group.name] = {}
+            self.reg_branch_features[group.name] = {}
 
     def get_ensemble_weights_for_horizon(
         self, horizon: int, model_type: str = "classifier", is_branch: bool = False
@@ -390,37 +614,53 @@ class ShadowPriceModels:
         flow_direction: int,
         branch_data: pd.DataFrame,
         weight_overrides: dict[str, float] | None = None,
-    ) -> tuple[str, int, list[tuple[Any, float]] | None, float | None, StandardScaler | None]:
+    ) -> tuple[str, int, list[tuple[Any, float]] | None, float | None, StandardScaler | None, list[str] | None, bool]:
         """
         Train a single branch classifier.
-        Returns: (branch_name, flow_direction, ensemble, optimal_threshold, scaler)
+        Returns: (branch_name, flow_direction, ensemble, optimal_threshold, scaler, selected_features, is_fallback)
         """
         # Skip branches with too few samples
         if len(branch_data) < self.config.training.min_samples_for_branch_model:
-            return branch_name, flow_direction, None, 0.5, None
+            return branch_name, flow_direction, None, 0.5, None, None, False
 
         # Skip branches with only one class (all 0s or all 1s)
         y_branch_raw = (branch_data["label"] > self.config.training.label_threshold).astype(int)
         if len(np.unique(y_branch_raw)) < 2:
-            return branch_name, flow_direction, None, 0.5, None
+            return branch_name, flow_direction, None, 0.5, None, None, False
+
+        # Skip branches with rare positive labels (less than 5%)
+        # This prevents training models on branches that are almost never binding
+        if y_branch_raw.mean() < self.config.training.min_branch_positive_ratio:
+            return branch_name, flow_direction, None, 0.5, None, None, False
 
         # Prepare branch data with BRANCH-SPECIFIC SCALING
         feature_cols = self.config.features.all_features
-        scaler_branch = MinMaxScaler()
+        scaler_branch = RobustMinMaxScaler()
         branch_data_scaled = branch_data.copy()
         branch_data_scaled[feature_cols] = scaler_branch.fit_transform(branch_data[feature_cols])
         # Extract classification features from SCALED data
         # Note: config.features.step1_features is now a list of tuples (name, constraint)
-        step1_feature_names = [f[0] for f in self.config.features.step1_features]
-        X_branch = branch_data_scaled[step1_feature_names].copy()
+
+        # Re-extract just step1 features as candidates
+        step1_candidates = self.config.features.step1_features
+        step1_names = [f[0] for f in step1_candidates]
+        X_branch_candidates = branch_data_scaled[step1_names].copy()
+
         y_branch_binary = (branch_data_scaled["label"] > self.config.training.label_threshold).astype(int)
         groups_branch = (
             branch_data_scaled["auction_month"].values if "auction_month" in branch_data_scaled.columns else None
         )
 
+        # Feature Selection
+        X_branch, constraints, selected_features, is_fallback = select_features(
+            X_branch_candidates, y_branch_binary, step1_candidates, self.config.feature_selection
+        )
+
+        if is_fallback:
+            return branch_name, flow_direction, None, 0.5, None, None, True
+
         # Construct Monotonic Constraints for XGBoost
         # Format: "(1,0,-1)" corresponding to feature columns in X_branch
-        constraints = [f[1] for f in self.config.features.step1_features]
         monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
 
         # Train branch-specific ensemble
@@ -444,43 +684,60 @@ class ShadowPriceModels:
             self.config.threshold.threshold_scaling_factor,
         )
 
-        return branch_name, flow_direction, clf_ensemble, optimal_threshold_branch, scaler_branch
+        return (
+            branch_name,
+            flow_direction,
+            clf_ensemble,
+            optimal_threshold_branch,
+            scaler_branch,
+            selected_features,
+            is_fallback,
+        )
 
     def _train_single_branch_regressor(
         self, branch_name: str, flow_direction: int, branch_data: pd.DataFrame
-    ) -> tuple[str, int, list[tuple[Any, float]] | None, Any | None]:
+    ) -> tuple[str, int, list[tuple[Any, float]] | None, Any | None, list[str] | None, bool]:
         """
         Train a single branch regressor.
-        Returns: (branch_name, flow_direction, ensemble, scaler)
+        Returns: (branch_name, flow_direction, ensemble, scaler, selected_features, is_fallback)
         """
         # Skip branches with too few samples
         if len(branch_data) < self.config.training.min_samples_for_branch_model:
-            return branch_name, flow_direction, None, None
+            return branch_name, flow_direction, None, None, None, False
 
         # Prepare branch data with BRANCH-SPECIFIC SCALING
         feature_cols = self.config.features.all_features
-        scaler_branch = MinMaxScaler()
+        scaler_branch = RobustMinMaxScaler()
         branch_data_scaled = branch_data.copy()
         branch_data_scaled[feature_cols] = scaler_branch.fit_transform(branch_data[feature_cols])
 
         # Filter for binding constraints (label > 0)
         # Extract regression features from SCALED data
-        # Note: config.features.step2_features is now a list of tuples (name, constraint)
-        step2_feature_names = [f[0] for f in self.config.features.step2_features]
         binding_mask = branch_data_scaled["label"] > 0
-        X_branch_reg = branch_data_scaled.loc[binding_mask, step2_feature_names].copy()
+        if binding_mask.sum() < self.config.training.min_binding_samples_for_regression:
+            return branch_name, flow_direction, None, None, None, False
+
+        # Candidates
+        step2_candidates = self.config.features.step2_features
+        step2_names = [f[0] for f in step2_candidates]
+        X_branch_candidates = branch_data_scaled.loc[binding_mask, step2_names].copy()
         y_branch_reg = np.log1p(branch_data_scaled.loc[binding_mask, "label"].copy())
+
         groups_branch_reg = (
             branch_data_scaled.loc[binding_mask, "auction_month"].values
             if "auction_month" in branch_data_scaled.columns
             else None
         )
 
-        if len(X_branch_reg) < self.config.training.min_binding_samples_for_regression:
-            return branch_name, flow_direction, None, None
+        # Feature Selection
+        X_branch_reg, constraints, selected_features, is_fallback = select_features(
+            X_branch_candidates, y_branch_reg, step2_candidates, self.config.feature_selection
+        )
+
+        if is_fallback:
+            return branch_name, flow_direction, None, None, None, True
 
         # Construct Monotonic Constraints for XGBoost
-        constraints = [f[1] for f in self.config.features.step2_features]
         monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
 
         # Train branch-specific ensemble
@@ -493,7 +750,7 @@ class ShadowPriceModels:
             monotone_constraints=monotone_constraints,
         )
 
-        return branch_name, flow_direction, reg_ensemble, scaler_branch
+        return branch_name, flow_direction, reg_ensemble, scaler_branch, selected_features, is_fallback
 
     def train_classifiers(
         self,
@@ -553,7 +810,7 @@ class ShadowPriceModels:
 
             # 1. Handle Default Model Scaling & Training
             feature_cols = self.config.features.all_features
-            scaler_default = MinMaxScaler()
+            scaler_default = RobustMinMaxScaler()
 
             # Create scaled copy for default model
             group_data_scaled_default = group_data.copy()
@@ -564,52 +821,70 @@ class ShadowPriceModels:
             if verbose:
                 print(f"  Training default fallback classifier ({group_name})...")
 
-            step1_feature_names = [f[0] for f in self.config.features.step1_features]
-            X_train_all = group_data_scaled_default[step1_feature_names].copy()
+            # Note: config.features.step1_features is now a list of tuples (name, constraint)
+            X_train_candidates = group_data_scaled_default[[f[0] for f in self.config.features.step1_features]].copy()
             y_train_all = group_data_scaled_default["label"].copy()
             y_train_binary_all = (y_train_all > self.config.training.label_threshold).astype(int)
 
             # Extract groups (auction_month) for CV
             groups_all = group_data["auction_month"].values if "auction_month" in group_data.columns else None
 
-            # Construct Monotonic Constraints for XGBoost
-            constraints = [f[1] for f in self.config.features.step1_features]
-            monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
-
-            # Train default classifier ensemble
-            default_ensemble = train_ensemble(
-                self.config.models.default_classifiers,
-                X_train_all,
+            # Feature Selection for Default Model
+            X_train_all, constraints, selected_features, is_fallback = select_features(
+                X_train_candidates,
                 y_train_binary_all,
-                is_classifier=True,
-                groups=groups_all,
-                monotone_constraints=monotone_constraints,
+                self.config.features.step1_features,
+                self.config.feature_selection,
             )
-            self.clf_default_ensembles[group_name] = default_ensemble
+            self.clf_default_features[group_name] = selected_features
 
-            if verbose:
-                n_models = len(default_ensemble)
-                print(f"    ✓ Default ensemble trained ({n_models} models)")
-                print(f"    Total samples: {len(X_train_all):,}")
+            if is_fallback:
+                if verbose:
+                    print("    ⚠️ Default model fallback triggered (no monotonic features). Marking invalid.")
+                self.clf_default_valid[group_name] = False
+                self.clf_default_ensembles[group_name] = []
+                self.optimal_threshold_defaults[group_name] = 0.5
+            else:
+                self.clf_default_valid[group_name] = True
 
-            # Optimize threshold for default classifier ensemble
-            if verbose:
-                print(f"  Optimizing threshold for default ensemble ({group_name})...")
+                # Construct Monotonic Constraints for XGBoost
+                monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
 
-            y_proba_train_all = predict_ensemble(
-                default_ensemble, X_train_all, predict_proba=True, weight_overrides=weight_overrides
-            )
-            # Find optimal threshold
-            optimal_threshold, max_f1 = find_optimal_threshold(
-                y_train_binary_all,
-                y_proba_train_all,
-                beta=self.config.threshold.threshold_beta,
-                scaling_factor=self.config.threshold.threshold_scaling_factor,
-            )
-            self.optimal_threshold_defaults[group_name] = optimal_threshold
+                # Train default classifier ensemble
+                default_ensemble = train_ensemble(
+                    self.config.models.default_classifiers,
+                    X_train_all,
+                    y_train_binary_all,
+                    is_classifier=True,
+                    groups=groups_all,
+                    monotone_constraints=monotone_constraints,
+                )
+                self.clf_default_ensembles[group_name] = default_ensemble
 
-            if verbose:
-                print(f"    ✓ Optimal threshold: {optimal_threshold:.3f} (F-beta={max_f1:.3f})")
+                if verbose:
+                    n_models = len(default_ensemble)
+                    print(f"    ✓ Default ensemble trained ({n_models} models)")
+                    print(f"    Total samples: {len(X_train_all):,}")
+                    print(f"    Selected features: {len(selected_features)}/{len(self.config.features.step1_features)}")
+
+                # Optimize threshold for default classifier ensemble
+                if verbose:
+                    print(f"  Optimizing threshold for default ensemble ({group_name})...")
+
+                y_proba_train_all = predict_ensemble(
+                    default_ensemble, X_train_all, predict_proba=True, weight_overrides=weight_overrides
+                )
+                # Find optimal threshold
+                optimal_threshold, max_f1 = find_optimal_threshold(
+                    y_train_binary_all,
+                    y_proba_train_all,
+                    beta=self.config.threshold.threshold_beta,
+                    scaling_factor=self.config.threshold.threshold_scaling_factor,
+                )
+                self.optimal_threshold_defaults[group_name] = optimal_threshold
+
+                if verbose:
+                    print(f"    ✓ Optimal threshold: {optimal_threshold:.3f} (F-beta={max_f1:.3f})")
 
             # Train branch-specific classifiers
             if verbose:
@@ -643,16 +918,20 @@ class ShadowPriceModels:
             # Sequential Training (as requested to avoid nested parallelism)
             results = []
             for param_dict in param_dict_list:
+                # if param_dict['branch_name'] == 'FOS-IRNT       1':
+                #     print('aaaaaa')
                 result = self._train_single_branch_classifier(**param_dict)
                 results.append(result)
             trained_count = 0
             skipped_count = 0
 
-            for branch_name, flow_direction, ensemble, threshold, scaler in results:
+            for branch_name, flow_direction, ensemble, threshold, scaler, selected_feats, is_fallback_branch in results:
                 if ensemble is not None and threshold is not None:
                     self.clf_ensembles[group_name][(branch_name, flow_direction)] = ensemble
                     self.optimal_thresholds[group_name][(branch_name, flow_direction)] = threshold
                     self.scalers_branch[group_name][(branch_name, flow_direction)] = scaler
+                    self.clf_branch_features[group_name][(branch_name, flow_direction)] = selected_feats
+                    self.clf_branch_fallback[group_name][(branch_name, flow_direction)] = is_fallback_branch
                     trained_count += 1
                 else:
                     skipped_count += 1
@@ -662,6 +941,7 @@ class ShadowPriceModels:
 
         if verbose:
             print("\n✓ Classification Training Complete")
+        self.log_fallback_statistics()
 
     def train_regressors(
         self,
@@ -718,7 +998,7 @@ class ShadowPriceModels:
 
             # 1. Handle Default Model Scaling & Training
             feature_cols = self.config.features.all_features
-            scaler_default = MinMaxScaler()
+            scaler_default = RobustMinMaxScaler()
 
             # Create scaled copy for default model
             group_data_scaled_default = group_data.copy()
@@ -729,34 +1009,54 @@ class ShadowPriceModels:
             if verbose:
                 print(f"  Training default fallback regressor ({group_name})...")
 
-            step2_feature_names = [f[0] for f in self.config.features.step2_features]
+            step2_candidates = self.config.features.step2_features
+            step2_names = [f[0] for f in step2_candidates]
+
             binding_mask_all = group_data_scaled_default["label"] > 0
-            X_train_reg_all = group_data_scaled_default.loc[binding_mask_all, step2_feature_names].copy()
+            X_train_candidates = group_data_scaled_default.loc[binding_mask_all, step2_names].copy()
             y_train_reg_all = np.log1p(group_data_scaled_default.loc[binding_mask_all, "label"].copy())
+
             groups_reg_all = (
                 group_data.loc[binding_mask_all, "auction_month"].values
                 if "auction_month" in group_data.columns
                 else None
             )
 
-            if len(X_train_reg_all) > self.config.training.min_binding_samples_for_regression:
-                default_ensemble = train_ensemble(
-                    self.config.models.default_regressors,
-                    X_train_reg_all,
-                    y_train_reg_all,
-                    is_classifier=False,
-                    groups=groups_reg_all,
-                )
-                self.reg_default_ensembles[group_name] = default_ensemble
+            # Feature Selection for Default Regressor
+            X_train_reg_all, constraints, selected_features_reg, is_fallback_reg = select_features(
+                X_train_candidates, y_train_reg_all, step2_candidates, self.config.feature_selection
+            )
+            self.reg_default_features[group_name] = selected_features_reg
 
+            if is_fallback_reg:
                 if verbose:
-                    n_models = len(default_ensemble)
-                    print(f"    ✓ Default ensemble trained ({n_models} models)")
-                    print(f"    Total binding samples: {len(X_train_reg_all):,}")
-            else:
-                if verbose:
-                    print("    ⚠️  Insufficient binding samples for default regressor. Skipping.")
+                    print("    ⚠️ Default regressor fallback triggered. Marking invalid.")
+                self.reg_default_valid[group_name] = False
                 self.reg_default_ensembles[group_name] = []
+            else:
+                self.reg_default_valid[group_name] = True
+
+                monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
+
+                if len(X_train_reg_all) > self.config.training.min_binding_samples_for_regression:
+                    default_ensemble = train_ensemble(
+                        self.config.models.default_regressors,
+                        X_train_reg_all,
+                        y_train_reg_all,
+                        is_classifier=False,
+                        groups=groups_reg_all,
+                        monotone_constraints=monotone_constraints,
+                    )
+                    self.reg_default_ensembles[group_name] = default_ensemble
+
+                    if verbose:
+                        n_models = len(default_ensemble)
+                        print(f"    ✓ Default ensemble trained ({n_models} models)")
+                        print(f"    Total binding samples: {len(X_train_reg_all):,}")
+                else:
+                    if verbose:
+                        print("    ⚠️  Insufficient binding samples for default regressor. Skipping.")
+                    self.reg_default_ensembles[group_name] = []
 
             # Train branch-specific regressors
             if verbose:
@@ -795,10 +1095,12 @@ class ShadowPriceModels:
             trained_count = 0
             skipped_count = 0
 
-            for branch_name, flow_direction, ensemble, scaler in results:
+            for branch_name, flow_direction, ensemble, scaler, selected_feats, is_fallback_branch in results:
                 if ensemble is not None:
                     self.reg_ensembles[group_name][(branch_name, flow_direction)] = ensemble
                     self.scalers_branch[group_name][(branch_name, flow_direction)] = scaler
+                    self.reg_branch_features[group_name][(branch_name, flow_direction)] = selected_feats
+                    self.reg_branch_fallback[group_name][(branch_name, flow_direction)] = is_fallback_branch
                     trained_count += 1
                 else:
                     skipped_count += 1
@@ -808,6 +1110,7 @@ class ShadowPriceModels:
 
         if verbose:
             print("\n✓ Regression Training Complete")
+        self.log_fallback_statistics()
 
     def get_classifier_ensemble(
         self, branch_name: str, flow_direction: int, horizon: int
@@ -970,3 +1273,40 @@ class ShadowPriceModels:
                 data_scaled.iloc[indices, col_indices] = transformed_values
 
         return data_scaled
+
+    def log_fallback_statistics(self):
+        """Log statistics about model fallback frequency."""
+        print("\n" + "=" * 80)
+        print("FALLBACK MONITORING STATISTICS")
+        print("=" * 80)
+
+        for group in self.config.horizon_groups:
+            print(f"\n[{group.name.upper()}]")
+
+            # --- Classification ---
+            clf_fallbacks = self.clf_branch_fallback[group.name]
+            total_clf_branches = len(clf_fallbacks)
+            if total_clf_branches > 0:
+                fallback_count = sum(clf_fallbacks.values())
+                fallback_rate = (fallback_count / total_clf_branches) * 100
+                print(f"  Classification Fallback Rate: {fallback_count}/{total_clf_branches} ({fallback_rate:.2f}%)")
+            else:
+                print("  Classification Fallback Rate: N/A (0 branches)")
+
+            clf_def_valid = self.clf_default_valid.get(group.name, True)
+            if not clf_def_valid:
+                print("  ⚠️  Default Classification Model is INVALID (Fallback Triggered)")
+
+            # --- Regression ---
+            reg_fallbacks = self.reg_branch_fallback[group.name]
+            total_reg_branches = len(reg_fallbacks)
+            if total_reg_branches > 0:
+                fallback_count = sum(reg_fallbacks.values())
+                fallback_rate = (fallback_count / total_reg_branches) * 100
+                print(f"  Regression Fallback Rate:     {fallback_count}/{total_reg_branches} ({fallback_rate:.2f}%)")
+            else:
+                print("  Regression Fallback Rate:     N/A (0 branches)")
+
+            reg_def_valid = self.reg_default_valid.get(group.name, True)
+            if not reg_def_valid:
+                print("  ⚠️  Default Regression Model is INVALID (Fallback Triggered)")

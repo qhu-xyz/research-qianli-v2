@@ -15,7 +15,6 @@ from pbase.utils.ray import parallel_equal_pool
 from .anomaly_detection import AnomalyDetector
 from .config import PredictionConfig
 from .data_loader import DataLoader
-from .evaluation import analyze_results
 from .models import ShadowPriceModels
 from .prediction import Predictor
 
@@ -148,21 +147,24 @@ def _process_auction_month(
         return [(None, None, auction_month, mm) for mm in market_months], None, None, None, auction_month
 
     # Apply label modification logic
-    # If prob_exceed_80 is 0, set label to 0
+    # If feature value is below threshold, set label to 0
     # Save original label in label_ori
-    if "prob_exceed_80" in train_data.columns:
-        if verbose:
-            print("  Applying label modification based on prob_exceed_80...")
-        train_data["label_ori"] = train_data["label"]
-        mask_zero_prob = train_data["prob_exceed_80"] < 1e-6
-        n_modified = mask_zero_prob.sum()
-        if n_modified > 0:
-            train_data.loc[mask_zero_prob, "label"] = 0
+    mod_rule = config.training.label_modification_rule
+    if mod_rule is not None:
+        feat_name, threshold = mod_rule
+        if feat_name in train_data.columns:
             if verbose:
-                print(f"    Modified {n_modified} labels to 0 where prob_exceed_80 is 0.")
-    else:
-        if verbose:
-            print("  ⚠️ prob_exceed_80 not found in training data. Skipping label modification.")
+                print(f"  Applying label modification based on {feat_name} < {threshold}...")
+            train_data["label_ori"] = train_data["label"]
+            mask_zero_prob = train_data[feat_name] < threshold
+            n_modified = mask_zero_prob.sum()
+            if n_modified > 0:
+                train_data.loc[mask_zero_prob, "label"] = 0
+                if verbose:
+                    print(f"    Modified {n_modified} labels to 0 where {feat_name} < {threshold}.")
+        else:
+            if verbose:
+                print(f"  ⚠️ {feat_name} not found in training data. Skipping label modification.")
 
     # Step 3: Identify Test Branches (from all market months)
     if verbose:
@@ -187,8 +189,23 @@ def _process_auction_month(
         # Populate test_data_by_month and all_test_branches
         for market_month, month_df in all_test_data.groupby("market_month"):
             test_data_by_month[market_month] = month_df
-            pairs = month_df[["branch_name", "flow_direction"]].drop_duplicates().itertuples(index=False, name=None)
-            all_test_branches.update(pairs)
+
+            # Filter branch generation based on test_unbind_rule
+            # So that we don't train models for branches that are fully unbind
+            df_for_branches = month_df
+            mod_rule = config.training.test_unbind_rule
+            if mod_rule is not None:
+                feat_name, threshold = mod_rule
+                if feat_name in df_for_branches.columns:
+                    df_for_branches = df_for_branches[df_for_branches[feat_name] >= threshold]
+
+            if not df_for_branches.empty:
+                pairs = (
+                    df_for_branches[["branch_name", "flow_direction"]]
+                    .drop_duplicates()
+                    .itertuples(index=False, name=None)
+                )
+                all_test_branches.update(pairs)
 
     if verbose:
         print(f"  Found {len(all_test_branches)} unique branch-flow pairs in test set.")
@@ -295,7 +312,7 @@ def _process_auction_month(
     print(f"[Timing] _process_auction_month for {auction_month.strftime('%Y-%m')} took {duration:.2f} seconds")
 
     # return results, period_models, period_anomaly_detector, train_data, auction_month
-    return results, None, None, None, None
+    return results, period_models, period_anomaly_detector, train_data, auction_month
 
 
 class ShadowPricePipeline:
@@ -317,7 +334,7 @@ class ShadowPricePipeline:
         self.predictor = Predictor(config, self.models, self.anomaly_detector)
 
         # Store data for later use
-        self.train_data: pd.DataFrame | None = None
+        self.train_data: dict[pd.Timestamp, pd.DataFrame] = {}
         self.test_data: pd.DataFrame | None = None
 
         # Store trained models by auction month
@@ -337,7 +354,7 @@ class ShadowPricePipeline:
         output_dir: str | None = None,
         refresh: bool = False,
         branch_name: str | None = None,
-    ) -> tuple[pd.DataFrame, pd.DataFrame, dict, pd.DataFrame, dict[pd.Timestamp, Predictor]]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame, dict, dict[pd.Timestamp, pd.DataFrame], dict[pd.Timestamp, Predictor]]:
         """
         Run the complete prediction pipeline with parallel processing.
 
@@ -536,7 +553,10 @@ class ShadowPricePipeline:
                 self.trained_predictors[auction_month] = predictor
 
             if train_data is not None:
-                all_train_data.append(train_data)
+                # self.train_data[auction_month] = train_data
+                all_train_data.append(
+                    train_data
+                )  # Keep for logging stats if needed, or remove if memory concern. Used below for combined stats.
 
             for results_per_outage, final_results, _, _ in results_list:
                 if results_per_outage is not None:
@@ -554,7 +574,9 @@ class ShadowPricePipeline:
             pd.concat(all_results_per_outage, axis=0) if all_results_per_outage else pd.DataFrame()
         )
         combined_final_results = pd.concat(all_final_results, axis=0) if all_final_results else pd.DataFrame()
-        combined_train_data = pd.concat(all_train_data, axis=0) if all_train_data else pd.DataFrame()
+        # combined_train_data is no longer returned, but we used it for stats.
+        # Let's calculate total length from dict.
+        total_train_samples = sum(len(df) for df in self.train_data.values())
 
         if verbose:
             print("\n✓ Results Combined")
@@ -565,19 +587,22 @@ class ShadowPricePipeline:
                     f"  Date range: {combined_results_per_outage['outage_date'].min().strftime('%Y-%m-%d')} "
                     f"to {combined_results_per_outage['outage_date'].max().strftime('%Y-%m-%d')}"
                 )
-            if not combined_train_data.empty:
-                print(f"  Total training samples: {len(combined_train_data):,}")
+            if total_train_samples > 0:
+                print(
+                    f"  Total training samples: {total_train_samples:,} (across {len(self.train_data)} auction months)"
+                )
 
-        # Analyze combined results
-        if verbose:
-            print("\n[ANALYZING COMBINED RESULTS]")
+        # # Analyze combined results
+        # if verbose:
+        #     print("\n[ANALYZING COMBINED RESULTS]")
 
-        if not combined_results_per_outage.empty and combined_results_per_outage["actual_shadow_price"].notna().any():
-            metrics = analyze_results(combined_results_per_outage, combined_final_results, verbose)
-        else:
-            if verbose:
-                print("  Skipping metrics calculation (no labels available)")
-            metrics = {}
+        # if not combined_results_per_outage.empty and combined_results_per_outage["actual_shadow_price"].notna().any():
+        #     metrics = analyze_results(combined_results_per_outage, combined_final_results, verbose)
+        # else:
+        #     if verbose:
+        #         print("  Skipping metrics calculation (no labels available)")
+        #     metrics = {}
+        metrics = {}
 
         if verbose:
             print("\n" + "=" * 80)
@@ -588,7 +613,7 @@ class ShadowPricePipeline:
             combined_results_per_outage,
             combined_final_results,
             metrics,
-            combined_train_data,
+            None,
             self.trained_predictors,
         )
 

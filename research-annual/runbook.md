@@ -1,12 +1,14 @@
 # MISO Annual FTR Bid Pricing — Research Runbook
 
-**Repo:** `research-qianli-v2/research-annual` | **Updated:** 2026-02-18
+**Repo:** `research-qianli-v2/research-annual` | **Updated:** 2026-02-22
 
-Practical domain reference for MISO annual FTR research. For experiment results, see `findings_all_quarters.md`.
+Practical domain reference for MISO annual FTR research. For full experiment tables, see `findings.md`.
 
 ---
 
 ## 1. Auction Structure
+
+Timeline: `PY 2022 R1 -> R2 -> R3 -> f0 monthly -> PY 2023 R1 -> R2 -> R3 -> f0 -> ...`
 
 3 rounds (R1, R2, R3), each auctioning all 4 quarters simultaneously. ~April 8 / April 22 / May 5.
 
@@ -28,8 +30,8 @@ PY = starting year: PY 2024 = Jun 2024 through May 2025.
 **Year mapping for prior data** (most critical formula):
 
 ```
-delivery_month >= 6  →  dy = PY - 1
-delivery_month < 6   →  dy = PY
+delivery_month >= 6  ->  dy = PY - 1
+delivery_month < 6   ->  dy = PY
 ```
 
 | PY | aq1 (6,7,8) | aq2 (9,10,11) | aq3 (12,1,2) | aq4 (3,4,5) |
@@ -59,47 +61,73 @@ delivery_month < 6   →  dy = PY
 
 ---
 
-## 5. R1 Residual Statistics
+## 5. R1 Research Results
 
-PY 2019-2025, from `all_residuals_v2.parquet`:
+Full per-quarter tables in **`findings.md`**.
 
-| Quarter | n | Bias | MAE | p95 | Dir% |
-|---------|---|------|-----|-----|------|
-| aq1 | 618K | +411 | 838 | 3,171 | 66% |
-| aq2 | 629K | +489 | 943 | 3,712 | 67% |
-| aq3 | 572K | +402 | 816 | 3,211 | 67% |
-| aq4 | 569K | +375 | 797 | 3,107 | 62% |
+### Phase 1: Baseline Comparison
 
-R1 is 12.7x worse than R2 by p95. Bias ranges +148 (PY 2020) to +679 (PY 2022).
+**Nodal f0 stitch is the best R1 baseline across all 4 quarters.** `path_mcp = sink_f0 - source_f0` from `get_mcp_df(market_month=PY-1)` col 0, averaged over 3 delivery months.
 
-**By |H| bin:** Dir% ranges from 50% (tiny <50) to 90% (large 1k+). Band widths must scale with |H|.
+| Quarter | H MAE | Nodal f0 MAE | H Dir% | Nodal Dir% | Improvement |
+|---------|------:|-------------:|-------:|-----------:|------------:|
+| aq1 | 934 | 798 | 67.7% | 80.9% | -15% MAE, +13pp Dir |
+| aq2 | 1,070 | 947 | 69.0% | 82.1% | -11% MAE, +13pp Dir |
+| aq3 | 920 | 797 | 69.1% | 83.8% | -13% MAE, +15pp Dir |
+| aq4 | 893 | 704 | 64.3% | 84.8% | -21% MAE, +21pp Dir |
+
+Ranking identical across all quarters: **Nodal f0 ≈ f0 path < f1 < R3 ≈ R2 < R1 < QF < H**.
+
+2-tier cascade (Nodal f0 -> H fallback) is optimal. f0 path as Tier 1 always hurts (+4-5 MAE).
+
+### Phase 2: Improving Nodal f0
+
+**Alpha scaling** (`pred = alpha * nodal_f0`, LOO by PY):
+- Nodal f0 has persistent positive bias (+200-340) — it underestimates MCP by ~50%.
+- Multiplying by alpha=1.55-1.60 corrects this. Direction accuracy is unchanged (scaling preserves sign).
+
+| Quarter | Raw MAE | Alpha-scaled MAE | Improvement |
+|---------|--------:|-----------------:|------------:|
+| aq1 | 798 | 736 | -8% |
+| aq2 | 947 | 815 | -14% |
+| aq3 | 797 | 668 | -16% |
+| aq4 | 704 | 566 | -20% |
+
+**Alpha + prior-year residual** (`pred = alpha * f0 + beta * (PY-1 mcp - PY-1 f0)`):
+- Exploits residual autocorrelation (lag-1 r = 0.41-0.71).
+- Only ~22% of paths have prior-year data (recurring paths from PY-1's R1).
+- Gives further 2-11% on top of alpha-scaling on those paths.
+
+| Quarter | Alpha-only MAE | Combined MAE | vs raw |
+|---------|---------------:|-------------:|-------:|
+| aq1 | 669 | 663 | -10% |
+| aq2 | 674 | 650 | -17% |
+| aq3 | 620 | 570 | -23% |
+| aq4 | 536 | 459 | -31% |
+
+### Phase 2 Dead Ends
+
+**Signal blending does not work.** Tested: convex combination (w * f0 + (1-w) * H), Ridge regression, de-biased averaging/median, inverse-MAE weighting, best-available cascade. All lose to alpha-scaled nodal_f0.
+
+- **Convex combination of f0 + H:** LOO-optimal weight on f0 = 0.95-1.00. H adds zero information.
+- **Ridge regression:** Learns f0 weight = 1.9-2.3x — overfitting disguised as blending. Catastrophic on PY 2023.
+- **De-biased blending:** Fixes bias but destroys Dir% (drops 10pp). Averaging in other signals flips signs.
+
+**Why:** All available signals (H, f0_path, f1, priors, quarterlies) are noisier versions of the same congestion signal. They carry no independent directional information. Alpha-scaling is the only transformation that corrects bias while preserving direction perfectly.
+
+### Recommended Production Cascade
+
+| Tier | Method | Coverage | Notes |
+|------|--------|----------|-------|
+| 1a | `alpha * nodal_f0 + beta * prior_residual` | ~22% | Where path recurs from PY-1 R1 |
+| 1b | `alpha * nodal_f0` | ~77% | Remaining paths with nodal coverage |
+| 2 | H (fallback) | ~1% | Missing nodes only |
+
+Optimal parameters (LOO): alpha = 1.40-1.60, beta = 0.15-0.40.
 
 ---
 
-## 6. R1 Experiment Results (Summary)
-
-Full results with per-quarter tables in **`findings_all_quarters.md`**.
-
-**Key finding: 2-tier cascade is optimal for all 4 quarters.**
-
-| Tier | Source | Coverage | Purpose |
-|------|--------|----------|---------|
-| 1 | Nodal f0 (3-month avg) | 98.8-100% | Primary baseline |
-| 2 | H bias-corrected (LOO) | 0-1.2% | Fallback for missing nodes |
-
-Head-to-head win rate: Nodal f0 wins 51.8% vs f0 path 48.0% — invariant across all quarters.
-
-f0 path is NOT a production tier. Adding it as Tier 1 always hurts (+4-5 MAE, -0.3-0.6pp dir).
-
-**Early-phase experiments** (prior-year MCP, shrinkage sweep, bias correction, multi-year averaging) are archived in `archive/phase1_3/findings_baseline_improvement.md`. Summary:
-- Per-quarter LOO bias correction: -4.5% p95, +3.5pp dir (universally applicable)
-- Prior-year MCP: 32% coverage, -41% p95 on matched paths (now superseded by nodal f0 at 99%+ coverage)
-- Shrinkage sweep: negligible effect, not worth changing
-- Multi-year averaging: hurts, not recommended
-
----
-
-## 7. R2/R3 Research (Summary)
+## 6. R2/R3 Research (Summary)
 
 M-only is optimal. Band width signals: volume decile (1.7x range) and MTM drift (5.4x range for R3).
 
@@ -107,7 +135,7 @@ f2p-style binning is confirmed feasible: all |M| bins have >21K rows per PY.
 
 ---
 
-## 8. Nodal Replacement & Stitching
+## 7. Nodal Replacement & Stitching
 
 Nodes get renamed over time. `MisoNodalReplacement().load_data()` has ~920 records spanning 2013-2025.
 
@@ -124,21 +152,19 @@ Nodes get renamed over time. `MisoNodalReplacement().load_data()` has ~920 recor
 
 **Stitching:** `path_mcp = sink_node_f0 - source_node_f0`, averaged across 3 delivery months. Use `get_mcp_df()` **column 0** (f0 monthly forward). Column -1 is annual R1 — wrong product.
 
-**Verification:** Per-month stitching matches path f0 at 99-100% ($0.015 tolerance). The ~37% "exact match" in 3-month averages is expected: paths traded in <3 months average fewer months than nodal.
+**Verification:** Per-month stitching matches path f0 at 99-100% ($0.015 tolerance).
 
 ---
 
-## 9. Legacy System (ftr23)
+## 8. Legacy System (ftr23)
 
 Production annual pricing: `pmodel/base/ftr23/`. Key issue: **all 3 rounds use identical parameters** — same bid spread for R1 (p95=3,307) and R3 (p95=202), a 16x calibration error.
 
 Other problems: `price_change_cap=2000` too small for R1 large paths (actual p95=8,772); positive bias uncorrected; parametric bounds too narrow.
 
-Detailed analysis archived in prior runbook versions.
-
 ---
 
-## 10. Data Locations
+## 9. Data Locations
 
 All at `/opt/temp/qianli/annual_research/`:
 
@@ -154,7 +180,7 @@ Old files (`*_v1`, non-`_v2`): superseded, do not use.
 
 ---
 
-## 11. Code Locations
+## 10. Code Locations
 
 **pbase:**
 - `analysis/tools/miso.py:322` — `fill_mtm_1st_period_with_hist_revenue()` (R1 H baseline)
@@ -166,6 +192,8 @@ Old files (`*_v1`, non-`_v2`): superseded, do not use.
 **Research scripts:**
 - `scripts/baseline_utils.py` — Shared eval/print/replacement utilities
 - `scripts/run_aq{1,2,3,4}_experiment.py` — Per-quarter R1 baseline experiments
+- `scripts/run_phase2_improvement.py` — Alpha-scaling + prior-year residual LOO
+- `scripts/run_phase3_v2_bands.py` — Band width reduction experiments (5 configs)
 
 **Legacy (ftr23):**
 - `pmodel/base/ftr23/v1/base.py:94` — `_set_bid_price()`
@@ -174,7 +202,7 @@ Old files (`*_v1`, non-`_v2`): superseded, do not use.
 
 ---
 
-## 12. Environment
+## 11. Environment
 
 ```bash
 cd /home/xyz/workspace/pmodel && source .venv/bin/activate
@@ -191,7 +219,7 @@ Memory rules: see `CLAUDE.md`. Key points: use polars, lazy scan, `del + gc.coll
 
 ---
 
-## 13. Evaluation Metrics
+## 12. Evaluation Metrics
 
 | Metric | Definition |
 |--------|-----------|
@@ -205,10 +233,10 @@ Memory rules: see `CLAUDE.md`. Key points: use polars, lazy scan, `del + gc.coll
 
 ---
 
-## 14. Known Issues
+## 13. Known Issues
 
 1. **Year mapping bug:** `dy = PY - 2` (stale) vs correct `PY - 1`/`PY`. Always verify.
-2. **aq4 gets 1 month DA data.** April cutoff → March only → Dir% ~62-64%.
+2. **aq4 gets 1 month DA data.** April cutoff -> March only -> Dir% ~62-64% for H.
 3. **q1 does not exist.** aq1 has no quarterly forward.
 4. **f0p parquet has f0, f1, q4 only.** q2/q3 must come from cleared trades via Ray.
 5. **Replacement target dates differ by quarter.** aq1: `{PY}-08`, aq2: `{PY}-11`, aq3: `{PY+1}-02`, aq4: `{PY+1}-05`.
@@ -219,3 +247,172 @@ Memory rules: see `CLAUDE.md`. Key points: use polars, lazy scan, `del + gc.coll
 10. **PY 2019 has no prior-year data.** Exclude from comparisons.
 11. **R1 bias is not stable** (+148 to +679 by PY). Use LOO correction, not fixed offset.
 12. **NEVER run long scripts via `claude -r`.** OOM crash loops.
+
+---
+
+## 14. Pipeline & Versioning
+
+### Overview
+
+Experiments are versioned under `versions/{part}/` (e.g., `versions/baseline/v3/`). Each version has:
+- `config.json` — method description, parameters, data sources, environment
+- `metrics.json` — structured evaluation results (overall, per-PY, per-class, stability, matched)
+- `NOTES.md` — human-readable explanation and decision rationale
+
+A `promoted.json` file in each part directory tracks the current best version.
+
+### CLI
+
+```bash
+python pipeline/pipeline.py create baseline v4 "description"
+python pipeline/pipeline.py list baseline
+python pipeline/pipeline.py compare baseline v4         # vs promoted
+python pipeline/pipeline.py compare baseline v4 v2      # vs explicit version
+python pipeline/pipeline.py promote baseline v4          # gate check + promote
+python pipeline/pipeline.py promote baseline v4 --force  # override HARD failures
+python pipeline/pipeline.py validate baseline            # schema checks
+```
+
+### Promotion Gates
+
+| # | Gate | Severity | Check |
+|---|------|----------|-------|
+| G1 | MAE improvement | HARD | candidate matched MAE <= promoted matched MAE, all 4 quarters |
+| G2 | Direction preserved | HARD | candidate matched Dir% >= promoted - 1.0pp, all 4 quarters |
+| G3 | Coverage floor | HARD | candidate coverage >= 95%, all 4 quarters |
+| G4 | Bias sign | SOFT | candidate bias >= 0, all 4 quarters |
+| G5 | Per-PY stability | SOFT | mae_cv < 0.30, all 4 quarters |
+| G6 | Worst-PY bound | SOFT | worst_py_mae < 1.5 * median_py_mae, all 4 quarters |
+| G7 | Class parity | ADVISORY | |onpeak - offpeak| / avg < 0.40 |
+| G8 | Win rate | ADVISORY | win_rate >= 50% on matched rows |
+| G9 | Tail risk | ADVISORY | p99 <= promoted p99 * 1.10 |
+
+- **HARD:** Must pass to promote (unless `--force`).
+- **SOFT:** Failure needs written justification in NOTES.md.
+- **ADVISORY:** Informational warnings only.
+- G1/G2/G8/G9 use `matched` section (apples-to-apples on same paths), not `overall`.
+
+### Staleness
+
+If a candidate's `matched.compared_against` doesn't match the current promoted version, the `compare` command warns and skips comparative gates. `promote` refuses unless `--force`.
+
+### Running a New Experiment
+
+1. `python pipeline/pipeline.py create baseline v4 "description"`
+2. Edit `config.json` to fill in method, parameters, data_sources
+3. Run experiment script, at the end call:
+   ```python
+   from pipeline.pipeline import compute_full_evaluation, save_metrics
+   metrics = compute_full_evaluation(df, candidate_col="prediction", promoted_col="nodal_f0", quarters=["aq1","aq2","aq3","aq4"])
+   metrics["version"] = "v4"
+   metrics["evaluated_at"] = "2026-..."
+   metrics["compared_against"] = "v3"
+   metrics["matched"]["compared_against"] = "v3"
+   save_metrics(metrics, Path("versions/baseline/v4"))
+   ```
+4. `python pipeline/pipeline.py compare baseline v4`
+5. `python pipeline/pipeline.py promote baseline v4`
+6. Write NOTES.md with results and decision
+
+---
+
+## 15. Band Calibration
+
+### Overview
+
+Prediction intervals ("bands") around the baseline: given our f0 prediction, what range captures X% of true MCPs?
+
+**Method (v1):** Symmetric empirical quantile bins.
+1. Bin paths by `|nodal_f0|` using boundaries `[0, 50, 250, 1000, inf]` → tiny/small/medium/large
+2. For each bin, compute quantile of `|mcp - nodal_f0|` at each coverage level
+3. Apply symmetric bands: `nodal_f0 ± width`
+4. Validate via leave-one-PY-out (train on 5 PYs, test on 1)
+
+Coverage levels: P50, P70, P80, P90, P95.
+
+### Current Promoted Results (per-class stratified)
+
+All rounds now use per-class stratified bands: separate widths for onpeak/offpeak within each |baseline| bin. Coverage and widths are equivalent to pooled, but class parity gap is reduced from 0.05-1.02pp to 0.00-0.14pp.
+
+**R1 v3** (4 quantile bins, per-class):
+
+| Quarter | P95 cov | P95 error | P95 mean width |
+|---------|--------:|----------:|---------------:|
+| aq1 | 94.66% | -0.34pp | 2,664 |
+| aq2 | 94.65% | -0.35pp | 3,126 |
+| aq3 | 94.71% | -0.29pp | 2,497 |
+| aq4 | 94.36% | -0.64pp | 2,073 |
+
+**R2 v2** (6 quantile bins, per-class):
+
+| Quarter | P95 cov | P95 error | P95 mean width |
+|---------|--------:|----------:|---------------:|
+| aq1 | 94.63% | -0.37pp | 217 |
+| aq2 | 94.71% | -0.29pp | 228 |
+| aq3 | 94.60% | -0.40pp | 202 |
+| aq4 | 94.64% | -0.36pp | 211 |
+
+**R3 v2** (6 quantile bins, per-class):
+
+| Quarter | P95 cov | P95 error | P95 mean width |
+|---------|--------:|----------:|---------------:|
+| aq1 | 94.57% | -0.43pp | 181 |
+| aq2 | 94.79% | -0.21pp | 182 |
+| aq3 | 94.54% | -0.46pp | 162 |
+| aq4 | 94.66% | -0.34pp | 163 |
+
+### Cross-Round P95 Width Summary
+
+| Quarter | R1 | R2 | R3 |
+|---------|---:|---:|---:|
+| aq1 | 2,664 | 217 | 181 |
+| aq2 | 3,126 | 228 | 182 |
+| aq3 | 2,497 | 202 | 162 |
+| aq4 | 2,073 | 211 | 163 |
+
+### Band Promotion Gates
+
+| # | Gate | Severity | Check |
+|---|------|----------|-------|
+| BG0 | Baseline still promoted | HARD | band's baseline_version == current promoted baseline |
+| BG1 | P95 coverage accuracy | HARD | \|actual - 95.0\| < 3.0pp for all 4 quarters |
+| BG2 | P50 coverage accuracy | HARD | \|actual - 50.0\| < 5.0pp for all 4 quarters |
+| BG3 | Per-bin uniformity (P95) | HARD | all 4 bins within 5pp of target, all 4 quarters |
+| BG4 | Width narrower or equal | SOFT | candidate P95 width <= promoted width (if exists) |
+| BG5 | Per-PY stability | SOFT | p95_worst_py_coverage >= 90.0 for all 4 quarters |
+| BG6 | Width monotonicity | ADVISORY | p50 < p70 < p80 < p90 < p95 overall |
+| BG7 | Class parity coverage | ADVISORY | \|onpeak - offpeak\| < 5pp at P95 |
+
+### CLI
+
+```bash
+python pipeline/pipeline.py validate bands/r1     # R1
+python pipeline/pipeline.py validate bands/r2     # R2
+python pipeline/pipeline.py validate bands/r3     # R3
+python pipeline/pipeline.py compare bands/r1 v3
+python pipeline/pipeline.py compare bands/r2 v2
+python pipeline/pipeline.py compare bands/r3 v2
+python pipeline/pipeline.py list bands/r1
+```
+
+### Band Methodology
+
+Symmetric empirical quantile bins with per-class (onpeak/offpeak) stratification. Bin boundaries computed from |baseline| percentiles on training set; separate widths calibrated per (bin, class). R1 uses 4 bins (nodal_f0 baseline, ~135K rows/quarter). R2/R3 use 6 bins (M baseline, ~1M rows/quarter).
+
+**CV method:** Temporal expanding window (train on PYs < test PY) with `min_train_pys=3` filter. LOO by PY retained as secondary diagnostic in `loo_validation` section of metrics.
+
+### Running Band Experiments
+
+```bash
+cd /home/xyz/workspace/pmodel && source .venv/bin/activate
+# R1 v1 (original)
+python /home/xyz/workspace/research-qianli-v2/research-annual/scripts/run_phase3_bands.py
+# R1 v2 (width reduction)
+python /home/xyz/workspace/research-qianli-v2/research-annual/scripts/run_phase3_v2_bands.py
+# R2/R3 v1 (pooled)
+python /home/xyz/workspace/research-qianli-v2/research-annual/scripts/run_r2r3_bands.py
+# v3 per-class stratified (all rounds)
+python /home/xyz/workspace/research-qianli-v2/research-annual/scripts/run_v3_bands.py
+```
+
+Scripts output to `versions/bands/{r1,r2,r3}/{version}/metrics.json` directly. Then validate/compare/promote as above.

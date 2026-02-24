@@ -57,6 +57,16 @@ init_ray(address='ray://10.8.0.36:10001', extra_modules=[pmodel])
 - Add `lightgbm` to `extra_modules` only if using LightGBM: `extra_modules=[pmodel, lgb]`
 - The Ray cluster address `ray://10.8.0.36:10001` is the standard dev cluster
 
+## Versioned Experiments (MANDATORY)
+
+When implementing a new version (e.g., bands v2, baseline v4):
+1. **Always run the experiment script** — never leave it as "ready to run"
+2. **Run `validate`** after the script completes to confirm schema compliance
+3. **Run `compare`** against promoted version to check gates
+4. **Update NOTES.md** with actual results (not placeholders)
+5. **Update mem.md** with actual numbers
+6. Deliver a complete, tested version — not a stub.
+
 ## Virtual Environment
 
 Scripts run via pmodel's venv:

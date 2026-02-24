@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "version": "v3",
+  "description": "Nodal f0 stitch (raw, unscaled): sink_f0 - source_f0 averaged over delivery months",
+  "created": "2026-02-22",
+  "part": "baseline",
+  "method": {
+    "formula": "sink_f0 - source_f0 (3-month avg from get_mcp_df col 0)",
+    "coverage": "98.8-100%"
+  },
+  "parameters": {},
+  "data_sources": [
+    {"path": "crossproduct_work/aq1_all_baselines.parquet", "column": "nodal_f0"},
+    {"path": "crossproduct_work/aq2_all_baselines.parquet", "column": "nodal_f0"},
+    {"path": "crossproduct_work/aq3_all_baselines.parquet", "column": "nodal_f0"},
+    {"path": "crossproduct_work/aq4_all_baselines.parquet", "column": "nodal_f0"}
+  ],
+  "environment": {
+    "git_hash": "c4e33be",
+    "python_version": "3.11.9",
+    "polars_version": "1.31.0"
+  }
+}

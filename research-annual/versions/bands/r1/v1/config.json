@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "version": "v1",
+  "description": "Empirical quantile bins by |baseline|, symmetric bands, LOO by PY",
+  "created": "2026-02-22",
+  "part": "bands/r1",
+  "baseline_version": "v3",
+  "method": {
+    "band_type": "symmetric",
+    "calibration": "empirical quantile of |mcp - nodal_f0| per |nodal_f0| bin",
+    "cv_method": "LOO_by_PY (train on 5 PYs, test on 1)"
+  },
+  "parameters": {
+    "coverage_levels": [
+      0.5,
+      0.7,
+      0.8,
+      0.9,
+      0.95
+    ],
+    "bin_boundaries": [
+      0,
+      50,
+      250,
+      1000,
+      "inf"
+    ],
+    "bin_labels": [
+      "tiny",
+      "small",
+      "medium",
+      "large"
+    ],
+    "band_type": "symmetric",
+    "cv_method": "LOO_by_PY"
+  },
+  "data_sources": [
+    {
+      "path": "crossproduct_work/aq1_all_baselines.parquet",
+      "columns": [
+        "mcp_mean",
+        "nodal_f0"
+      ]
+    },
+    {
+      "path": "crossproduct_work/aq2_all_baselines.parquet",
+      "columns": [
+        "mcp_mean",
+        "nodal_f0"
+      ]
+    },
+    {
+      "path": "crossproduct_work/aq3_all_baselines.parquet",
+      "columns": [
+        "mcp_mean",
+        "nodal_f0"
+      ]
+    },
+    {
+      "path": "crossproduct_work/aq4_all_baselines.parquet",
+      "columns": [
+        "mcp_mean",
+        "nodal_f0"
+      ]
+    }
+  ],
+  "environment": {
+    "git_hash": "c4e33be",
+    "python_version": "3.11.9",
+    "polars_version": "1.31.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "version": "v1",
+  "description": "H baseline: 0.85 * DA congestion (production standard)",
+  "created": "2026-02-22",
+  "part": "baseline",
+  "method": {
+    "formula": "0.85 * DA_congestion",
+    "coverage": "100%"
+  },
+  "parameters": {},
+  "data_sources": [
+    {"path": "crossproduct_work/aq1_all_baselines.parquet", "column": "mtm_1st_mean"},
+    {"path": "crossproduct_work/aq2_all_baselines.parquet", "column": "mtm_1st_mean"},
+    {"path": "crossproduct_work/aq3_all_baselines.parquet", "column": "mtm_1st_mean"},
+    {"path": "crossproduct_work/aq4_all_baselines.parquet", "column": "mtm_1st_mean"}
+  ],
+  "environment": {
+    "git_hash": "c4e33be",
+    "python_version": "3.11.9",
+    "polars_version": "1.31.0"
+  }
+}

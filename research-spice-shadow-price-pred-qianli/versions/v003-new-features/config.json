@@ -1,0 +1,12 @@
+{
+  "description": "Iteration 3: F0.5 + expanded features + higher capacity",
+  "changes_from_baseline": [
+    "ThresholdConfig.threshold_beta: kept at 0.5 (reverted from v001/v002 F2.0)",
+    "Added features: prob_exceed_85, prob_exceed_80, prob_below_100, density_mean, density_kurtosis",
+    "density_skewness monotonicity: +1 -> 0",
+    "default_clf: max_depth 4->6, n_estimators 200->400, min_child_weight 10->5",
+    "default_reg: max_depth 4->6, n_estimators 200->400, min_child_weight 10->5",
+    "branch_clf: max_depth 4->6, n_estimators 200->400, min_child_weight 10->5",
+    "branch_reg: max_depth 4->6, n_estimators 200->400, min_child_weight 10->5"
+  ]
+}

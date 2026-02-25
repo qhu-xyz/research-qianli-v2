@@ -1,0 +1,10 @@
+{
+  "model_id": "v003-new-features",
+  "created": "2026-02-22T20:43:29",
+  "description": "Iteration 3: Revert F0.5 threshold + add 5 features (prob_exceed_85/80, prob_below_100, density_mean, density_kurtosis) + density_skewness constraint=0 + increased model capacity (max_depth=6, n_estimators=400, min_child_weight=5)",
+  "source_commit": "4b3ca42",
+  "algo": "xgb",
+  "status": "candidate",
+  "config_checksum": "sha256:7f40c4145929c195",
+  "version_hash": "sha256:38112bf6ddd9473370b6f6074c3ded75"
+}

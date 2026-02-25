@@ -1,0 +1,9 @@
+{
+  "model_id": "v001-threshold-f2",
+  "created": "2026-02-20T15:02:30",
+  "description": "Iteration 1: Switch threshold from F0.5 to F2.0 (recall-weighted). Only change: threshold_beta 0.5 -> 2.0",
+  "source_commit": "8e93306",
+  "algo": "xgb",
+  "status": "candidate",
+  "config_checksum": "sha256:39ef5d6f851d8c20"
+}

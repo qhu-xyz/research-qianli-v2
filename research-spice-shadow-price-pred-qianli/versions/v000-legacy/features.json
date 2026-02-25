@@ -1,0 +1,73 @@
+{
+  "step1_features": [
+    {
+      "name": "prob_exceed_110",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_exceed_105",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_exceed_100",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_exceed_95",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_exceed_90",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_below_95",
+      "monotonicity": -1
+    },
+    {
+      "name": "prob_below_90",
+      "monotonicity": -1
+    },
+    {
+      "name": "density_skewness",
+      "monotonicity": 1
+    }
+  ],
+  "step2_features": [
+    {
+      "name": "prob_exceed_110",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_exceed_105",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_exceed_100",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_exceed_95",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_exceed_90",
+      "monotonicity": 1
+    },
+    {
+      "name": "prob_below_95",
+      "monotonicity": -1
+    },
+    {
+      "name": "prob_below_90",
+      "monotonicity": -1
+    },
+    {
+      "name": "density_skewness",
+      "monotonicity": 1
+    }
+  ],
+  "n_step1": 8,
+  "n_step2": 8,
+  "note": "8 density features only; hist_da and seasonal features not used"
+}

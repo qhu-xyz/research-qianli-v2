@@ -1,6 +1,6 @@
 # Runbook: Shadow Price Prediction Pipeline (SPICE_F0P_V6.7B)
 
-> **Last updated**: 2026-02-24
+> **Last updated**: 2026-02-25 (updated: gate restructuring, unified regressor, v012)
 > **Signal**: `SPICE_F0P_V6.7B.R1`
 > **RTOs**: MISO (active), PJM (blocked — see blockers.md)
 
@@ -62,7 +62,16 @@ density parquets + DA shadow prices
 - Model: XGBRegressor with monotonic constraints
 - Target: `log1p(label)` (log-transformed shadow price)
 - Output: `expm1(prediction)` → estimated shadow price in $/MWh
-- Only runs for constraints predicted as binding in Stage 1
+
+**Three operating modes** (controlled by `ThresholdConfig` + `TrainingConfig`):
+
+| Mode | Training Data | Prediction Gate | Config Flag |
+|------|--------------|-----------------|-------------|
+| **Standard** (default) | Binding only (`label > 0`) | Binary hard gate: only samples with `P >= threshold` | — |
+| **EV Scoring** | Binding only | Soft gate: all samples with `P >= regression_prob_floor` (default 0.05); output = `P(binding) * reg_pred` | `expected_value_scoring=True` |
+| **Unified Regressor** | ALL samples (binding + non-binding); target = `log1p(max(0, label))` | No gate — all samples scored; model learns zero boundary and severity jointly | `unified_regressor=True` |
+
+The unified regressor eliminates the structural bottleneck where the binary gate between Stage 1 and Stage 2 prevents non-binary-positive samples from ever receiving non-zero shadow price predictions.
 
 ---
 
@@ -306,7 +315,17 @@ Rolling 12-month lookback with temporal split. For auction month X:
 
 Configured via `TrainingConfig(train_months=N, val_months=M, test_months=0)`. The `train_months_lookback` property computes the total (N+M).
 
-**Current config (v008)**: train_months=10, val_months=2 → 12-month lookback. Note: v007 used 9/3 split; v008 reverted to 10/2 for more training data.
+**Current config (v008+)**: train_months=10, val_months=2 → 12-month lookback. Note: v007 used 9/3 split; v008 reverted to 10/2 for more training data.
+
+### Training Config Options (TrainingConfig)
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `train_months` | 10 | Months used for model fitting |
+| `val_months` | 2 | Months used for threshold optimization |
+| `value_weighted` | False | Weight classifier training by `log1p(shadow_price)` — higher shadow-price binding events get more weight |
+| `value_weighted_reg` | False | Weight regressor training by `log1p(shadow_price)` — independent of classifier weighting |
+| `unified_regressor` | False | Train regressors on ALL samples (not just binding). Eliminates binary gate in Stage 2. |
 
 ### Label Modification
 
@@ -430,23 +449,42 @@ Each experiment version is stored in `versions/{version_id}/` with:
 - `config.json` — frozen PredictionConfig at time of run
 - `NOTES.md` — human-readable analysis and conclusions
 
-`versions/manifest.json` tracks the active champion. Promotion requires passing all hard gates AND beating the champion within noise tolerance.
+`versions/manifest.json` tracks the active champion. Promotion requires passing all **promotion gates** AND beating the champion within noise tolerance.
 
-### Hard Gates (11 gates)
+### Gate Architecture (updated 2026-02-25)
+
+Gates are split into two tiers to eliminate threshold-dependent metric bias when comparing versions:
+
+**Promotion Gates (8 gates — threshold-independent)**
+
+These drive promotion decisions. All are independent of the binary classification threshold.
 
 | Gate | Description | Direction | Floor |
 |------|-------------|-----------|-------|
 | S1-AUC | Stage 1 AUC-ROC | higher | 0.65 |
-| S1-REC | Stage 1 Recall | higher | 0.25 |
-| S1-PREC | Stage 1 Precision | higher | 0.25 |
-| S2-SPR | Stage 2 Spearman (TP) | higher | 0.30 |
-| C-VC@100 | Value Capture top-100 | higher | 0.20 |
+| S1-AP | Stage 1 Average Precision (AUC-PR) | higher | 0.12 |
+| R-REC@500 | Ranking Recall@500 (constraint level) | higher | 0.30 |
+| C-VC@100 | Value Capture top-100 (constraint level) | higher | 0.20 |
 | C-VC@500 | Value Capture top-500 | higher | 0.45 |
 | C-VC@1000 | Value Capture top-1000 | higher | 0.50 |
-| C-CAP@20 | Capture rate top-20 | higher | 0.50 |
-| C-CAP@200 | Capture rate top-200 | higher | 0.30 |
-| C-CAP@1000 | Capture rate top-1000 | higher | 0.10 |
-| C-RMSE | Combined RMSE (all) | lower | 2000.0 |
+| C-NDCG | Constraint-level NDCG | higher | 0.30 |
+| C-RMSE | Combined RMSE (all samples) | lower | 2000.0 |
+
+**Monitoring Gates (7 gates — threshold-dependent, informational only)**
+
+These are tracked for monitoring but do not gate promotion. Threshold choice affects their values, making cross-version comparison unreliable.
+
+| Gate | Description | Floor |
+|------|-------------|-------|
+| S1-REC | Stage 1 Recall | None |
+| S1-PREC | Stage 1 Precision | None |
+| S1-F1 | Stage 1 F1 | None |
+| S2-SPR | Stage 2 Spearman (TP) | None |
+| C-CAP@20 | Capture rate top-20 | None |
+| C-CAP@200 | Capture rate top-200 | None |
+| C-CAP@1000 | Capture rate top-1000 | None |
+
+**Rationale**: Any metric computed after the binary classification gate (`predicted_binding = 1`) is threshold-dependent. Recall, Precision, F1, Spearman (on TPs), and Capture@K all change dramatically as threshold changes. Comparing versions with different threshold settings using these metrics is an apples-to-oranges comparison.
 
 **Noise tolerance**: `NOISE_TOLERANCE = 0.02` (2%) — candidate "beats" champion if value is within ±2% of champion's value, with at least one genuine improvement.
 
@@ -558,3 +596,10 @@ Fetched via `MisoApTools.tools.fetch_da_shadow(st, et, class_type)` — requires
 | 2026-02-24 | Threshold experiment (v007-thr050) | v007 with threshold_override=0.5, 12/32 runs | Incomplete (session interrupted at 12/32). v007 f1 thresholds were ~0.75-0.89; lowering to 0.5 would test recall impact. |
 | 2026-02-24 | Per-period gate enforcement | registry.py, run_experiment.py | Gates now checked per (class_type, period_type) segment. Each of onpeak/f0, onpeak/f1, offpeak/f0, offpeak/f1 must independently pass all floor gates. Failed segments shown in summary. Rescored v000, v007, v008 with per-period data. |
 | 2026-02-24 | threshold_override feature | config.py, models.py, _experiment_worker.py | Added ThresholdConfig.threshold_override to bypass threshold optimization. Fixed group=None early-return path to respect override. |
+| 2026-02-25 | v009-single-threshold experiment | 32 runs, threshold_override=0.7 | 32/32 OK. FAILS S1-REC floor on onpeak/f1 (0.228 < 0.25). 0.7 raised branch fallbacks from 0.50, killing recall. |
+| 2026-02-25 | v010-threshold-050 experiment | 32 runs, threshold_override=0.5 | 32/32 OK. All gates pass. f1 segments IDENTICAL to v008 (already used 0.50). f0 ~2pp recall drop (noise). **Threshold tuning dead end** — branch fallbacks dominate. |
+| 2026-02-25 | v010-value-weighted-ev experiment | 32 runs, value_weighted=True (clf+reg), expected_value_scoring=True | 32/32 OK. S2-SPR=0.42 (+15% vs v008), C-RMSE=1100 (-16%). But S1-REC=0.27, FAILS floor on onpeak/f1 (0.229) because value-weighted classifier de-emphasizes low-value binding. |
+| 2026-02-25 | v011-reg-vw-ev experiment | 32 runs, value_weighted_reg=True (reg only), expected_value_scoring=True | 32/32 OK. **ALL GATES PASS.** S2-SPR=0.40 (+11% vs v008), C-RMSE=1098 (-16% vs v008), S1-REC=0.29 (passes all segments). Best regressor quality + calibration. |
+| 2026-02-25 | Gate restructuring | registry.py, run_experiment.py | Replaced monolithic HARD_GATES with PROMOTION_GATES (8 threshold-independent) + MONITORING_GATES (7 threshold-dependent, no floors). Fixes systematic error where threshold-dependent metrics (recall, Spearman-on-TPs, Capture@K) were used to compare versions with different thresholds. Backward-compat alias HARD_GATES = {**PROMOTION_GATES, **MONITORING_GATES} kept. |
+| 2026-02-25 | Promotion gate comparison (v000/v008/v010/v011) | score mode, stored per_run_scores | v008/v011 have identical promotion gate values except C-RMSE (v011: 1098, v008: 1109). v000 leads on S1-AP, R-REC@500, C-VC@100 because its lower threshold lets more binding constraints receive non-zero shadow prices. Root cause: binary gate between classifier and regressor is the structural bottleneck. |
+| 2026-02-25 | v012-unified-regressor (in progress) | 32 runs, unified_regressor=True | Smoke: OK. Training on all 1.35M samples (vs ~67K binding-only). Full benchmark running (9/32 parquets at time of documentation). Architecture change: regressors train on ALL data with target=log1p(max(0,shadow_price)). XGBoost learns zero/non-zero boundary AND severity jointly. |

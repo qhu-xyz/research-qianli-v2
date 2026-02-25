@@ -13,6 +13,61 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from .config import ModelSpec, PredictionConfig
 
 
+def compute_value_weights(y_binary: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """Compute per-sample weights that encode class balance AND shadow price magnitude.
+
+    For classifiers: negatives get weight 1.0, positives get weight proportional to
+    log1p(shadow_price), scaled so total positive weight = total negative weight
+    (preserving the class balance that scale_pos_weight normally provides).
+
+    Parameters
+    ----------
+    y_binary : array of {0, 1}
+        Binary classification labels.
+    labels : array of float
+        Raw shadow prices (pre-binarization).
+
+    Returns
+    -------
+    sample_weight : array of float, same length as y_binary
+    """
+    weights = np.ones(len(y_binary), dtype=np.float64)
+    pos_mask = y_binary == 1
+    n_pos = pos_mask.sum()
+    n_neg = len(y_binary) - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return weights
+
+    # Within positives, weight by log1p(shadow_price)
+    pos_raw = np.log1p(np.maximum(labels[pos_mask], 0))
+    pos_mean = pos_raw.mean()
+    if pos_mean > 0:
+        pos_raw = pos_raw / pos_mean  # normalize so mean = 1.0
+
+    # Scale positive weights so total_pos_weight = total_neg_weight = n_neg
+    # This replaces scale_pos_weight (n_neg/n_pos) with value-aware version
+    weights[pos_mask] = pos_raw * (n_neg / n_pos)
+    return weights
+
+
+def compute_regression_value_weights(y_reg: np.ndarray) -> np.ndarray:
+    """Compute per-sample weights for regressor training.
+
+    Weights binding samples by log1p(shadow_price), normalized so mean weight = 1.
+
+    Parameters
+    ----------
+    y_reg : array of float
+        log1p-transformed shadow prices (all positive / binding samples).
+    """
+    raw_labels = np.expm1(y_reg)  # back to dollar scale
+    weights = np.log1p(np.maximum(raw_labels, 0))
+    mean_w = weights.mean()
+    if mean_w > 0:
+        weights = weights / mean_w
+    return weights
+
+
 class RobustMinMaxScaler:
     """
     MinMaxScaler that handles near-zero constant features by setting them to 0
@@ -282,6 +337,7 @@ def train_ensemble(
     use_stacking: bool = False,
     groups: np.ndarray = None,
     monotone_constraints: str | None = None,
+    sample_weight: np.ndarray | None = None,
 ) -> list[tuple[Any, float]]:
     """
     Train an ensemble of models and return list of (model, weight) tuples.
@@ -302,6 +358,9 @@ def train_ensemble(
         Group labels for cross-validation
     monotone_constraints : str, optional
         Monotonic constraints string for XGBoost
+    sample_weight : np.ndarray, optional
+        Per-sample weights for fit(). If provided, scale_pos_weight is set to 1.0
+        since class balance is handled by the weights.
 
     Returns:
     --------
@@ -312,7 +371,7 @@ def train_ensemble(
 
     # Calculate scale_pos_weight for this batch
     scale_pos_weight = 1.0
-    if is_classifier:
+    if is_classifier and sample_weight is None:
         n_pos = y.sum()
         n_neg = len(y) - n_pos
         if n_pos > 0:
@@ -326,7 +385,10 @@ def train_ensemble(
             monotone_constraints=monotone_constraints,
         )
 
-        model.fit(X, y)
+        if sample_weight is not None:
+            model.fit(X, y, sample_weight=sample_weight)
+        else:
+            model.fit(X, y)
 
         ensemble.append((model, spec.weight))
 
@@ -601,6 +663,13 @@ class ShadowPriceModels:
         # Format: "(1,0,-1)" corresponding to feature columns in X_branch
         monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
 
+        # Compute value weights if enabled
+        branch_clf_weight = None
+        if self.config.training.value_weighted:
+            branch_clf_weight = compute_value_weights(
+                y_branch_binary.values, branch_data["label"].values
+            )
+
         # Train branch-specific ensemble
         clf_ensemble = train_ensemble(
             self.config.models.branch_classifiers,
@@ -609,6 +678,7 @@ class ShadowPriceModels:
             is_classifier=True,
             groups=groups_branch,
             monotone_constraints=monotone_constraints,
+            sample_weight=branch_clf_weight,
         )
 
         # Optimize threshold on validation data (BUG-3 fix: avoid in-sample overfitting)
@@ -659,23 +729,32 @@ class ShadowPriceModels:
         branch_data_scaled = branch_data.copy()
         branch_data_scaled[feature_cols] = scaler_branch.fit_transform(branch_data[feature_cols])
 
-        # Filter for binding constraints (label > 0)
-        # Extract regression features from SCALED data
-        binding_mask = branch_data_scaled["label"] > 0
-        if binding_mask.sum() < self.config.training.min_binding_samples_for_regression:
-            return branch_name, flow_direction, None, None, None, False
-
         # Candidates
         step2_candidates = self.config.features.step2_features
         step2_names = [f[0] for f in step2_candidates]
-        X_branch_candidates = branch_data_scaled.loc[binding_mask, step2_names].copy()
-        y_branch_reg = np.log1p(branch_data_scaled.loc[binding_mask, "label"].copy())
 
-        groups_branch_reg = (
-            branch_data_scaled.loc[binding_mask, "auction_month"].values
-            if "auction_month" in branch_data_scaled.columns
-            else None
-        )
+        if self.config.training.unified_regressor:
+            # Unified regressor: train on ALL samples (binding + non-binding)
+            X_branch_candidates = branch_data_scaled[step2_names].copy()
+            y_branch_reg = np.log1p(branch_data_scaled["label"].clip(lower=0).copy())
+            groups_branch_reg = (
+                branch_data_scaled["auction_month"].values
+                if "auction_month" in branch_data_scaled.columns
+                else None
+            )
+        else:
+            # Filter for binding constraints (label > 0)
+            binding_mask = branch_data_scaled["label"] > 0
+            if binding_mask.sum() < self.config.training.min_binding_samples_for_regression:
+                return branch_name, flow_direction, None, None, None, False
+
+            X_branch_candidates = branch_data_scaled.loc[binding_mask, step2_names].copy()
+            y_branch_reg = np.log1p(branch_data_scaled.loc[binding_mask, "label"].copy())
+            groups_branch_reg = (
+                branch_data_scaled.loc[binding_mask, "auction_month"].values
+                if "auction_month" in branch_data_scaled.columns
+                else None
+            )
 
         # Feature Selection
         X_branch_reg, constraints, selected_features, is_fallback = select_features(
@@ -688,6 +767,11 @@ class ShadowPriceModels:
         # Construct Monotonic Constraints for XGBoost
         monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
 
+        # Compute value weights if enabled (uses separate reg flag)
+        reg_sample_weight = None
+        if self.config.training.value_weighted_reg:
+            reg_sample_weight = compute_regression_value_weights(y_branch_reg.values)
+
         # Train branch-specific ensemble
         reg_ensemble = train_ensemble(
             self.config.models.branch_regressors,
@@ -696,6 +780,7 @@ class ShadowPriceModels:
             is_classifier=False,
             groups=groups_branch_reg,
             monotone_constraints=monotone_constraints,
+            sample_weight=reg_sample_weight,
         )
 
         return branch_name, flow_direction, reg_ensemble, scaler_branch, selected_features, is_fallback
@@ -800,6 +885,13 @@ class ShadowPriceModels:
                 # Construct Monotonic Constraints for XGBoost
                 monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
 
+                # Compute value weights if enabled
+                clf_sample_weight = None
+                if self.config.training.value_weighted:
+                    clf_sample_weight = compute_value_weights(
+                        y_train_binary_all.values, y_train_all.values
+                    )
+
                 # Train default classifier ensemble
                 default_ensemble = train_ensemble(
                     self.config.models.default_classifiers,
@@ -808,6 +900,7 @@ class ShadowPriceModels:
                     is_classifier=True,
                     groups=groups_all,
                     monotone_constraints=monotone_constraints,
+                    sample_weight=clf_sample_weight,
                 )
                 self.clf_default_ensembles[group_name] = default_ensemble
 
@@ -1001,15 +1094,25 @@ class ShadowPriceModels:
             step2_candidates = step2_deduped
             step2_names = [f[0] for f in step2_candidates]
 
-            binding_mask_all = group_data_scaled_default["label"] > 0
-            X_train_candidates = group_data_scaled_default.loc[binding_mask_all, step2_names].copy()
-            y_train_reg_all = np.log1p(group_data_scaled_default.loc[binding_mask_all, "label"].copy())
-
-            groups_reg_all = (
-                group_data.loc[binding_mask_all, "auction_month"].values
-                if "auction_month" in group_data.columns
-                else None
-            )
+            if self.config.training.unified_regressor:
+                # Unified regressor: train on ALL samples (binding + non-binding)
+                # Target: log1p(max(0, shadow_price)) — non-binding samples have target=0
+                X_train_candidates = group_data_scaled_default[step2_names].copy()
+                y_train_reg_all = np.log1p(group_data_scaled_default["label"].clip(lower=0).copy())
+                groups_reg_all = (
+                    group_data["auction_month"].values
+                    if "auction_month" in group_data.columns
+                    else None
+                )
+            else:
+                binding_mask_all = group_data_scaled_default["label"] > 0
+                X_train_candidates = group_data_scaled_default.loc[binding_mask_all, step2_names].copy()
+                y_train_reg_all = np.log1p(group_data_scaled_default.loc[binding_mask_all, "label"].copy())
+                groups_reg_all = (
+                    group_data.loc[binding_mask_all, "auction_month"].values
+                    if "auction_month" in group_data.columns
+                    else None
+                )
 
             # Feature Selection for Default Regressor
             X_train_reg_all, constraints, selected_features_reg, is_fallback_reg = select_features(
@@ -1028,6 +1131,11 @@ class ShadowPriceModels:
                 monotone_constraints = "(" + ",".join(map(str, constraints)) + ")"
 
                 if len(X_train_reg_all) > self.config.training.min_binding_samples_for_regression:
+                    # Compute value weights if enabled (uses separate reg flag)
+                    default_reg_weight = None
+                    if self.config.training.value_weighted_reg:
+                        default_reg_weight = compute_regression_value_weights(y_train_reg_all.values)
+
                     default_ensemble = train_ensemble(
                         self.config.models.default_regressors,
                         X_train_reg_all,
@@ -1035,13 +1143,15 @@ class ShadowPriceModels:
                         is_classifier=False,
                         groups=groups_reg_all,
                         monotone_constraints=monotone_constraints,
+                        sample_weight=default_reg_weight,
                     )
                     self.reg_default_ensembles[group_name] = default_ensemble
 
                     if verbose:
                         n_models = len(default_ensemble)
-                        print(f"    ✓ Default ensemble trained ({n_models} models)")
-                        print(f"    Total binding samples: {len(X_train_reg_all):,}")
+                        mode = "unified (all)" if self.config.training.unified_regressor else "binding-only"
+                        print(f"    ✓ Default ensemble trained ({n_models} models, {mode})")
+                        print(f"    Total training samples: {len(X_train_reg_all):,}")
                 else:
                     if verbose:
                         print("    ⚠️  Insufficient binding samples for default regressor. Skipping.")

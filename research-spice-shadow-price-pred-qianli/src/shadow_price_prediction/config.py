@@ -404,6 +404,12 @@ class TrainingConfig:
     # Rule to modify test prediction to 0 (unbind) if a feature is below a threshold
     # Format: (feature_name, threshold)
     test_unbind_rule: tuple[str, float] | None = ("prob_exceed_90", 1e-5)
+    # Value-weighted training: weight binding samples by log1p(shadow_price)
+    value_weighted: bool = False  # Apply to classifiers
+    value_weighted_reg: bool = False  # Apply to regressors (independent of value_weighted)
+    # Unified regressor: train on ALL samples (not just binding), predict shadow price directly.
+    # Eliminates the binary gate between classifier and regressor.
+    unified_regressor: bool = False
 
     @property
     def train_months_lookback(self) -> int:
@@ -418,6 +424,10 @@ class ThresholdConfig:
     threshold_beta: float = 0.7  # F-beta score beta parameter (0.7 = moderate recall/precision balance)
     threshold_scaling_factor: float = 1.0  # Scale factor for optimal threshold (heuristic to avoid overfitting)
     threshold_override: float | None = None  # If set, bypass optimization and use this fixed threshold
+    # Expected-value scoring: predicted_shadow_price = P(binding) * regressor_prediction
+    # Runs regressor on all samples with P(binding) > regression_prob_floor
+    expected_value_scoring: bool = False
+    regression_prob_floor: float = 0.05  # Min probability to run regressor (efficiency cutoff)
 
 
 @dataclass

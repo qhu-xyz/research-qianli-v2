@@ -57,11 +57,21 @@ def apply_overrides(config, overrides: dict):
         config.threshold = replace(config.threshold, threshold_beta=overrides["threshold_beta"])
     if "threshold_override" in overrides:
         config.threshold = replace(config.threshold, threshold_override=overrides["threshold_override"])
+    if "expected_value_scoring" in overrides:
+        config.threshold = replace(config.threshold, expected_value_scoring=overrides["expected_value_scoring"])
+    if "regression_prob_floor" in overrides:
+        config.threshold = replace(config.threshold, regression_prob_floor=overrides["regression_prob_floor"])
 
     if "train_months" in overrides:
         config.training = replace(config.training, train_months=overrides["train_months"])
     if "val_months" in overrides:
         config.training = replace(config.training, val_months=overrides["val_months"])
+    if "value_weighted" in overrides:
+        config.training = replace(config.training, value_weighted=overrides["value_weighted"])
+    if "value_weighted_reg" in overrides:
+        config.training = replace(config.training, value_weighted_reg=overrides["value_weighted_reg"])
+    if "unified_regressor" in overrides:
+        config.training = replace(config.training, unified_regressor=overrides["unified_regressor"])
 
     if "step1_features" in overrides:
         from shadow_price_prediction.config import FeatureConfig

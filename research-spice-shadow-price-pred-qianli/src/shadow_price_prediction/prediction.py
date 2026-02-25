@@ -452,10 +452,20 @@ class Predictor:
             # Stage 2: Regression (Shadow Price Estimation)
             # ====================================================================
 
-            # Only predict shadow price for binding constraints
-            binding_mask_local = y_pred_binary_branch == 1
+            # Determine which samples get regression predictions
+            use_unified = self.config.training.unified_regressor
+            use_ev_scoring = self.config.threshold.expected_value_scoring
+            if use_unified:
+                # Unified regressor: run on ALL samples (no gate)
+                regression_mask_local = np.ones(len(branch_indices), dtype=bool)
+            elif use_ev_scoring:
+                # Soft scoring: run regressor on all samples with sufficient probability
+                regression_mask_local = y_proba_branch >= self.config.threshold.regression_prob_floor
+            else:
+                # Hard gate: only predict shadow price for binary-positive samples
+                regression_mask_local = y_pred_binary_branch == 1
 
-            if np.any(binding_mask_local):
+            if np.any(regression_mask_local):
                 # Get appropriate regressor ensemble
                 reg_ensemble_to_use, reg_scaler = self.models.get_regressor_ensemble(
                     branch_name, flow_direction, forecast_horizon
@@ -463,14 +473,9 @@ class Predictor:
 
                 if len(reg_ensemble_to_use) == 0:
                     # No regression model available (even default)
-                    no_reg_model_count += binding_mask_local.sum()
+                    no_reg_model_count += regression_mask_local.sum()
                     # Shadow price remains 0
                 else:
-                    # Prepare regression features
-                    # Use the SAME scaler if it exists (it should match the one from classifier if branch-specific)
-                    # Or reg_scaler might be different if we fell back to default regressor but used branch classifier?
-                    # get_regressor_ensemble handles logic.
-
                     # Check if branch model
                     is_branch_reg_model = False
                     if (branch_name, flow_direction) in self.models.reg_ensembles.get(horizon_group, {}):
@@ -478,42 +483,34 @@ class Predictor:
 
                     # Determine correct features for the model
                     if is_branch_reg_model:
-                        # Use features stored during training for this branch
                         feats = self.models.reg_branch_features.get(horizon_group, {}).get(
                             (branch_name, flow_direction)
                         )
                         if not feats:
-                            # Fallback if not found (shouldn't happen if trained)
                             feats = [f[0] for f in self.config.features.step2_features]
                     else:
-                        # Use default model features
                         feats = self.models.reg_default_features.get(horizon_group)
                         if not feats:
                             feats = [f[0] for f in self.config.features.step2_features]
 
                     if reg_scaler:
-                        # If we already scaled for classification and it's the SAME scaler, we could reuse
-                        # But simpler to just transform again to be safe/robust
                         X_branch_scaled_reg_all = X_branch_all.copy()
                         X_branch_scaled_reg_all[feature_cols] = reg_scaler.transform(
                             X_branch_scaled_reg_all[feature_cols]
                         )
-                        # Extract regression features from SCALED
-                        # Ensure features exist in dataframe
                         valid_feats = [f for f in feats if f in X_branch_scaled_reg_all.columns]
                         X_branch_reg = X_branch_scaled_reg_all[valid_feats]
                     else:
                         valid_feats = [f for f in feats if f in X_branch_all.columns]
                         X_branch_reg = X_branch_all[valid_feats]
 
-                    # Filter for binding samples
-                    # We need to subset X_branch_reg using binding_mask_local
-                    X_branch_reg_binding = X_branch_reg[binding_mask_local]
+                    # Filter to samples that pass the regression mask
+                    X_branch_reg_subset = X_branch_reg[regression_mask_local]
 
                     if is_branch_reg_model:
-                        used_branch_reg_count += binding_mask_local.sum()
+                        used_branch_reg_count += regression_mask_local.sum()
                     else:
-                        used_default_reg_count += binding_mask_local.sum()
+                        used_default_reg_count += regression_mask_local.sum()
 
                     reg_weights = self.models.get_ensemble_weights_for_horizon(
                         forecast_horizon, "regressor", is_branch=is_branch_reg_model
@@ -522,7 +519,7 @@ class Predictor:
                     # Predict shadow price (log-transformed)
                     raw_pred = predict_ensemble(
                         reg_ensemble_to_use,
-                        X_branch_reg_binding,
+                        X_branch_reg_subset,
                         predict_proba=False,
                         weight_overrides=reg_weights,
                     )
@@ -546,21 +543,16 @@ class Predictor:
                             if self.models.reg_default_valid.get(horizon_group, True):
                                 default_reg_ens = self.models.reg_default_ensembles.get(horizon_group, [])
                                 if default_reg_ens:
-                                    # Prepare features for default model
-                                    # We need original scaled data for default features? No, we need to scale using default scaler.
-                                    # X_branch_all contains unscaled features for this branch subset
-                                    X_branch_binding_raw = X_branch_all.iloc[np.where(binding_mask_local)[0]]
+                                    X_branch_subset_raw = X_branch_all.iloc[np.where(regression_mask_local)[0]]
 
                                     scaler_def = self.models.scalers_default_reg.get(horizon_group)
                                     if scaler_def:
-                                        X_def_scaled = X_branch_binding_raw.copy()
-                                        # Need to scale all features
+                                        X_def_scaled = X_branch_subset_raw.copy()
                                         X_def_scaled[self.config.features.all_features] = scaler_def.transform(
                                             X_def_scaled[self.config.features.all_features]
                                         )
 
                                         default_feats = self.models.reg_default_features.get(horizon_group, [])
-                                        # Intersect with available columns (which should be all scaled features)
                                         valid_feats = [f for f in default_feats if f in X_def_scaled.columns]
                                         X_def_reg = X_def_scaled[valid_feats]
 
@@ -580,15 +572,22 @@ class Predictor:
                             w_fallback = self.config.feature_selection.fallback_weight
                             shadow_price_pred = w_fallback * shadow_price_pred + (1 - w_fallback) * val_default
 
+                    # Apply expected-value scoring: shadow_price = P(binding) * regressor_output
+                    # Skip if unified regressor (it already learns to output 0 for non-binding)
+                    if use_ev_scoring and not use_unified:
+                        shadow_price_pred = y_proba_branch[regression_mask_local] * shadow_price_pred
+
                     # Map back to full array
-                    # binding_indices_local are indices within X_branch_all
-                    # We need to map to global indices
-                    binding_indices_global = branch_indices[binding_mask_local]
-                    y_pred_shadow_price[binding_indices_global] = shadow_price_pred
+                    regression_indices_global = branch_indices[regression_mask_local]
+                    y_pred_shadow_price[regression_indices_global] = shadow_price_pred
 
                     # Update model usage log
                     reg_model_name = f" + {'Branch' if is_branch_reg_model else 'Default'} REG"
-                    for idx in binding_indices_global:
+                    if use_unified:
+                        reg_model_name += " (Unified)"
+                    elif use_ev_scoring:
+                        reg_model_name += " (EV)"
+                    for idx in regression_indices_global:
                         model_used[idx] += reg_model_name
 
             branches_processed += 1

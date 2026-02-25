@@ -467,20 +467,29 @@ def score_all_results(output_dir: str, version_id: str):
 
     # ── Gate table ─────────────────────────────────────────────────────
     def _compute_gates(df):
-        """Compute gate values from a DataFrame slice."""
+        """Compute gate values from a DataFrame slice.
+
+        Includes both promotion gates (threshold-independent) and
+        monitoring gates (threshold-dependent, informational).
+        """
         return {
+            # --- Promotion gates (threshold-independent) ---
             "S1-AUC": round(float(df["auc_roc"].mean()), 4),
+            "S1-AP": round(float(df["avg_precision"].mean()), 4),
+            "R-REC@500": round(float(df["recall_cst_500"].mean()), 4),
+            "C-VC@100": round(float(df["valcap_cst_100"].mean()), 4),
+            "C-VC@500": round(float(df["valcap_cst_500"].mean()), 4),
+            "C-VC@1000": round(float(df["valcap_cst_1000"].mean()), 4),
+            "C-NDCG": round(float(df["ndcg_constraint"].mean()), 4),
+            "C-RMSE": round(float(df["rmse_all"].mean()), 2),
+            # --- Monitoring gates (threshold-dependent, informational) ---
             "S1-REC": round(float(df["recall"].mean()), 4),
             "S1-PREC": round(float(df["precision"].mean()), 4),
             "S1-F1": round(float(df["f1"].mean()), 4),
             "S2-SPR": round(float(df["spearman_tp"].mean()), 4),
-            "C-VC@100": round(float(df["valcap_cst_100"].mean()), 4),
-            "C-VC@500": round(float(df["valcap_cst_500"].mean()), 4),
-            "C-VC@1000": round(float(df["valcap_cst_1000"].mean()), 4),
             "C-CAP@20": round(float(df["capture_cst_20"].mean()), 4),
             "C-CAP@200": round(float(df["capture_cst_200"].mean()), 4),
             "C-CAP@1000": round(float(df["capture_cst_1000"].mean()), 4),
-            "C-RMSE": round(float(df["rmse_all"].mean()), 2),
         }
 
     print(f"\n{'='*70}")

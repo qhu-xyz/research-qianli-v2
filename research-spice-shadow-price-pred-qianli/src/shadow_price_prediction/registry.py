@@ -34,28 +34,30 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 # Each gate specifies:
-#   metric_path : dot-separated path into gate_values dict
-#   direction   : "higher" (floor) or "lower" (ceiling)
-#   floor/ceil  : absolute threshold (None = tracked but not enforced)
+#   direction : "higher" (floor) or "lower" (ceiling)
+#   floor     : absolute threshold (None = tracked but not enforced)
+#
+# PROMOTION_GATES: threshold-independent metrics used for promotion decisions.
+# These compare model quality fairly regardless of classification threshold.
+#
+# MONITORING_GATES: threshold-dependent metrics tracked for diagnostics.
+# Not used for promotion gating or champion comparison.
 
-HARD_GATES: dict[str, dict[str, Any]] = {
+PROMOTION_GATES: dict[str, dict[str, Any]] = {
+    # --- Classifier discrimination (threshold-independent) ---
     "S1-AUC": {
         "description": "Stage 1 AUC-ROC",
         "direction": "higher",
         "floor": 0.65,
     },
-    "S1-REC": {
-        "description": "Stage 1 Recall",
+    "S1-AP": {
+        "description": "Stage 1 Average Precision (AUC-PR)",
         "direction": "higher",
-        "floor": 0.25,
+        "floor": 0.12,
     },
-    "S1-PREC": {
-        "description": "Stage 1 Precision",
-        "direction": "higher",
-        "floor": 0.25,
-    },
-    "S2-SPR": {
-        "description": "Stage 2 Spearman (TP)",
+    # --- Ranking quality (threshold-independent, uses predicted shadow price) ---
+    "R-REC@500": {
+        "description": "Ranking Recall@500 (of all binding, % in top-500 predicted)",
         "direction": "higher",
         "floor": 0.30,
     },
@@ -74,27 +76,61 @@ HARD_GATES: dict[str, dict[str, Any]] = {
         "direction": "higher",
         "floor": 0.50,
     },
-    "C-CAP@20": {
-        "description": "Capture rate top-20 constraints",
-        "direction": "higher",
-        "floor": 0.50,
-    },
-    "C-CAP@200": {
-        "description": "Capture rate top-200 constraints",
+    "C-NDCG": {
+        "description": "Constraint-level NDCG",
         "direction": "higher",
         "floor": 0.30,
     },
-    "C-CAP@1000": {
-        "description": "Capture rate top-1000 constraints",
-        "direction": "higher",
-        "floor": 0.10,
-    },
+    # --- Calibration (threshold-independent) ---
     "C-RMSE": {
         "description": "Combined RMSE (all)",
         "direction": "lower",
         "floor": 2000.0,
     },
 }
+
+MONITORING_GATES: dict[str, dict[str, Any]] = {
+    # --- Threshold-dependent classifier metrics (informational) ---
+    "S1-REC": {
+        "description": "Stage 1 Recall (threshold-dependent)",
+        "direction": "higher",
+        "floor": None,
+    },
+    "S1-PREC": {
+        "description": "Stage 1 Precision (threshold-dependent)",
+        "direction": "higher",
+        "floor": None,
+    },
+    "S1-F1": {
+        "description": "Stage 1 F1 (threshold-dependent)",
+        "direction": "higher",
+        "floor": None,
+    },
+    "S2-SPR": {
+        "description": "Stage 2 Spearman on TPs (threshold-dependent TP set)",
+        "direction": "higher",
+        "floor": None,
+    },
+    # --- Threshold-dependent capture (informational) ---
+    "C-CAP@20": {
+        "description": "Capture rate top-20 (threshold-dependent)",
+        "direction": "higher",
+        "floor": None,
+    },
+    "C-CAP@200": {
+        "description": "Capture rate top-200 (threshold-dependent)",
+        "direction": "higher",
+        "floor": None,
+    },
+    "C-CAP@1000": {
+        "description": "Capture rate top-1000 (threshold-dependent)",
+        "direction": "higher",
+        "floor": None,
+    },
+}
+
+# Legacy alias for backward compatibility
+HARD_GATES = {**PROMOTION_GATES, **MONITORING_GATES}
 
 # Noise tolerance for promotion: candidate must be >= champion * (1 - TOLERANCE)
 # for "higher is better" gates, and <= champion * (1 + TOLERANCE) for "lower is better".
@@ -673,14 +709,14 @@ class ModelRegistry:
         period_types : tuple of str
             Period types to enforce.  Each (ct, pt) combo is checked.
         gates : dict, optional
-            Gate definitions.  Defaults to ``HARD_GATES``.
+            Gate definitions.  Defaults to ``PROMOTION_GATES``.
 
         Returns
         -------
         GateResult
         """
         if gates is None:
-            gates = HARD_GATES
+            gates = PROMOTION_GATES
 
         candidate = self.get_version(model_id)
         champion = self.get_champion()

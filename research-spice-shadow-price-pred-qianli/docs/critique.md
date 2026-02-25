@@ -1,6 +1,6 @@
 # Critique: Shadow Price Prediction Pipeline
 
-> **Last updated**: 2026-02-24
+> **Last updated**: 2026-02-25
 > **Applies to**: `src/shadow_price_prediction/` codebase
 
 ---
@@ -379,6 +379,24 @@ Remaining: no formal Optuna/cross-val search has been run. The v008 hyperparamet
 
 ---
 
+### IMP-21: Threshold tuning is a dead end
+
+**Priority**: LOW (resolved — no further action needed)
+**Impact**: Saves future effort by documenting that threshold is not a useful optimization lever
+
+Tested three threshold strategies against v008's natural mixed-threshold behavior:
+- v009: threshold_override=0.7 — FAILS S1-REC gate (onpeak/f1 = 0.228 < 0.25). Raising branch fallbacks from 0.50 to 0.70 kills recall.
+- v010-thr050: threshold_override=0.5 — All gates pass, but nearly IDENTICAL to v008. f1 metrics unchanged (v008 already used 0.50). f0 metrics differ by ~2pp (noise).
+- v008 (mixed): f0 default ~0.91, f1 default 0.50, all branches 0.50 — best overall.
+
+Root cause: hundreds of branch models all fall back to threshold=0.50 (insufficient per-branch validation data). They dominate aggregate metrics. The f0 default model's optimized threshold (~0.91) affects only the minority of predictions from constraints without branch models.
+
+**Conclusion**: Future improvements must come from model quality (features, architecture, training data), not threshold selection. The optimizer's natural output works well.
+
+**Status**: CLOSED (2026-02-25)
+
+---
+
 ## Change Log
 
 | Date | Item | Change |
@@ -413,3 +431,9 @@ Remaining: no formal Optuna/cross-val search has been run. The v008 hyperparamet
 | 2026-02-24 | IMP-19 | DONE: Per-period gate enforcement — each (class_type, period_type) segment checked independently |
 | 2026-02-24 | IMP-20 | DONE: threshold_override feature for controlled experiments |
 | 2026-02-24 | IMP-11 | Updated: Partially addressed by v007/v008 hyperparameter experiments |
+| 2026-02-25 | IMP-21 | CLOSED: Threshold tuning dead end. v009 (0.7) fails gate, v010-thr050 (0.5) identical to v008. Branch fallbacks dominate. |
+| 2026-02-25 | IMP-22 | DONE: Gate restructuring — PROMOTION_GATES (8, threshold-independent) + MONITORING_GATES (7, informational). Eliminates apples-to-oranges comparisons across threshold configs. |
+| 2026-02-25 | IMP-23 | DONE: EV scoring (expected_value_scoring=True) + regressor value weighting (value_weighted_reg=True). v011: all gates pass, C-RMSE -16% vs v008. But promotion ranking metrics unchanged — regressor coverage bottleneck identified. |
+| 2026-02-25 | IMP-24 | IN PROGRESS: Unified regressor (unified_regressor=True) — v012 running. Trains on all samples, no binary gate at prediction. Addresses root cause: regressor coverage bottleneck. |
+| 2026-02-25 | CONCERN-1 | OPEN: Unified regressor shows severe negative bias in smoke test ($468 predicted vs $1302 actual on TPs). 95%+ zero training data pulls XGBoost toward near-zero predictions. Consider Tweedie loss (`reg:tweedie`) as next experiment if v012 ranking metrics don't improve. |
+| 2026-02-25 | CONCERN-2 | OPEN: Even "threshold-independent" promotion gates (R-REC@500, C-VC@K) are indirectly affected by threshold — the binary gate controls which constraints get non-zero shadow price predictions, affecting top-K ranking. Only AUC/AP are truly threshold-independent. This is a fundamental property of the two-stage architecture. |

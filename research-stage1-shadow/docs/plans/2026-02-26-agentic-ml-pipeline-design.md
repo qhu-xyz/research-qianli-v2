@@ -1,7 +1,7 @@
 # Design: Agentic ML Research Pipeline for Shadow Price Classification
 
 **Date**: 2026-02-26
-**Version**: v8 (fixes orchestrator arg parsing, merge-before-rsync order, worker handoff path exception, synthesis direction write, archive path naming)
+**Version**: v9 (fixes shell injection in launches, gate auto-population, Codex prompt divergence, status-aware handoff verify, lock guard, CWD anchoring, dynamic artifact paths, sha256-before-merge)
 **Author**: Claude (brainstorming session with user)
 
 ---
@@ -277,8 +277,12 @@ case "$PHASE" in
   *) echo "Unknown phase: $PHASE"; exit 1 ;;
 esac
 SESSION="orch-${BATCH_ID}-iter${N}-${PHASE}"
+# Use stdin redirect — never embed prompt via $(cat): LLM output in memory/ files
+# can contain quotes, backticks, or $() that corrupt shell parsing.
 tmux new-session -d -s "${SESSION}" \
-  "claude -p \"$(cat ${PROMPT})\" --model opus --allowedTools \"Read,Write,Edit,Glob,Grep,Bash\""
+  "cd \"${PROJECT_DIR}\" && claude --print --model opus \
+   --allowedTools \"Read,Write,Edit,Glob,Grep,Bash\" \
+   < \"${PROMPT}\""
 echo "${SESSION}"  # controller writes orchestrator_tmux to state.json
 ```
 **Timeout**: 600s
@@ -287,6 +291,7 @@ echo "${SESSION}"  # controller writes orchestrator_tmux to state.json
 1. Read `memory/hot/` (all files), `memory/warm/` (all files), `memory/archive/index.md`
 2. If iteration 1 and human input: read `memory/human_input.md`
 3. Read `registry/gates.json`
+4. Read `registry/{champion}/metrics.json` to understand current best baseline
 5. Decide what change to try. Write `memory/direction_iter{N}.md` with:
    - What to change and why
    - Specific code changes (file paths, parameters, values)
@@ -332,11 +337,12 @@ SESSION="worker-${BATCH_ID}-iter${N}"
 WORKTREE="${PROJECT_DIR}/.claude/worktrees/iter${N}-${BATCH_ID}"   # batch_id prevents cross-batch collision
 git worktree add "${WORKTREE}" -b "iter${N}-${BATCH_ID}"
 tmux new-session -d -s "${SESSION}" \
-  "cd \"${WORKTREE}\" && claude -p \"$(cat ${PROJECT_DIR}/agents/prompts/worker.md)\" \
-   --model opus \
+  "cd \"${WORKTREE}\" && claude --print --model opus \
    --allowedTools \"Read,Write,Edit,Glob,Grep,Bash\" \
-   --permission-mode default"
+   --permission-mode default \
+   < \"${PROJECT_DIR}/agents/prompts/worker.md\""
 # cd into worktree BEFORE launching claude — enforces isolation; worker operates on its branch only
+# Use stdin redirect (< file) not -p "$(cat ...)" — worker.md is static but consistent with other launches
 echo "${SESSION}"   # controller captures this and writes worker_tmux to state.json
 ```
 **Timeout**: 1800s
@@ -404,10 +410,12 @@ directly from `metrics.json` — no AI interpretation. Also writes
 **Launch**:
 ```bash
 SESSION="rev-claude-${BATCH_ID}-iter${N}"
+# cd to PROJECT_DIR so relative paths in prompt (memory/, reviews/, handoff/) resolve correctly.
+# Stdin redirect avoids shell injection from LLM-generated memory content.
 tmux new-session -d -s "${SESSION}" \
-  "claude -p \"$(cat ${PROJECT_DIR}/agents/prompts/reviewer_claude.md)\" \
-   --model opus \
-   --allowedTools \"Read,Glob,Grep,Write,Bash\""
+  "cd \"${PROJECT_DIR}\" && claude --print --model opus \
+   --allowedTools \"Read,Glob,Grep,Write,Bash\" \
+   < \"${PROJECT_DIR}/agents/prompts/reviewer_claude.md\""
 # Write + Bash needed to write review file, handoff JSON, and compute sha256
 # Prompt constrains writes to reviews/ and handoff/ only
 echo "${SESSION}"  # controller writes claude_reviewer_tmux to state.json
@@ -460,11 +468,15 @@ This is enforced in the reviewer prompt's WHEN DONE section.
 **Launch** (corrected — `codex exec` has no `-o` flag; stdout redirect used):
 ```bash
 SESSION="rev-codex-${BATCH_ID}-iter${N}"
-REVIEW_FILE="reviews/${BATCH_ID}_iter${N}_codex.md"
+# Absolute paths: Codex wrapper runs in shell whose CWD may not be PROJECT_DIR
+REVIEW_FILE="${PROJECT_DIR}/reviews/${BATCH_ID}_iter${N}_codex.md"
 HANDOFF="${PROJECT_DIR}/handoff/${BATCH_ID}/iter${N}/codex_reviewer_done.json"
+# reviewer_codex.md MUST instruct Codex to print the full review to stdout (not write a file).
+# --sandbox read-only means Codex cannot write files; the shell wrapper captures stdout into REVIEW_FILE.
+# This is intentionally different from reviewer_claude.md which instructs Claude to write a file directly.
 tmux new-session -d -s "${SESSION}" \
   "codex exec \
-    -m gpt-5.3-codex \
+    -m ${CODEX_MODEL} \
     -c model_reasoning_effort=high \
     --sandbox read-only \
     --full-auto \
@@ -534,15 +546,20 @@ Your interactive Claude Code session does NOT become the orchestrator. It:
    CAS: state = WORKER_RUNNING, max_s = 1800.
 6. WORKER_SESSION=$(launch_worker.sh); write worker_tmux to state.json (controller-owned write)
 7. Poll for handoff/.../worker_done.json
-7a. On worker_done status "failed": skip 7b-7c, transition to ORCHESTRATOR_SYNTHESIZING (see failure handling).
+7a. On worker_done status "failed": skip 7b-7d, transition to ORCHESTRATOR_SYNTHESIZING (see failure handling).
 7b. Verify worker committed (branch head must differ from main HEAD — else fail fast):
     MAIN_HEAD=$(git -C "${PROJECT_DIR}" rev-parse HEAD)
     BRANCH_HEAD=$(git -C "${PROJECT_DIR}" rev-parse "iter${N}-${BATCH_ID}")
     [[ "$MAIN_HEAD" != "$BRANCH_HEAD" ]] || { echo "ERROR: worker made no commits"; exit 1; }
-7c. Merge worker branch into main (brings ml/ + registry/${VERSION_ID}/ into main in one step):
+7c. Verify sha256 of metrics.json IN THE WORKTREE BRANCH before merging (fail fast before touching main):
+    METRICS="${PROJECT_DIR}/.claude/worktrees/iter${N}-${BATCH_ID}/registry/${VERSION_ID}/metrics.json"
+    EXPECTED_SHA=$(jq -r '.sha256' "handoff/${BATCH_ID}/iter${N}/worker_done.json")
+    ACTUAL_SHA=$(sha256sum "${METRICS}" | cut -d' ' -f1)
+    [[ "$EXPECTED_SHA" == "$ACTUAL_SHA" ]] || { echo "ERROR: metrics.json sha256 mismatch"; exit 1; }
+7d. Merge worker branch into main (brings ml/ + registry/${VERSION_ID}/ into main in one step):
     git -C "${PROJECT_DIR}" merge --no-ff "iter${N}-${BATCH_ID}" -m "Merge iter${N} worker: ${VERSION_ID}"
     # No pre-merge rsync — worker committed registry/${VERSION_ID}/ to its branch, merge handles it cleanly.
-8. Verify sha256 of metrics.json. Run ml/compare.py (non-AI comparison table).
+8. Run ml/compare.py (non-AI comparison table). sha256 already verified in step 7c.
 9. CAS: state = REVIEW_CLAUDE, max_s = 1200.
 10. CLAUDE_SESSION=$(launch_reviewer_claude.sh); write claude_reviewer_tmux to state.json
 11. Poll for handoff/.../claude_reviewer_done.json
@@ -613,6 +630,12 @@ F1, F-beta (β=2.0), CAP@250, CAP@1000, VCAP@250.
 After v0 runs, the controller auto-populates v0-relative floors in `gates.json` (one-time
 initialization). Until then, v0-relative floors are `null` with `"pending_v0": true`.
 No candidate can be promoted until all `null` floors are resolved.
+
+**Explicit assignment**: `run_pipeline.sh` calls `python ml/populate_v0_gates.py` before
+launching iteration 1 of the very first batch. This script reads `registry/v0/metrics.json`,
+computes `v0_metric − offset` for each pending gate (e.g., `v0_AUC − 0.05`), writes back
+to `registry/gates.json`, and sets `"pending_v0": false`. It is idempotent — re-running
+when no `pending_v0: true` entries exist is a no-op.
 
 ```json
 {
@@ -709,37 +732,45 @@ Synthesis orchestrator reads the failure handoff and includes a failure analysis
 | REVIEW_CODEX | required — same version_id as worker |
 | ORCHESTRATOR_SYNTHESIZING | `null` — synthesis spans the full iteration, not one version |
 
-Controller verification (two-step — path then hash):
+Controller verification (status-aware, paths computed dynamically at call time):
 ```bash
 # In state_utils.sh
-# Expected artifact paths by (state, agent) — derived by controller, not trusted from handoff
-declare -A EXPECTED_ARTIFACT_PATTERN=(
-  ["WORKER_RUNNING"]="registry/${VERSION_ID}/metrics.json"
-  ["REVIEW_CLAUDE"]="reviews/${BATCH_ID}_iter${N}_claude.md"
-  ["REVIEW_CODEX"]="reviews/${BATCH_ID}_iter${N}_codex.md"
-  ["ORCHESTRATOR_PLANNING"]="memory/direction_iter${N}.md"
-)
 
-# Synthesis artifact is iteration-dependent: iter 1-2 produce next-iter direction; iter 3 produces executive summary
-get_synthesis_artifact() {
-  local iter="$1" batch_id="$2"
-  if (( iter == 3 )); then
-    echo "memory/archive/${batch_id}/executive_summary.md"
-  else
-    echo "memory/direction_iter$((iter+1)).md"
-  fi
+# Compute expected artifact path at call time (never from a pre-declared array —
+# bash declare -A evaluates values at declaration time, so ${VERSION_ID} would be empty).
+get_expected_artifact() {
+  local state="$1"
+  local batch_id=$(jq -r '.batch_id' "$STATE_FILE")
+  local iter=$(jq -r '.iteration' "$STATE_FILE")
+  local version_id=$(jq -r '.version_id // empty' "$STATE_FILE")
+  case "$state" in
+    WORKER_RUNNING)            echo "registry/${version_id}/metrics.json" ;;
+    REVIEW_CLAUDE)             echo "reviews/${batch_id}_iter${iter}_claude.md" ;;
+    REVIEW_CODEX)              echo "reviews/${batch_id}_iter${iter}_codex.md" ;;
+    ORCHESTRATOR_PLANNING)     echo "memory/direction_iter${iter}.md" ;;
+    ORCHESTRATOR_SYNTHESIZING)
+      if (( iter == 3 )); then echo "memory/archive/${batch_id}/executive_summary.md"
+      else                     echo "memory/direction_iter$((iter+1)).md"
+      fi ;;
+    *) echo ""; return 1 ;;
+  esac
 }
 
 verify_handoff() {
   local handoff_file="$1" state="$2"
+  local status=$(jq -r '.status' "$handoff_file")
+
+  # Failure handoffs: artifact_path and sha256 are null by design — only require error field
+  if [[ "$status" == "failed" ]]; then
+    local error=$(jq -r '.error // empty' "$handoff_file")
+    [[ -n "$error" ]] || { echo "Failed handoff missing 'error' field"; return 1; }
+    return 0
+  fi
+
+  # Success handoffs: enforce path match + sha256
   local reported_path=$(jq -r '.artifact_path' "$handoff_file")
   local expected_path
-  if [[ "$state" == "ORCHESTRATOR_SYNTHESIZING" ]]; then
-    local iter=$(jq -r '.iteration' "$STATE_FILE")
-    expected_path=$(get_synthesis_artifact "$iter" "$BATCH_ID")
-  else
-    expected_path="${EXPECTED_ARTIFACT_PATTERN[$state]}"
-  fi
+  expected_path=$(get_expected_artifact "$state") || { echo "Unknown state: $state"; return 1; }
   # Step 1: path must match controller-derived expectation (not agent-reported)
   [[ "$reported_path" == "$expected_path" ]] || { echo "Path mismatch: $reported_path != $expected_path"; return 1; }
   # Step 2: hash must match
@@ -781,7 +812,7 @@ Memory is tiered. Each tier trades recency and detail for context size.
 | `index.md` | One-liner per batch: date, versions run, best result, key insight, link |
 | `${batch_id}/executive_summary.md` | Full executive summary from HUMAN_SYNC |
 | `${batch_id}/experiment_log_full.md` | Complete experiment log snapshot at batch end |
-| `${batch_id}/all_critiques.md` | Both reviewer outputs verbatim (not aggregated) |
+| `${batch_id}/all_critiques.md` | Both reviewer outputs verbatim (not aggregated); if Codex failed all 3 iterations, file includes a "Codex unavailable" note instead of missing |
 | `${batch_id}/insights_extracted.md` | What was learned from this batch |
 | `${batch_id}/hypothesis_results.md` | All hypotheses and outcomes |
 
@@ -1043,6 +1074,7 @@ DATA_ROOT="/opt/temp/tmp/pw_data/spice6"
 VENV_ACTIVATE="/home/xyz/workspace/pmodel/.venv/bin/activate"
 SMOKE_TEST=false          # true = synthetic data, no Ray, full loop in <30s
 REGISTRY_DISK_LIMIT_MB=10240
+CODEX_MODEL="gpt-5.3-codex"   # confirm model ID on subscription before first run (Open Decision #1)
 ```
 
 ### 12.2 CLI invocation reference
@@ -1065,12 +1097,23 @@ Codex auth: `codex auth login` or `OPENAI_API_KEY` env var.
 LOCK_FILE="${PROJECT_DIR}/state.lock"
 exec 9>"$LOCK_FILE"
 flock -n 9 || { echo "Pipeline already running. Check state.json."; exit 1; }
+export PIPELINE_LOCKED=1   # guards run_single_iter.sh against direct invocation
 
 current_state=$(jq -r '.state' "${PROJECT_DIR}/state.json")
 if [[ "$current_state" != "IDLE" && "$current_state" != "HUMAN_SYNC" ]]; then
   echo "Cannot start: state is ${current_state}. Wait for IDLE or HUMAN_SYNC."
   exit 1
 fi
+
+# Defensive cleanup: remove stale direction files from any prior crashed batch
+# Orchestrator overwrites them anyway, but this eliminates the staleness window.
+rm -f "${PROJECT_DIR}/memory/direction_iter"*.md
+```
+
+`run_single_iter.sh` guard — prevents direct invocation without the lock:
+```bash
+# Top of run_single_iter.sh
+[[ -n "${PIPELINE_LOCKED:-}" ]] || { echo "ERROR: run_single_iter.sh must be called via run_pipeline.sh"; exit 1; }
 ```
 
 ### 12.4 Smoke test mode
@@ -1126,9 +1169,9 @@ What is tested (1-iteration smoke loop — iteration 1 of 3):
 1. Batch lock acquired (state.lock)
 2. Orchestrator launches, writes direction_iter1.md, writes handoff signal
 3. State transitions IDLE → ORCHESTRATOR_PLANNING → WORKER_RUNNING (CAS verified)
-4. Worker launches in worktree, writes metrics.json, writes changes_summary.md, handoff
-4a. Artifacts synced from worktree to main (registry/${VERSION_ID}/ visible in PROJECT_DIR)
-4b. Worker branch merged into main
+4. Worker launches in worktree, writes metrics.json, writes changes_summary.md, commits, writes handoff
+4a. sha256 of metrics.json verified against worktree branch (before merge)
+4b. Worker branch merged into main — registry/${VERSION_ID}/ and ml/ now visible in PROJECT_DIR via git merge
 5. ml/compare.py runs and produces comparison table
 6. State transitions to REVIEW_CLAUDE
 7. Claude reviewer launches, writes review file, writes handoff

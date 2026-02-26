@@ -1,6 +1,6 @@
 # Verification Plan: Agentic ML Pipeline
 
-**Design doc**: `docs/plans/2026-02-26-agentic-ml-pipeline-design.md` (v9)
+**Design doc**: `docs/plans/2026-02-26-agentic-ml-pipeline-design.md` (v10)
 **Date**: 2026-02-26
 
 This document serves two purposes:
@@ -50,14 +50,11 @@ Document this in the design — either as an export block at the top of `run_sin
 
 **Problem**: The synthesis orchestrator's conditional input contract (worker succeeded vs failed) depends on this env var. If never set, the orchestrator will always take the success path and try to read review/comparison files that don't exist on a failure iteration.
 
-**Required fix**: Add an explicit export step in the iteration flow between 7a and step 16:
-```
-7a. Worker status == "failed": set WORKER_FAILED=1 and export; skip 7b-7d.
-    Worker status == "done": WORKER_FAILED=0 (default).
-...
-16. export WORKER_FAILED; ORCH_SESSION=$(launch_orchestrator.sh --phase synthesize)
-```
-The synthesis prompt reads this env var (or a file flag) to choose its input contract.
+**Required fix**: Two-part fix:
+1. `run_single_iter.sh` step 0: `export WORKER_FAILED=0` (explicit reset each iteration — bash exports persist across loop invocations; "default" is not sufficient)
+2. Step 7a: `export WORKER_FAILED=1` on failure branch before jumping to step 15
+
+`WORKER_FAILED` is then available to the synthesize launcher at step 16 and to the synthesis prompt.
 
 ---
 
@@ -72,10 +69,9 @@ python ml/pipeline.py ... --version-id ${VERSION_ID} ...
 
 **Required fix**: Add to worker prompt step 3:
 ```
-VERSION_ID=$(jq -r '.version_id' "${PROJECT_DIR}/../state.json")
-# Note: state.json is in PROJECT_DIR (the main repo root), not the worktree.
+VERSION_ID=$(jq -r '.version_id' "${PROJECT_DIR}/state.json")
+# PROJECT_DIR is exported by run_single_iter.sh (R2 fix) and available in the worktree shell.
 ```
-(Worktree is at `PROJECT_DIR/.claude/worktrees/iter{N}-{BATCH_ID}/`, so `state.json` is two levels up from the worktree root, or accessible via `${PROJECT_DIR}/state.json` if PROJECT_DIR is exported.)
 
 ---
 
@@ -118,7 +114,9 @@ Before claiming any component is done, verify each item below.
 | `launch_orchestrator.sh` | §5.1 | `while` arg parser; `--phase plan\|synthesize`; stdin redirect; `cd "${PROJECT_DIR}"` |
 | `launch_worker.sh` | §5.2 | `git worktree add`; `cd "${WORKTREE}"`; stdin redirect; `echo "${SESSION}"` |
 | `launch_reviewer_claude.sh` | §5.4 | `cd "${PROJECT_DIR}"`; stdin redirect; Write+Bash tools |
-| `launch_reviewer_codex.sh` | §5.5 | `--sandbox read-only`; absolute `REVIEW_FILE`; absolute `HANDOFF`; `${CODEX_MODEL}` not hardcoded; shell writes handoff JSON |
+| `launch_reviewer_codex.sh` | §5.5 | `--sandbox read-only`; relative path in handoff JSON `artifact_path`; absolute path for file I/O only; `${CODEX_MODEL}` not hardcoded; shell writes handoff JSON |
+| `test_arg_parser.sh` | §3.4 VP | Tests `launch_orchestrator.sh --phase plan`, `--phase=synthesize`, invalid, default; requires `--dry-run` flag in launchers |
+| `test_guards.sh` | §3.5 VP | Tests `PIPELINE_LOCKED` guard (positive + negative); watchdog false-positive guard (3.7) |
 | `state_utils.sh` | §8 | `get_expected_artifact()` (all 5 states, iter 1/2/3); `verify_handoff()` (done/failed branches); CAS read/write helpers |
 | `watchdog.sh` | §11.2 | `STATE_TO_HANDOFF` map (5 entries); immediate crash detection (3 states); elapsed timeout; disk check; audit log |
 | `check_clis.sh` | §13.1 | Sources config.sh; `${CODEX_MODEL}` used |
@@ -157,65 +155,80 @@ Before claiming any component is done, verify each item below.
 
 Each test below has explicit pass/fail criteria. Implement these before the smoke test.
 
+**Required preamble for all shell tests in 3.1–3.7** (run once before executing any test):
+```bash
+# Setup: source utilities, create temp dir as fake project root, seed STATE_FILE
+TMPDIR=$(mktemp -d)
+export PROJECT_DIR="${TMPDIR}"
+export STATE_FILE="${PROJECT_DIR}/state.json"
+source agents/state_utils.sh
+mkdir -p "${TMPDIR}/memory" "${TMPDIR}/registry" "${TMPDIR}/reviews" "${TMPDIR}/handoff"
+```
+Each test then writes to `${TMPDIR}/` and reads `STATE_FILE` from the same location.
+
 ### 3.1 `state_utils.sh test` — `verify_handoff()` cases
 
 ```bash
 # Test 1: done handoff — correct path and sha256
-echo '{"status":"done","artifact_path":"memory/direction_iter1.md","sha256":"<actual>"}' > /tmp/t1.json
-echo "test content" > memory/direction_iter1.md
-SHA=$(sha256sum memory/direction_iter1.md | cut -d' ' -f1)
+echo "test content" > "${PROJECT_DIR}/memory/direction_iter1.md"
+SHA=$(sha256sum "${PROJECT_DIR}/memory/direction_iter1.md" | cut -d' ' -f1)
+echo "{\"state\":\"ORCHESTRATOR_PLANNING\",\"iteration\":1,\"batch_id\":\"b1\",\"version_id\":null}" > "${STATE_FILE}"
 echo "{\"status\":\"done\",\"artifact_path\":\"memory/direction_iter1.md\",\"sha256\":\"${SHA}\"}" > /tmp/t1.json
-# Seed state.json: {"state":"ORCHESTRATOR_PLANNING","iteration":1,"batch_id":"b1","version_id":null}
-verify_handoff /tmp/t1.json ORCHESTRATOR_PLANNING
-# Expected: PASS (exit 0)
+cd "${PROJECT_DIR}" && verify_handoff /tmp/t1.json ORCHESTRATOR_PLANNING
+# Expected: exit 0 (PASS)
 
 # Test 2: done handoff — sha256 mismatch
 echo "{\"status\":\"done\",\"artifact_path\":\"memory/direction_iter1.md\",\"sha256\":\"wrong\"}" > /tmp/t2.json
-verify_handoff /tmp/t2.json ORCHESTRATOR_PLANNING
-# Expected: FAIL (exit nonzero, message "sha256")
+cd "${PROJECT_DIR}" && verify_handoff /tmp/t2.json ORCHESTRATOR_PLANNING
+# Expected: exit nonzero (sha256 mismatch message)
 
 # Test 3: done handoff — path mismatch
 echo "{\"status\":\"done\",\"artifact_path\":\"memory/direction_iter9.md\",\"sha256\":\"x\"}" > /tmp/t3.json
-verify_handoff /tmp/t3.json ORCHESTRATOR_PLANNING
-# Expected: FAIL (exit nonzero, message "Path mismatch")
+cd "${PROJECT_DIR}" && verify_handoff /tmp/t3.json ORCHESTRATOR_PLANNING
+# Expected: exit nonzero ("Path mismatch")
 
 # Test 4: failed handoff — has error field
+echo '{"state":"WORKER_RUNNING","iteration":1,"batch_id":"b1","version_id":"v0001"}' > "${STATE_FILE}"
 echo '{"status":"failed","artifact_path":null,"sha256":null,"error":"pytest failed 3x"}' > /tmp/t4.json
-verify_handoff /tmp/t4.json WORKER_RUNNING
-# Expected: PASS (exit 0) — failed handoffs bypass path/sha check
+cd "${PROJECT_DIR}" && verify_handoff /tmp/t4.json WORKER_RUNNING
+# Expected: exit 0 — failed handoffs bypass path/sha check
 
 # Test 5: failed handoff — missing error field
 echo '{"status":"failed","artifact_path":null,"sha256":null}' > /tmp/t5.json
-verify_handoff /tmp/t5.json WORKER_RUNNING
-# Expected: FAIL (exit nonzero, message "missing 'error'")
+cd "${PROJECT_DIR}" && verify_handoff /tmp/t5.json WORKER_RUNNING
+# Expected: exit nonzero ("missing 'error'")
 
 # Test 6: unknown state
-verify_handoff /tmp/t1.json UNKNOWN_STATE
-# Expected: FAIL (exit nonzero, message "Unknown state")
+cd "${PROJECT_DIR}" && verify_handoff /tmp/t1.json UNKNOWN_STATE
+# Expected: exit nonzero ("Unknown state")
 ```
 
 ### 3.2 `get_expected_artifact()` — all states and iterations
 
 ```bash
-# State: ORCHESTRATOR_PLANNING, iter=1
-# state.json: {"state":"ORCHESTRATOR_PLANNING","iteration":1,"batch_id":"b1","version_id":null}
+echo '{"state":"ORCHESTRATOR_PLANNING","iteration":1,"batch_id":"b1","version_id":null}' > "${STATE_FILE}"
 result=$(get_expected_artifact ORCHESTRATOR_PLANNING)
-[[ "$result" == "memory/direction_iter1.md" ]] || echo "FAIL: $result"
+[[ "$result" == "memory/direction_iter1.md" ]] || echo "FAIL orch_plan iter1: $result"
 
-# State: WORKER_RUNNING, iter=2, version_id=v0007
-# state.json: {"state":"WORKER_RUNNING","iteration":2,"batch_id":"b1","version_id":"v0007"}
+echo '{"state":"WORKER_RUNNING","iteration":2,"batch_id":"b1","version_id":"v0007"}' > "${STATE_FILE}"
 result=$(get_expected_artifact WORKER_RUNNING)
-[[ "$result" == "registry/v0007/metrics.json" ]] || echo "FAIL: $result"
+[[ "$result" == "registry/v0007/metrics.json" ]] || echo "FAIL worker_running: $result"
 
-# State: ORCHESTRATOR_SYNTHESIZING, iter=2 (mid-batch → direction_iter3.md)
-# state.json: {"state":"ORCHESTRATOR_SYNTHESIZING","iteration":2,"batch_id":"b1"}
-result=$(get_expected_artifact ORCHESTRATOR_SYNTHESIZING)
-[[ "$result" == "memory/direction_iter3.md" ]] || echo "FAIL: $result"
+echo '{"state":"REVIEW_CLAUDE","iteration":1,"batch_id":"b1","version_id":"v0007"}' > "${STATE_FILE}"
+result=$(get_expected_artifact REVIEW_CLAUDE)
+[[ "$result" == "reviews/b1_iter1_claude.md" ]] || echo "FAIL review_claude: $result"
 
-# State: ORCHESTRATOR_SYNTHESIZING, iter=3 (HUMAN_SYNC → executive_summary)
-# state.json: {"state":"ORCHESTRATOR_SYNTHESIZING","iteration":3,"batch_id":"batch-20260226-001"}
+echo '{"state":"REVIEW_CODEX","iteration":1,"batch_id":"b1","version_id":"v0007"}' > "${STATE_FILE}"
+result=$(get_expected_artifact REVIEW_CODEX)
+[[ "$result" == "reviews/b1_iter1_codex.md" ]] || echo "FAIL review_codex: $result"
+
+echo '{"state":"ORCHESTRATOR_SYNTHESIZING","iteration":2,"batch_id":"b1","version_id":null}' > "${STATE_FILE}"
 result=$(get_expected_artifact ORCHESTRATOR_SYNTHESIZING)
-[[ "$result" == "memory/archive/batch-20260226-001/executive_summary.md" ]] || echo "FAIL: $result"
+[[ "$result" == "memory/direction_iter3.md" ]] || echo "FAIL synth iter2: $result"
+
+echo '{"state":"ORCHESTRATOR_SYNTHESIZING","iteration":3,"batch_id":"batch-20260226-001","version_id":null}' > "${STATE_FILE}"
+result=$(get_expected_artifact ORCHESTRATOR_SYNTHESIZING)
+[[ "$result" == "memory/archive/batch-20260226-001/executive_summary.md" ]] || echo "FAIL synth iter3: $result"
 ```
 
 ### 3.3 `STATE_TO_HANDOFF` map completeness
@@ -228,75 +241,103 @@ for state in WORKER_RUNNING REVIEW_CLAUDE REVIEW_CODEX ORCHESTRATOR_PLANNING ORC
 done
 # Expected: no FAIL lines
 
-# Spot-check values
+# Spot-check values (all 5 canonical filenames)
+[[ "${STATE_TO_HANDOFF[WORKER_RUNNING]}" == "worker_done.json" ]] || echo "FAIL WORKER_RUNNING"
+[[ "${STATE_TO_HANDOFF[REVIEW_CLAUDE]}" == "claude_reviewer_done.json" ]] || echo "FAIL REVIEW_CLAUDE"
 [[ "${STATE_TO_HANDOFF[REVIEW_CODEX]}" == "codex_reviewer_done.json" ]] || echo "FAIL REVIEW_CODEX"
 [[ "${STATE_TO_HANDOFF[ORCHESTRATOR_PLANNING]}" == "orchestrator_plan_done.json" ]] || echo "FAIL ORCH_PLAN"
+[[ "${STATE_TO_HANDOFF[ORCHESTRATOR_SYNTHESIZING]}" == "orchestrator_synth_done.json" ]] || echo "FAIL ORCH_SYNTH"
 ```
 
 ### 3.4 `launch_orchestrator.sh` arg parser
 
+**Requires `--dry-run` flag in all launch scripts** (must be implemented as part of launch script contract).
+In `--dry-run` mode, each launcher prints the full tmux command it *would* run (including `cd "${PROJECT_DIR}"` and prompt path) to stdout and exits 0 without executing tmux. This is mandatory for test 3.4 and 3.6.
+
 ```bash
 # --phase plan (two-arg style)
-PHASE=$(bash agents/launch_orchestrator.sh --phase plan --dry-run 2>&1 | grep "^PHASE=" | cut -d= -f2)
-[[ "$PHASE" == "plan" ]] || echo "FAIL: two-arg plan: $PHASE"
+PHASE=$(bash agents/launch_orchestrator.sh --phase plan --dry-run | grep "^PHASE=" | cut -d= -f2)
+[[ "$PHASE" == "plan" ]] || echo "FAIL two-arg plan: $PHASE"
 
 # --phase=synthesize (equals style)
-PHASE=$(bash agents/launch_orchestrator.sh --phase=synthesize --dry-run 2>&1 | grep "^PHASE=" | cut -d= -f2)
-[[ "$PHASE" == "synthesize" ]] || echo "FAIL: equals synthesize: $PHASE"
+PHASE=$(bash agents/launch_orchestrator.sh --phase=synthesize --dry-run | grep "^PHASE=" | cut -d= -f2)
+[[ "$PHASE" == "synthesize" ]] || echo "FAIL equals synthesize: $PHASE"
 
 # Invalid phase → exits nonzero
-bash agents/launch_orchestrator.sh --phase invalid 2>/dev/null && echo "FAIL: should reject invalid phase"
+bash agents/launch_orchestrator.sh --phase invalid --dry-run 2>/dev/null; [[ $? -ne 0 ]] || echo "FAIL: should reject invalid phase"
 
 # No args → defaults to plan
-PHASE=$(bash agents/launch_orchestrator.sh --dry-run 2>&1 | grep "^PHASE=" | cut -d= -f2)
-[[ "$PHASE" == "plan" ]] || echo "FAIL: default: $PHASE"
+PHASE=$(bash agents/launch_orchestrator.sh --dry-run | grep "^PHASE=" | cut -d= -f2)
+[[ "$PHASE" == "plan" ]] || echo "FAIL default: $PHASE"
 ```
-*(Requires a `--dry-run` flag that prints `PHASE=...` and exits without launching tmux.)*
 
 ### 3.5 `PIPELINE_LOCKED` guard
 
 ```bash
-# Direct invocation without lock → exits nonzero with "must be called via run_pipeline.sh"
+# Test 1: direct invocation without lock → exits nonzero with error message
 unset PIPELINE_LOCKED
-bash agents/run_single_iter.sh 2>&1 | grep -q "must be called via" || echo "FAIL: guard not triggered"
+OUTPUT=$(bash agents/run_single_iter.sh 2>&1); EXIT=$?
+[[ $EXIT -ne 0 ]] || echo "FAIL: should exit nonzero"
+echo "$OUTPUT" | grep -q "must be called via" || echo "FAIL: wrong error message: $OUTPUT"
 
-# Via run_pipeline.sh (PIPELINE_LOCKED exported) → guard passes, reaches next check
+# Test 2: with PIPELINE_LOCKED exported → guard passes, reaches next check (state.lock or CAS)
 export PIPELINE_LOCKED=1
-bash agents/run_single_iter.sh 2>&1 | grep -v "must be called via" || echo "FAIL: guard fires when locked"
+OUTPUT=$(bash agents/run_single_iter.sh 2>&1); EXIT=$?
+echo "$OUTPUT" | grep -q "must be called via" && echo "FAIL: guard fired when PIPELINE_LOCKED=1"
+# (exit code may be nonzero due to other checks — that's OK; we only verify the guard message is absent)
 ```
 
 ### 3.6 CWD independence of agent launchers
 
 ```bash
-# Launch scripts invoked from /tmp must still write artifacts under PROJECT_DIR
+# --dry-run prints the full tmux command string to stdout; we grep for cd "${PROJECT_DIR}"
+export BATCH_ID=test-cwd N=1 VERSION_ID=v0001
 cd /tmp
-BATCH_ID=test-cwd N=1 VERSION_ID=v0001 bash "${PROJECT_DIR}/agents/launch_reviewer_claude.sh" --dry-run
-# Verify: session command contains "cd \"${PROJECT_DIR}\"" as first token after tmux
-# Verify: REVIEW_FILE in Codex launch resolves to ${PROJECT_DIR}/reviews/... (absolute path)
+
+# Claude reviewer: must start with cd PROJECT_DIR
+CMD=$(bash "${PROJECT_DIR}/agents/launch_reviewer_claude.sh" --dry-run)
+echo "$CMD" | grep -q "cd \"${PROJECT_DIR}\"" || echo "FAIL reviewer_claude: missing PROJECT_DIR cd"
+
+# Codex reviewer: handoff artifact_path in jq command must be REVIEW_FILE_REL (relative, not absolute)
+CMD=$(bash "${PROJECT_DIR}/agents/launch_reviewer_codex.sh" --dry-run)
+echo "$CMD" | grep -q '"path" "reviews/' || echo "FAIL reviewer_codex: artifact_path not relative"
+echo "$CMD" | grep -q "${PROJECT_DIR}/reviews/" && echo "FAIL reviewer_codex: absolute path leaked into jq --arg path"
 ```
 
 ### 3.7 Watchdog false-positive guard
 
 ```bash
-# Scenario: agent has completed (handoff file exists) but tmux session already exited
+# Scenario: agent completed (handoff exists) but tmux session already exited
 # Watchdog must NOT write a timeout/crash artifact
-mkdir -p handoff/b1/iter1
-echo '{"status":"done"}' > handoff/b1/iter1/worker_done.json
-# Set state.json: state=WORKER_RUNNING, entered_at=1 hour ago
-# Kill tmux session "worker-b1-iter1" (or don't create it)
-bash agents/watchdog.sh
-[[ ! -f "handoff/b1/iter1/timeout_WORKER_RUNNING.json" ]] || echo "FAIL: false crash artifact created"
+mkdir -p "${PROJECT_DIR}/handoff/b1/iter1"
+echo '{"status":"done"}' > "${PROJECT_DIR}/handoff/b1/iter1/worker_done.json"
+# entered_at = 1 hour ago in ISO 8601 (watchdog uses `date -d` to parse)
+HOUR_AGO=$(date -u -d "1 hour ago" +%Y-%m-%dT%H:%M:%SZ)
+echo "{\"state\":\"WORKER_RUNNING\",\"iteration\":1,\"batch_id\":\"b1\",\"entered_at\":\"${HOUR_AGO}\",\"max_seconds\":1800,\"worker_tmux\":\"\"}" \
+  > "${PROJECT_DIR}/state.json"
+# No tmux session named "" — SESSION_ALIVE will be false
+cd "${PROJECT_DIR}" && bash agents/watchdog.sh
+[[ ! -f "${PROJECT_DIR}/handoff/b1/iter1/timeout_WORKER_RUNNING.json" ]] \
+  || echo "FAIL: false crash artifact written"
 ```
 
-### 3.8 `populate_v0_gates.py` — idempotency and correctness
+### 3.8 `populate_v0_gates.py` — idempotency and direction correctness
 
 ```python
-# Test 1: populates pending_v0: true entries from v0 metrics
-v0_metrics = {"S1-AUC": 0.695, "S1-VCAP@100": 0.412, "S1-BRIER": 0.089, ...}
-# After populate: S1-VCAP@100 floor = 0.412 - 0.05 = 0.362; pending_v0 = false
-# After second run (no pending entries): gates.json unchanged (idempotent)
+# Test 1: higher-direction metric (VCAP@100) — floor = v0 - offset
+# v0 S1-VCAP@100 = 0.412, offset = 0.05 → expected floor = 0.362
+# After populate: gates.json S1-VCAP@100 floor == 0.362, pending_v0 == false
 
-# Test 2: aborts cleanly if registry/v0/metrics.json does not exist
+# Test 2: lower-direction metric (BRIER) — floor = v0 + offset
+# v0 S1-BRIER = 0.089, offset = 0.02 → expected floor = 0.109
+# (Not 0.069 — lower-direction gates relax upward, not down)
+# After populate: gates.json S1-BRIER floor == 0.109, pending_v0 == false
+
+# Test 3: idempotency — re-run with no pending_v0: true entries
+# Expected: gates.json unchanged after second run
+
+# Test 4: missing v0 — aborts cleanly
+# Delete registry/v0/metrics.json, run populate_v0_gates.py
 # Expected: exits nonzero, no partial writes to gates.json
 ```
 
@@ -304,15 +345,19 @@ v0_metrics = {"S1-AUC": 0.695, "S1-VCAP@100": 0.412, "S1-BRIER": 0.089, ...}
 
 ```bash
 # Inject a failed worker handoff
+mkdir -p "${PROJECT_DIR}/handoff/b1/iter1"
 echo '{"status":"failed","error":"pytest failed 3x","artifact_path":null,"sha256":null}' \
-  > handoff/b1/iter1/worker_done.json
-# Run synthesis step with WORKER_FAILED=1
+  > "${PROJECT_DIR}/handoff/b1/iter1/worker_done.json"
 export WORKER_FAILED=1 BATCH_ID=b1 N=1
 bash agents/launch_orchestrator.sh --phase synthesize
-# Assert: synthesis prompt reads handoff + memory/hot/ + memory/warm/ only
-# Assert: no attempt to read reviews/ or reports/ (files don't exist)
-# Assert: orchestrator_synth_done.json written successfully
-# Assert: direction_iter2.md written (not empty)
+# Observable assertions (no strace needed):
+# 1. handoff/b1/iter1/orchestrator_synth_done.json exists with status "done"
+[[ -f "${PROJECT_DIR}/handoff/b1/iter1/orchestrator_synth_done.json" ]] || echo "FAIL: synth handoff missing"
+# 2. direction_iter2.md written and non-empty
+[[ -s "${PROJECT_DIR}/memory/direction_iter2.md" ]] || echo "FAIL: direction_iter2.md missing or empty"
+# 3. reviews/ and reports/ NOT created (they don't exist in failure path)
+[[ ! -d "${PROJECT_DIR}/reviews" ]] || [[ -z "$(ls "${PROJECT_DIR}/reviews/" 2>/dev/null)" ]] \
+  || echo "FAIL: reviews/ written on failure path"
 ```
 
 ### 3.10 Codex timeout → Claude-only degradation path
@@ -378,8 +423,9 @@ Additional assertions over 1-iter:
 SMOKE_TEST=true bash agents/test_pipeline_integrity.sh --inject-worker-failure
 ```
 Assertions:
-- Steps 7b–7d skipped (no merge, no comparison)
-- Synthesis runs and reaches `direction_iter2.md` (or exits HUMAN_SYNC if iter 3)
+- Step 7a: trace log message "Skipping steps 7b-7d: WORKER_FAILED" visible in output (add this log to run_single_iter.sh)
+- Steps 7b–7d skipped (no merge, no comparison table in `reports/`)
+- Synthesis runs and `direction_iter2.md` exists (or `executive_summary.md` if iter 3)
 - `memory/hot/progress.md` contains failure note
 - No crash of run_single_iter.sh — pipeline completes iteration normally
 
@@ -427,11 +473,15 @@ When any smoke test assertion fails, determine root cause before touching code:
 
 Before running the first real (non-smoke) batch:
 
-- [ ] R1 resolved: `registry/v0/` created with real data; guard in `run_pipeline.sh` verified
-- [ ] R2 resolved: `BATCH_ID`, `N`, `VERSION_ID` exported in `run_single_iter.sh`
-- [ ] R3 resolved: `WORKER_FAILED` set in step 7a of `run_single_iter.sh`
-- [ ] R4 resolved: worker prompt explicitly instructs `VERSION_ID=$(jq -r .version_id ${PROJECT_DIR}/state.json)`
-- [ ] R5 resolved: `check_clis.sh` uses `${CODEX_MODEL}`
+- [ ] R1 resolved: `registry/v0/` created by running `ml/pipeline.py --version-id v0`; guard in `run_pipeline.sh` verified
+- [ ] R2 resolved: `BATCH_ID`, `N`, `VERSION_ID`, `PROJECT_DIR` exported in `run_single_iter.sh` step 0
+- [ ] R3 resolved: `export WORKER_FAILED=0` at step 0; `export WORKER_FAILED=1` at step 7a failure branch
+- [ ] R4 resolved: worker prompt instructs `VERSION_ID=$(jq -r .version_id "${PROJECT_DIR}/state.json")`
+- [ ] R5 resolved: `check_clis.sh` uses `${CODEX_MODEL}` (not hardcoded)
+- [ ] `--dry-run` flag implemented in `launch_orchestrator.sh`, `launch_reviewer_claude.sh`, `launch_reviewer_codex.sh`
+- [ ] `test_arg_parser.sh` and `test_guards.sh` created in `agents/`
+- [ ] `populate_v0_gates.py` handles lower-direction gates correctly (Brier: floor = v0 + offset, not v0 - offset)
+- [ ] `run_single_iter.sh` step 7a logs "Skipping steps 7b-7d: WORKER_FAILED" for observability (Tier 4)
 - [ ] Codex model ID confirmed on subscription (Open Decision #1)
 - [ ] `check_clis.sh` passes (Tier 0)
 - [ ] All Tier 1 shell unit tests pass
@@ -439,5 +489,5 @@ Before running the first real (non-smoke) batch:
 - [ ] Tier 3 (3-iter smoke) passes — `HUMAN_SYNC` reached and exited cleanly
 - [ ] Tier 4 (worker failure path) passes
 - [ ] Tier 5 (Codex degradation) passes
-- [ ] `registry/v0/metrics.json` reviewed; gate floors after `populate_v0_gates.py` look sane
+- [ ] `registry/v0/metrics.json` reviewed; gate floors after `populate_v0_gates.py` look sane (especially Brier direction)
 - [ ] HUMAN_SYNC notification mechanism decided (Open Decision #4)

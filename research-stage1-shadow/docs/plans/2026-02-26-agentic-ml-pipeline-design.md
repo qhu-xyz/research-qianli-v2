@@ -1,7 +1,7 @@
 # Design: Agentic ML Research Pipeline for Shadow Price Classification
 
 **Date**: 2026-02-26
-**Version**: v9 (fixes shell injection in launches, gate auto-population, Codex prompt divergence, status-aware handoff verify, lock guard, CWD anchoring, dynamic artifact paths, sha256-before-merge)
+**Version**: v10 (v9 fixes + Codex handoff relative paths, reviewer_codex.md spec, WORKER_FAILED reset, handoff dir creation, run_pipeline.sh loop spec, v0 baseline clarification)
 **Author**: Claude (brainstorming session with user)
 
 ---
@@ -468,11 +468,14 @@ This is enforced in the reviewer prompt's WHEN DONE section.
 **Launch** (corrected — `codex exec` has no `-o` flag; stdout redirect used):
 ```bash
 SESSION="rev-codex-${BATCH_ID}-iter${N}"
-# Absolute paths: Codex wrapper runs in shell whose CWD may not be PROJECT_DIR
-REVIEW_FILE="${PROJECT_DIR}/reviews/${BATCH_ID}_iter${N}_codex.md"
-HANDOFF="${PROJECT_DIR}/handoff/${BATCH_ID}/iter${N}/codex_reviewer_done.json"
+# Relative paths for JSON (must match verify_handoff() get_expected_artifact() output).
+# Absolute paths used only for actual file I/O — CWD of the tmux wrapper may vary.
+REVIEW_FILE_REL="reviews/${BATCH_ID}_iter${N}_codex.md"
+REVIEW_FILE_ABS="${PROJECT_DIR}/${REVIEW_FILE_REL}"
+HANDOFF_REL="handoff/${BATCH_ID}/iter${N}/codex_reviewer_done.json"
+HANDOFF_ABS="${PROJECT_DIR}/${HANDOFF_REL}"
 # reviewer_codex.md MUST instruct Codex to print the full review to stdout (not write a file).
-# --sandbox read-only means Codex cannot write files; the shell wrapper captures stdout into REVIEW_FILE.
+# --sandbox read-only means Codex cannot write files; the shell wrapper captures stdout into REVIEW_FILE_ABS.
 # This is intentionally different from reviewer_claude.md which instructs Claude to write a file directly.
 tmux new-session -d -s "${SESSION}" \
   "codex exec \
@@ -482,19 +485,19 @@ tmux new-session -d -s "${SESSION}" \
     --full-auto \
     -C ${PROJECT_DIR} \
     \"$(cat ${PROJECT_DIR}/agents/prompts/reviewer_codex.md)\" \
-    > ${REVIEW_FILE} 2>&1 && \
-   SHA=\$(sha256sum ${REVIEW_FILE} | cut -d' ' -f1) && \
+    > ${REVIEW_FILE_ABS} 2>&1 && \
+   SHA=\$(sha256sum ${REVIEW_FILE_ABS} | cut -d' ' -f1) && \
    jq -n \
      --arg agent codex_reviewer \
      --arg producer codex_reviewer \
      --arg batch ${BATCH_ID} \
      --arg iter ${N} \
      --arg vid ${VERSION_ID} \
-     --arg path ${REVIEW_FILE} \
+     --arg path \"${REVIEW_FILE_REL}\" \
      --arg sha \"\$SHA\" \
      --arg ts \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \
      '{agent:\$agent,producer:\$producer,batch_id:\$batch,iteration:(\$iter|tonumber),version_id:\$vid,artifact_path:\$path,sha256:\$sha,created_at:\$ts,status:\"done\"}' \
-     > ${HANDOFF}"
+     > ${HANDOFF_ABS}"
 echo "${SESSION}"  # controller writes codex_reviewer_tmux to state.json
 ```
 
@@ -536,8 +539,13 @@ Your interactive Claude Code session does NOT become the orchestrator. It:
 ### 6.2 Single iteration flow (run_single_iter.sh)
 
 ```
+0. Export shared vars (available to all child scripts):
+   export BATCH_ID N VERSION_ID PROJECT_DIR
+   export WORKER_FAILED=0   # explicit reset each iteration — bash exports persist across loop iterations
 1. Acquire state.lock (flock). Verify state == expected_state (CAS check).
-2. Set state = ORCHESTRATOR_PLANNING, entered_at = now, max_seconds = 600
+2. Set state = ORCHESTRATOR_PLANNING, entered_at = now, max_seconds = 600.
+   Create handoff directory for this iteration (before any agent can write to it):
+   mkdir -p "${PROJECT_DIR}/handoff/${BATCH_ID}/iter${N}"
 3. ORCH_SESSION=$(launch_orchestrator.sh --phase plan); write orchestrator_tmux to state.json (controller-owned write)
 4. Poll for handoff/.../orchestrator_plan_done.json (30s interval, timeout = max_seconds)
 5. Verify sha256 of direction_iter{N}.md.
@@ -546,7 +554,9 @@ Your interactive Claude Code session does NOT become the orchestrator. It:
    CAS: state = WORKER_RUNNING, max_s = 1800.
 6. WORKER_SESSION=$(launch_worker.sh); write worker_tmux to state.json (controller-owned write)
 7. Poll for handoff/.../worker_done.json
-7a. On worker_done status "failed": skip 7b-7d, transition to ORCHESTRATOR_SYNTHESIZING (see failure handling).
+7a. Read worker_done.json status.
+    If "failed": export WORKER_FAILED=1; skip 7b-7d, transition directly to step 15 (ORCHESTRATOR_SYNTHESIZING).
+    If "done":   WORKER_FAILED remains 0 (already reset in step 0); continue to 7b.
 7b. Verify worker committed (branch head must differ from main HEAD — else fail fast):
     MAIN_HEAD=$(git -C "${PROJECT_DIR}" rev-parse HEAD)
     BRANCH_HEAD=$(git -C "${PROJECT_DIR}" rev-parse "iter${N}-${BATCH_ID}")
@@ -630,6 +640,20 @@ F1, F-beta (β=2.0), CAP@250, CAP@1000, VCAP@250.
 After v0 runs, the controller auto-populates v0-relative floors in `gates.json` (one-time
 initialization). Until then, v0-relative floors are `null` with `"pending_v0": true`.
 No candidate can be promoted until all `null` floors are resolved.
+
+**v0 baseline creation** (one-time bootstrap, before any pipeline run):
+`registry/v0/` is created by re-training with the **source repo's config** using the ported
+pipeline code. This produces a config-equivalent baseline without copying pre-trained weights:
+```bash
+python ml/pipeline.py --version-id v0 --auction-month 2021-07 --class-type onpeak \
+  --period-type f0
+```
+Set `random_state` in `ml/config.py` to a fixed seed so v0 is reproducible. Minor metric
+deviations from the source repo's historical result are expected and acceptable — v0 is the
+new reference point for all gate floors in this pipeline.
+
+**`run_pipeline.sh` guard**: `run_pipeline.sh` aborts if `registry/v0/metrics.json` is absent
+(see Section 12.3 loop sketch).
 
 **Explicit assignment**: `run_pipeline.sh` calls `python ml/populate_v0_gates.py` before
 launching iteration 1 of the very first batch. This script reads `registry/v0/metrics.json`,
@@ -946,6 +970,52 @@ CONSTRAINTS:
 - Enforcement of gate changes requires human approval at HUMAN_SYNC
 ```
 
+This is `reviewer_claude.md` — Claude writes files directly and computes sha256 itself.
+
+### 10.4 Codex reviewer prompt — structure (`reviewer_codex.md`)
+
+**Diverged from `reviewer_claude.md`**: Codex runs in `--sandbox read-only` and cannot write
+files. The shell wrapper captures stdout and writes the review file and handoff JSON on Codex's
+behalf. The prompt must NOT instruct Codex to write files.
+
+```
+IDENTITY: You are a Reviewer for an ML research pipeline.
+
+READ:
+- memory/direction_iter{N}.md (what was supposed to happen)
+- registry/${VERSION_ID}/changes_summary.md (worker's self-report)
+- reports/{batch_id}_iter{N}_comparison.md (cross-version table — primary reference)
+- registry/${VERSION_ID}/metrics.json (raw metrics)
+- registry/gates.json (current gate definitions)
+- memory/hot/gate_calibration.md (prior gate assessments across batches)
+- memory/warm/experiment_log.md (full history of versions and outcomes)
+- memory/warm/decision_log.md (why this change was chosen)
+- ml/ codebase (for code quality review)
+
+DO NOT read the other reviewer's output — reviews must be fully independent.
+
+REVIEW (all six sections are mandatory):
+1. Implementation Fidelity: worker did what orchestrator asked?
+2. Results Analysis: cross-version trends, anomalies in the comparison table
+3. Gate Calibration: for each gate — too strict / too loose / appropriate?
+   Suggest specific adjustments (enforcement deferred to HUMAN_SYNC)
+4. Architecture and Code Quality
+5. Suggestions for Next Iteration (ranked)
+6. Verdict: PASS / PASS_WITH_NOTES / FAIL
+
+WHEN DONE:
+Print the full review to stdout in the format above. Do NOT write any files.
+The shell wrapper that launched you will capture your stdout and write:
+  - reviews/{batch_id}_iter{N}_codex.md
+  - handoff/{batch_id}/iter{N}/codex_reviewer_done.json
+You do not need to take any file-write action.
+
+CONSTRAINTS:
+- Do NOT write any files (sandbox is read-only)
+- You MAY freely critique gates as stale, insufficient, or miscalibrated
+- Enforcement of gate changes requires human approval at HUMAN_SYNC
+```
+
 ---
 
 ## 11. Watchdog / Cron Job
@@ -1116,6 +1186,54 @@ rm -f "${PROJECT_DIR}/memory/direction_iter"*.md
 [[ -n "${PIPELINE_LOCKED:-}" ]] || { echo "ERROR: run_single_iter.sh must be called via run_pipeline.sh"; exit 1; }
 ```
 
+**`run_pipeline.sh` iteration loop** (full sketch):
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+source "${PROJECT_DIR}/agents/config.sh"
+
+# --- Batch setup ---
+BATCH_NAME="${1:---batch-$(date +%Y%m%d-%H%M%S)}"   # optional name arg
+BATCH_ID="batch-$(date +%Y%m%d-%H%M%S)"
+export PROJECT_DIR BATCH_ID
+
+# --- Acquire lock ---
+LOCK_FILE="${PROJECT_DIR}/state.lock"
+exec 9>"$LOCK_FILE"
+flock -n 9 || { echo "Pipeline already running. Check state.json."; exit 1; }
+export PIPELINE_LOCKED=1
+
+# --- Pre-run checks ---
+current_state=$(jq -r '.state' "${PROJECT_DIR}/state.json")
+if [[ "$current_state" != "IDLE" && "$current_state" != "HUMAN_SYNC" ]]; then
+  echo "Cannot start: state is ${current_state}. Wait for IDLE or HUMAN_SYNC."
+  exit 1
+fi
+
+# Guard: v0 baseline must exist before any iteration runs
+[[ -f "${PROJECT_DIR}/registry/v0/metrics.json" ]] \
+  || { echo "ERROR: registry/v0/metrics.json not found. Run baseline extraction first."; exit 1; }
+
+# Defensive cleanup: remove stale direction files from any prior crashed batch
+rm -f "${PROJECT_DIR}/memory/direction_iter"*.md
+
+# Populate v0-relative gate floors (idempotent — no-op if already populated)
+python "${PROJECT_DIR}/ml/populate_v0_gates.py"
+
+# --- 3-iteration loop ---
+for N in 1 2 3; do
+  export N
+  echo "=== Starting iteration ${N} of 3 (batch: ${BATCH_ID}) ==="
+  bash "${PROJECT_DIR}/agents/run_single_iter.sh"
+
+  # After iter 3, state will be HUMAN_SYNC — break
+  current_state=$(jq -r '.state' "${PROJECT_DIR}/state.json")
+  [[ "$current_state" == "HUMAN_SYNC" ]] && break
+done
+
+echo "=== Batch ${BATCH_ID} complete. State: $(jq -r '.state' "${PROJECT_DIR}/state.json") ==="
+```
+
 ### 12.4 Smoke test mode
 
 When `SMOKE_TEST=true` in `config.sh`:
@@ -1157,7 +1275,7 @@ result=$(claude -p "Reply with exactly: CLAUDE_OK" --model opus 2>&1)
 [[ "$result" == *"CLAUDE_OK"* ]] && echo "Claude: OK" || { echo "Claude: FAIL — $result"; exit 1; }
 
 echo "=== Checking Codex CLI ==="
-result=$(codex exec -m gpt-5.3-codex -s read-only --full-auto \
+result=$(codex exec -m ${CODEX_MODEL} -s read-only --full-auto \
   "Print exactly the text: CODEX_OK and nothing else" 2>&1)
 [[ "$result" == *"CODEX_OK"* ]] && echo "Codex: OK" || { echo "Codex: FAIL — $result"; exit 1; }
 

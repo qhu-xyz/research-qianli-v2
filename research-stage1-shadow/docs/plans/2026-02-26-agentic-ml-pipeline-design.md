@@ -1137,6 +1137,11 @@ XGBoost `.ubj` models for minimal slice: ~1–5 MB per version (gzipped ~0.5–1
 
 ## 13. Pipeline Integrity Testing
 
+> **See also**: [`docs/plans/2026-02-26-verification-plan.md`](2026-02-26-verification-plan.md) —
+> comprehensive verification spec: final design review findings (R1–R5), explicit unit test
+> assertions for every shell contract, integration smoke test tiers, failure triage protocol,
+> and pre-run checklist.
+
 Before the first real batch, and after any infrastructure change, run the integrity
 test suite to validate each component works end-to-end.
 

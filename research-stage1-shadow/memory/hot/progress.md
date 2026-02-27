@@ -1,10 +1,10 @@
 # Progress
 
-## Current Batch: smoke-v4-20260227-183323
+## Current Batch: smoke-v5-20260227-184427
 
 | Field | Value |
 |-------|-------|
-| Batch ID | smoke-v4-20260227-183323 |
+| Batch ID | smoke-v5-20260227-184427 |
 | Iteration | 1 of 3 |
 | State | ORCHESTRATOR_PLANNING → direction written |
 | Objective | Infrastructure validation (SMOKE_TEST) |

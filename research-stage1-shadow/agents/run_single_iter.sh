@@ -87,20 +87,24 @@ else
 fi
 
 if (( WORKER_FAILED == 0 )); then
-  # Step 7b: verify worker committed
-  # Step 7c: sha256 verify (artifact is in worktree, not main tree — cd there first)
+  # RT-8: Compute worktree project subdir (monorepo: git root != PROJECT_DIR)
   WT_DIR="${PROJECT_DIR}/.claude/worktrees/iter${N}-${BATCH_ID}"
-  if [[ -d "$WT_DIR" ]]; then
-    pushd "$WT_DIR" > /dev/null
+  REPO_PREFIX=$(cd "$PROJECT_DIR" && git rev-parse --show-prefix)
+  WT_PROJECT="${WT_DIR}/${REPO_PREFIX%/}"
+
+  # Step 7b: verify worker committed
+  # Step 7c: sha256 verify (artifact is in worktree's project subdir, not main tree)
+  if [[ -d "$WT_PROJECT" ]]; then
+    pushd "$WT_PROJECT" > /dev/null
     verify_handoff "${HANDOFF_DIR}/worker_done.json" "WORKER_RUNNING"
     popd > /dev/null
   fi
 
   # Step 7d: pre-merge guard for HUMAN-WRITE-ONLY files + merge worktree
-  if [[ -d "$WT_DIR" ]]; then
+  if [[ -d "$WT_PROJECT" ]]; then
     # Check HUMAN-WRITE-ONLY files unchanged
     for protected in "ml/evaluate.py" "registry/gates.json"; do
-      if ! diff -q "${PROJECT_DIR}/${protected}" "${WT_DIR}/${protected}" >/dev/null 2>&1; then
+      if ! diff -q "${PROJECT_DIR}/${protected}" "${WT_PROJECT}/${protected}" >/dev/null 2>&1; then
         echo "ERROR: worker modified HUMAN-WRITE-ONLY file: $protected" >&2
         WORKER_FAILED=1
         break

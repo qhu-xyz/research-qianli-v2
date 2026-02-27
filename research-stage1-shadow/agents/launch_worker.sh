@@ -38,8 +38,12 @@ fi
 cd "$PROJECT_DIR"
 git worktree add "$WT_DIR" -b "$WT_BRANCH" 2>/dev/null || git worktree add "$WT_DIR" "$WT_BRANCH" 2>/dev/null || true
 
-# Worker runs in worktree but needs PROJECT_DIR for absolute path access
-TMUX_CMD="cd '${WT_DIR}' && export PROJECT_DIR='${PROJECT_DIR}' && export PYTHONPATH='${WT_DIR}' && export SMOKE_TEST='${SMOKE_TEST}' && source '${VENV_ACTIVATE}' && claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+# RT-8: Compute worktree project subdir (monorepo: git root != PROJECT_DIR)
+REPO_PREFIX=$(git rev-parse --show-prefix)  # e.g. "research-stage1-shadow/"
+WT_PROJECT="${WT_DIR}/${REPO_PREFIX%/}"      # worktree's project subdirectory
+
+# Worker runs in worktree's project subdir, needs PROJECT_DIR for absolute path access
+TMUX_CMD="cd '${WT_PROJECT}' && export PROJECT_DIR='${PROJECT_DIR}' && export PYTHONPATH='${WT_PROJECT}' && export SMOKE_TEST='${SMOKE_TEST}' && source '${VENV_ACTIVATE}' && claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"
-echo "[launch_worker] Started session: $SESSION (worktree=$WT_DIR, log=$LOG)"
+echo "[launch_worker] Started session: $SESSION (worktree=$WT_PROJECT, log=$LOG)"

@@ -913,6 +913,8 @@ Key: flock, PIPELINE_LOCKED, v0 guard, populate_v0_gates.py, `export N` inside t
 
 **Runtime fix RT-7**: All implementation code (`ml/`, `agents/`, `registry/`, `CLAUDE.md`, `.gitignore`, etc.) MUST be committed to git before running the pipeline. Worker worktrees are created from HEAD — if files are untracked, they don't exist in the worktree, and merging the worker branch back fails with "untracked working tree files would be overwritten by merge." Also add `__pycache__/` and `*.pyc` to `.gitignore` to prevent pycache conflicts during merge.
 
+**Runtime fix RT-8**: Monorepo worktree subdir fix. The git repo root is `/home/xyz/workspace/research-qianli-v2` but PROJECT_DIR is the subdirectory `research-stage1-shadow`. `git worktree add` creates a checkout of the entire repo. The worker needs to `cd` into `${WT_DIR}/research-stage1-shadow/` (not `${WT_DIR}`), and PYTHONPATH must point there. Similarly, `verify_handoff`, `diff` checks, and `git merge` must use `WT_PROJECT="${WT_DIR}/$(git rev-parse --show-prefix)"` for file references. Without this fix, sha256 verification fails (wrong cwd), diff checks fail (wrong paths), and the worker can't find `ml/` modules.
+
 Pre-loop HUMAN_SYNC reset (CB-4 fix): if the current state is HUMAN_SYNC (starting a new batch after a completed 3-iteration batch), reset to IDLE before entering the loop:
 ```bash
 if [[ "$current_state" == "HUMAN_SYNC" ]]; then

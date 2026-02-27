@@ -911,6 +911,8 @@ Key: flock, PIPELINE_LOCKED, v0 guard, populate_v0_gates.py, `export N` inside t
 
 **Runtime fix RT-6**: Validate all handoff JSON files with `jq empty` before parsing. If the orchestrator or worker writes malformed JSON, the pipeline should fail gracefully (reset state to IDLE with error) instead of crashing with a jq parse error under `set -e`.
 
+**Runtime fix RT-7**: All implementation code (`ml/`, `agents/`, `registry/`, `CLAUDE.md`, `.gitignore`, etc.) MUST be committed to git before running the pipeline. Worker worktrees are created from HEAD — if files are untracked, they don't exist in the worktree, and merging the worker branch back fails with "untracked working tree files would be overwritten by merge." Also add `__pycache__/` and `*.pyc` to `.gitignore` to prevent pycache conflicts during merge.
+
 Pre-loop HUMAN_SYNC reset (CB-4 fix): if the current state is HUMAN_SYNC (starting a new batch after a completed 3-iteration batch), reset to IDLE before entering the loop:
 ```bash
 if [[ "$current_state" == "HUMAN_SYNC" ]]; then

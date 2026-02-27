@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "effective_since": "2026-02-26",
+  "noise_tolerance": 0.02,
+  "gates": {
+    "S1-AUC": {
+      "floor": 0.65,
+      "direction": "higher",
+      "pending_v0": false
+    },
+    "S1-AP": {
+      "floor": 0.12,
+      "direction": "higher",
+      "pending_v0": false
+    },
+    "S1-VCAP@100": {
+      "floor": 0.95,
+      "direction": "higher",
+      "pending_v0": false,
+      "v0_offset": 0.05
+    },
+    "S1-VCAP@500": {
+      "floor": 0.95,
+      "direction": "higher",
+      "pending_v0": false,
+      "v0_offset": 0.05
+    },
+    "S1-VCAP@1000": {
+      "floor": 0.95,
+      "direction": "higher",
+      "pending_v0": false,
+      "v0_offset": 0.05
+    },
+    "S1-NDCG": {
+      "floor": 0.4544,
+      "direction": "higher",
+      "pending_v0": false,
+      "v0_offset": 0.05
+    },
+    "S1-BRIER": {
+      "floor": 0.2221,
+      "direction": "lower",
+      "pending_v0": false,
+      "v0_offset": 0.02
+    },
+    "S1-REC": {
+      "floor": 0.4,
+      "direction": "higher",
+      "pending_v0": false,
+      "group": "B"
+    },
+    "S1-CAP@100": {
+      "floor": -0.05,
+      "direction": "higher",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "group": "B"
+    },
+    "S1-CAP@500": {
+      "floor": -0.05,
+      "direction": "higher",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "group": "B"
+    }
+  }
+}

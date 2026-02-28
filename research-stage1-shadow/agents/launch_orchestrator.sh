@@ -40,10 +40,13 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 # Build the tmux command with full env setup
+# RT-12: timeout wrapper = OS-level hard kill if agent loops forever
 if [[ "$PHASE" == "synthesize" ]]; then
-  TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && { echo 'WORKER_FAILED=${WORKER_FAILED:-0}'; cat '${PROMPT}'; } | claude --print --model opus --dangerously-skip-permissions > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+  HARD_TIMEOUT="${TIMEOUT_SYNTHESIZER}"
+  TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && { echo 'WORKER_FAILED=${WORKER_FAILED:-0}'; cat '${PROMPT}'; } | timeout ${HARD_TIMEOUT} claude --print --model opus --dangerously-skip-permissions > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 else
-  TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+  HARD_TIMEOUT="${TIMEOUT_ORCHESTRATOR}"
+  TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${HARD_TIMEOUT} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 fi
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"

@@ -42,9 +42,10 @@ echo "$PROMPT_TEXT" > "$PROMPT_FILE"
 
 # RT-9: Codex needs workspace-write to create handoff/review files (read-only prevents writes)
 # RT-10: Use --full-auto so Codex doesn't wait for interactive approvals in tmux
+# RT-12: timeout wrapper = OS-level hard kill if agent loops forever
 # Source venv so any Python commands Codex runs have correct environment
 # Codex needs the prompt as a positional argument; use the file content
-TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && codex exec --model '${CODEX_MODEL}' --full-auto \"\$(cat '${PROMPT_FILE}')\" > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_REVIEWER_CODEX} codex exec --model '${CODEX_MODEL}' --full-auto \"\$(cat '${PROMPT_FILE}')\" > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"
 echo "[launch_reviewer_codex] Started session: $SESSION (log=$LOG)"

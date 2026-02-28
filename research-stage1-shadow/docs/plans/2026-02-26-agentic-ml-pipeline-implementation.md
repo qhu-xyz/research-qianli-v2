@@ -919,6 +919,11 @@ Key: flock, PIPELINE_LOCKED, v0 guard, populate_v0_gates.py, `export N` inside t
 
 **Runtime fix RT-11**: `run_pipeline.sh` auto-wraps itself in a detached tmux session by default, so the user can close their terminal and the pipeline keeps running. Prints the session name, attach command, and log path on launch. Use `--foreground` to skip tmux wrapping (e.g., when already inside tmux or for debugging).
 
+**Runtime fix RT-12**: Defense against agent infinite loops and orphaned sessions.
+- **OS-level `timeout` wrapper**: Every agent command (`claude --print`, `codex exec`) is wrapped in `timeout N` where N is configured in `config.sh`. This kills the process at the kernel level regardless of what the agent is doing. The timeout is set ~50% above the poll timeout (e.g., worker poll=30min, hard kill=40min) to give the controller time to detect timeout first but guarantee the process dies.
+- **Watchdog recovery**: If state is stuck for 2x `max_seconds`, the controller is assumed dead. Watchdog kills all orphaned tmux sessions matching the batch pattern, resets state to IDLE, and releases the lock file. Requires manual re-run after recovery.
+- **Timeouts in `config.sh`**: `TIMEOUT_ORCHESTRATOR=900`, `TIMEOUT_WORKER=2400`, `TIMEOUT_REVIEWER_CLAUDE=1500`, `TIMEOUT_REVIEWER_CODEX=1500`, `TIMEOUT_SYNTHESIZER=900`.
+
 **Runtime fix RT-8**: Monorepo worktree subdir fix. The git repo root is `/home/xyz/workspace/research-qianli-v2` but PROJECT_DIR is the subdirectory `research-stage1-shadow`. `git worktree add` creates a checkout of the entire repo. The worker needs to `cd` into `${WT_DIR}/research-stage1-shadow/` (not `${WT_DIR}`), and PYTHONPATH must point there. Similarly, `verify_handoff`, `diff` checks, and `git merge` must use `WT_PROJECT="${WT_DIR}/$(git rev-parse --show-prefix)"` for file references. Without this fix, sha256 verification fails (wrong cwd), diff checks fail (wrong paths), and the worker can't find `ml/` modules.
 
 Pre-loop HUMAN_SYNC reset (CB-4 fix): if the current state is HUMAN_SYNC (starting a new batch after a completed 3-iteration batch), reset to IDLE before entering the loop:

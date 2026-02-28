@@ -31,7 +31,8 @@ if [[ "$DRY_RUN" == "true" ]]; then
   exit 0
 fi
 
-TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+# RT-12: timeout wrapper = OS-level hard kill if agent loops forever
+TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_REVIEWER_CLAUDE} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"
 echo "[launch_reviewer_claude] Started session: $SESSION (log=$LOG)"

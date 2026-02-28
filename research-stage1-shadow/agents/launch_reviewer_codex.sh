@@ -32,7 +32,7 @@ mkdir -p "$(dirname "$LOG")"
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "[DRY-RUN] cd ${PROJECT_DIR}"
   echo "[DRY-RUN] tmux new-session -d -s $SESSION"
-  echo "[DRY-RUN] codex exec --model ${CODEX_MODEL} --sandbox read-only '<prompt>'"
+  echo "[DRY-RUN] codex exec --model ${CODEX_MODEL} --full-auto '<prompt>'"
   exit 0
 fi
 
@@ -41,8 +41,10 @@ PROMPT_FILE="${PROJECT_DIR}/.logs/sessions/${SESSION}_prompt.md"
 echo "$PROMPT_TEXT" > "$PROMPT_FILE"
 
 # RT-9: Codex needs workspace-write to create handoff/review files (read-only prevents writes)
+# RT-10: Use --full-auto so Codex doesn't wait for interactive approvals in tmux
+# Source venv so any Python commands Codex runs have correct environment
 # Codex needs the prompt as a positional argument; use the file content
-TMUX_CMD="cd '${PROJECT_DIR}' && codex exec --model '${CODEX_MODEL}' --sandbox workspace-write \"\$(cat '${PROMPT_FILE}')\" > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && codex exec --model '${CODEX_MODEL}' --full-auto \"\$(cat '${PROMPT_FILE}')\" > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"
 echo "[launch_reviewer_codex] Started session: $SESSION (log=$LOG)"

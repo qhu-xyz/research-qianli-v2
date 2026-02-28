@@ -915,6 +915,8 @@ Key: flock, PIPELINE_LOCKED, v0 guard, populate_v0_gates.py, `export N` inside t
 
 **Runtime fix RT-9**: Codex sandbox must be `workspace-write`, not `read-only`. The Codex reviewer needs to write `reviews/` and `handoff/` files. With `read-only`, it completes the review (visible in stdout log) but can't write the handoff signal, causing the pipeline to wait until timeout.
 
+**Runtime fix RT-10**: Codex reviewer must use `--full-auto` (not just `--sandbox workspace-write`) and source the project venv before `codex exec`. Without `--full-auto`, Codex pauses for interactive approval on writes in a non-interactive tmux session and gets stuck. Without venv, any commands Codex attempts (e.g. `python3 -m pytest`) fail because system Python lacks project dependencies. The prompt also explicitly forbids running commands ("Do NOT run any commands — your role is READ and WRITE only") but Codex doesn't always comply, so the venv acts as a safety net.
+
 **Runtime fix RT-8**: Monorepo worktree subdir fix. The git repo root is `/home/xyz/workspace/research-qianli-v2` but PROJECT_DIR is the subdirectory `research-stage1-shadow`. `git worktree add` creates a checkout of the entire repo. The worker needs to `cd` into `${WT_DIR}/research-stage1-shadow/` (not `${WT_DIR}`), and PYTHONPATH must point there. Similarly, `verify_handoff`, `diff` checks, and `git merge` must use `WT_PROJECT="${WT_DIR}/$(git rev-parse --show-prefix)"` for file references. Without this fix, sha256 verification fails (wrong cwd), diff checks fail (wrong paths), and the worker can't find `ml/` modules.
 
 Pre-loop HUMAN_SYNC reset (CB-4 fix): if the current state is HUMAN_SYNC (starting a new batch after a completed 3-iteration batch), reset to IDLE before entering the loop:

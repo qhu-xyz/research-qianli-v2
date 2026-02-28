@@ -80,6 +80,7 @@ echo "{\"status\":\"done\",\"artifact_path\":\"${ARTIFACT}\",\"sha256\":\"${SHA}
 
 # CONSTRAINTS
 
+- Do NOT run any commands (no pytest, no python, no bash scripts) — your role is READ and WRITE only
 - Do NOT read the Claude reviewer's output — independence is mandatory
 - Do NOT modify ML code, registry, or memory files
 - Only write to `reviews/` and `handoff/` directories

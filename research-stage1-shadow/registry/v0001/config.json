@@ -6,7 +6,7 @@
     "version_id": "v0001",
     "train_months": 10,
     "val_months": 2,
-    "threshold_beta": 0.7,
+    "threshold_beta": 0.3,
     "threshold_scaling_factor": 1.0,
     "scale_pos_weight_auto": true
   },

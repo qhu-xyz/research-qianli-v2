@@ -6,8 +6,10 @@ CLI: python ml/pipeline.py --version-id v0 --auction-month 2021-07 --class-type 
 """
 
 import argparse
+import gzip
 import json
 import resource
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,6 +57,12 @@ def run_pipeline(
         hyperparam_config = HyperparamConfig()
     if feature_config is None:
         feature_config = FeatureConfig()
+
+    if from_phase > 1:
+        raise NotImplementedError(
+            f"from_phase={from_phase} requested but intermediate state loading is not yet implemented. "
+            "Run from phase 1."
+        )
 
     version_id = config.version_id or "v0"
     registry_dir = Path(config.registry_dir)
@@ -179,6 +187,14 @@ def run_pipeline(
         model_path = model_dir / "classifier.ubj"
         model.save_model(str(model_path))
         print(f"[pipeline] model saved to {model_path}")
+
+        # Compress model file
+        model_gz = model_dir / "classifier.ubj.gz"
+        with open(model_path, 'rb') as f_in:
+            with gzip.open(model_gz, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        model_path.unlink()
+        print(f"[pipeline] model compressed to {model_gz}")
 
         print(f"[pipeline] mem after register: {mem_mb():.0f} MB")
 

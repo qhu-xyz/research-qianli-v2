@@ -57,7 +57,8 @@ def test_pipeline_smoke_creates_model(tmp_path):
 
     model_dir = reg / "v0001" / "model"
     assert model_dir.exists()
-    assert (model_dir / "classifier.ubj").exists()
+    assert (model_dir / "classifier.ubj.gz").exists()
+    assert not (model_dir / "classifier.ubj").exists(), "Uncompressed model should be removed"
 
 
 def test_pipeline_metrics_have_all_gates(tmp_path):
@@ -120,3 +121,12 @@ def test_pipeline_deterministic(tmp_path):
 
     for key in ["S1-AUC", "S1-AP", "S1-BRIER", "S1-REC"]:
         assert metrics1[key] == metrics2[key], f"Non-deterministic: {key}"
+
+
+def test_from_phase_gt1_raises():
+    """from_phase > 1 raises NotImplementedError."""
+    from ml.pipeline import run_pipeline
+
+    config = PipelineConfig(version_id="v_test")
+    with pytest.raises(NotImplementedError, match="from_phase=2"):
+        run_pipeline(config, from_phase=2)

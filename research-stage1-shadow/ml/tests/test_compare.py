@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from ml.compare import build_comparison_table, check_gates, load_all_versions, run_comparison
+from ml.compare import build_comparison_table, check_gates, evaluate_overall_pass, load_all_versions, run_comparison
 
 
 @pytest.fixture
@@ -151,3 +151,31 @@ def test_run_comparison_writes_outputs(tmp_path):
     assert (tmp_path / "report.md").exists()
     assert (reg / "comparisons" / "test_batch_iter1.json").exists()
     assert "v0" in result["versions"]
+    assert "pass_summary" in result
+
+
+def test_group_b_does_not_block_pass(sample_gates):
+    """Group A pass + Group B fail => overall YES."""
+    metrics = {"S1-AUC": 0.70, "S1-BRIER": 0.08, "S1-REC": 0.10}  # REC fails (< 0.40 floor)
+    results = check_gates(metrics, sample_gates)
+    ga, gb = evaluate_overall_pass(results)
+    assert ga is True, "Group A should pass"
+    assert gb is False, "Group B should fail (S1-REC < 0.40)"
+
+
+def test_group_b_does_not_block_table(sample_gates):
+    """Comparison table shows YES when Group A passes but Group B fails."""
+    versions = {
+        "v0001": {"S1-AUC": 0.70, "S1-BRIER": 0.08, "S1-REC": 0.10},
+    }
+    table = build_comparison_table(versions, sample_gates)
+    assert "YES (B:NO)" in table
+
+
+def test_all_pass_shows_both_yes(sample_gates):
+    """When all gates pass, table shows YES (B:YES)."""
+    versions = {
+        "v0001": {"S1-AUC": 0.70, "S1-BRIER": 0.08, "S1-REC": 0.50},
+    }
+    table = build_comparison_table(versions, sample_gates)
+    assert "YES (B:YES)" in table

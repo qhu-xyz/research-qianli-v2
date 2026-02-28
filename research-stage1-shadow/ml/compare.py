@@ -116,6 +116,25 @@ def check_gates(
     return results
 
 
+def evaluate_overall_pass(gate_results: dict[str, dict]) -> tuple[bool, bool]:
+    """Evaluate overall pass from gate results, separated by group.
+
+    Returns (group_a_passed, group_b_passed).
+    Group A gates block promotion; Group B gates are informational.
+    """
+    group_a_passed = True
+    group_b_passed = True
+    for result in gate_results.values():
+        passed = result.get("passed")
+        group = result.get("group", "A")
+        if passed is not True:  # None or False
+            if group == "A":
+                group_a_passed = False
+            else:
+                group_b_passed = False
+    return group_a_passed, group_b_passed
+
+
 def build_comparison_table(
     versions: dict[str, dict],
     gates: dict,
@@ -139,28 +158,40 @@ def build_comparison_table(
         gate_results = check_gates(metrics, gates, champion_metrics, noise_tolerance)
 
         cells = []
-        all_passed = True
+        group_a_passed = True
+        group_b_passed = True
         for gate_name in gate_names:
             result = gate_results.get(gate_name, {})
             value = result.get("value")
             passed = result.get("passed")
+            group = result.get("group", "A")
 
             if value is None:
                 cells.append("--")
             elif isinstance(value, float) and (value != value):  # NaN check
                 cells.append("NaN")
-                all_passed = False
+                if group == "A":
+                    group_a_passed = False
+                else:
+                    group_b_passed = False
             else:
                 mark = "P" if passed else "F"
                 if passed is None:
                     mark = "?"
-                    all_passed = False
+                    if group == "A":
+                        group_a_passed = False
+                    else:
+                        group_b_passed = False
                 elif not passed:
-                    all_passed = False
+                    if group == "A":
+                        group_a_passed = False
+                    else:
+                        group_b_passed = False
                 cells.append(f"{value:.4f} {mark}")
 
-        pass_str = "YES" if all_passed else "NO"
-        row = f"| {version_id} | " + " | ".join(cells) + f" | {pass_str} |"
+        pass_str = "YES" if group_a_passed else "NO"
+        group_b_str = "YES" if group_b_passed else "NO"
+        row = f"| {version_id} | " + " | ".join(cells) + f" | {pass_str} (B:{group_b_str}) |"
         rows.append(row)
 
     return "\n".join(rows)
@@ -223,10 +254,18 @@ def run_comparison(
 
     # Per-version gate results
     per_version = {}
+    per_version_pass = {}
     for version_id, metrics in versions.items():
-        per_version[version_id] = check_gates(
+        gate_results = check_gates(
             metrics, gates, champion_metrics, noise_tolerance
         )
+        per_version[version_id] = gate_results
+        ga, gb = evaluate_overall_pass(gate_results)
+        per_version_pass[version_id] = {
+            "group_a_passed": ga,
+            "group_b_passed": gb,
+            "overall_passed": ga,  # Only Group A blocks
+        }
 
     comparison = {
         "batch_id": batch_id,
@@ -235,6 +274,7 @@ def run_comparison(
         "champion": champion_version,
         "noise_tolerance": noise_tolerance,
         "versions": per_version,
+        "pass_summary": per_version_pass,
         "table": table,
     }
 

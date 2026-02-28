@@ -16,3 +16,26 @@
 
 ### D5: Defer threshold leakage fix to real-data iteration
 **Rationale**: At n=20, a train/tune/test 3-way split would leave too few samples per partition. The concern is valid but only actionable with larger datasets.
+
+---
+
+## Iteration 1 Synthesis (smoke-v7) — 2026-02-28
+
+### D6: No promotion for v0001
+**Rationale**: v0001 metrics are bit-for-bit identical to v0. The H2 hypothesis failed — threshold_beta=0.3 had zero effect because beta < 1 weights precision, not recall (direction had the formula inverted). Bug fixes (from_phase, Group B policy, gzip) are valuable infrastructure improvements but do not change model performance. S1-REC still 0.0.
+
+### D7: No gate floor changes
+**Rationale**: Both reviewers agree — still too early. All deltas are exactly zero. n=20 is too small for stable inference. Keep floors unchanged and revisit after real data.
+
+### D8: Iteration 2 — fix beta direction (beta=2.0) + fix threshold `>` vs `>=` mismatch
+**Rationale**: Two independent root causes for S1-REC=0.0 identified:
+1. **Beta direction error** (both reviewers): beta < 1 favors precision. Must use beta > 1 to favor recall. beta=2.0 is the starting point (F_2 = 5PR/(4P+R) → heavily weights recall).
+2. **Threshold `>` vs `>=` mismatch** (Codex HIGH, new): PR curve thresholds are inclusive (>=), but `apply_threshold` uses strict `>`. At discrete n=20, samples exactly at the threshold boundary get excluded. Fixing this may independently help produce positive predictions.
+
+Both fixes should be applied in iter2 to maximize the chance of non-zero recall. If S1-BRIER flips due to the threshold drop, document the actual value and assess whether the floor needs recalibration at HUMAN_SYNC.
+
+### D9: Fix misleading beta docstring (LOW priority)
+**Rationale**: Claude found that threshold.py:8 says "0.7 = moderate recall/precision balance" which is misleading — beta=0.7 moderately favors precision. This likely contributed to the inverted hypothesis. Low priority but should be corrected to prevent future misdirection.
+
+### D10: Continue deferring threshold leakage
+**Rationale**: Codex reiterated this as HIGH. Still impractical at n=20. Remains deferred to real data.

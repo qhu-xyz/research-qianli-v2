@@ -29,3 +29,9 @@
 - **No floor changes yet** — insufficient data for recalibration
 - **Monitor S1-BRIER closely in iter2** — any threshold change is a risk
 - **Recalibrate all floors after first real-data run** with uncertainty-aware thresholds
+
+## After Iteration 1 (smoke-v7) — No Changes
+
+Both reviewers again agree: no gate floor changes justified. Iteration produced zero delta (hypothesis failed — beta direction was inverted). When beta > 1 is applied in iter2, S1-BRIER is almost certain to shift because producing positive predictions changes calibration. If S1-BRIER flips (value exceeds 0.2221 floor), assess whether the floor is too tight at n=20 and recommend recalibration at HUMAN_SYNC.
+
+Additional Codex observation: `S1-VCAP@K` and `S1-CAP@K` should become informational when K >= n_samples, as they're mathematically saturated.

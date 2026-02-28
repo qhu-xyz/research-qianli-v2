@@ -40,8 +40,9 @@ fi
 PROMPT_FILE="${PROJECT_DIR}/.logs/sessions/${SESSION}_prompt.md"
 echo "$PROMPT_TEXT" > "$PROMPT_FILE"
 
+# RT-9: Codex needs workspace-write to create handoff/review files (read-only prevents writes)
 # Codex needs the prompt as a positional argument; use the file content
-TMUX_CMD="cd '${PROJECT_DIR}' && codex exec --model '${CODEX_MODEL}' --sandbox read-only \"\$(cat '${PROMPT_FILE}')\" > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+TMUX_CMD="cd '${PROJECT_DIR}' && codex exec --model '${CODEX_MODEL}' --sandbox workspace-write \"\$(cat '${PROMPT_FILE}')\" > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"
 echo "[launch_reviewer_codex] Started session: $SESSION (log=$LOG)"

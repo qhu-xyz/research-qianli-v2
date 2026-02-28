@@ -1,9 +1,0 @@
-{
-  "created_at": "2026-02-27T23:47:25.253231+00:00",
-  "feature_count": 14,
-  "train_samples": 80,
-  "val_samples": 20,
-  "threshold": 0.8202872276306152,
-  "max_fbeta": 0.7525252525252525,
-  "registered_at": "2026-02-27T23:47:25.255256+00:00"
-}

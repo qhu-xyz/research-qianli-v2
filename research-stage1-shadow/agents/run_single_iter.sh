@@ -26,7 +26,7 @@ SESSION="orch-${BATCH_ID}-iter${N}"
 bash "${SCRIPT_DIR}/launch_orchestrator.sh" --phase plan --session "$SESSION"
 
 set +e
-poll_for_handoff "$HANDOFF_DIR" "orchestrator_plan_done.json" 600 30
+poll_for_handoff "$HANDOFF_DIR" "orchestrator_plan_done.json" 420 15
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then
@@ -44,7 +44,7 @@ if ! jq empty "${HANDOFF_DIR}/orchestrator_plan_done.json" 2>/dev/null; then
 fi
 
 # Step 4: ORCHESTRATOR_PLANNING -> WORKER_RUNNING
-cas_transition ORCHESTRATOR_PLANNING WORKER_RUNNING "{\"max_seconds\":1800}"
+cas_transition ORCHESTRATOR_PLANNING WORKER_RUNNING "{\"max_seconds\":900}"
 
 # Step 5: allocate version
 VERSION_ID=$(python -c "from ml.registry import allocate_version_id; print(allocate_version_id('${PROJECT_DIR}/registry/version_counter.json'))")
@@ -64,7 +64,7 @@ WORKER_SESSION="worker-${BATCH_ID}-iter${N}"
 bash "${SCRIPT_DIR}/launch_worker.sh" --session "$WORKER_SESSION"
 
 set +e
-poll_for_handoff "$HANDOFF_DIR" "worker_done.json" 1800 30
+poll_for_handoff "$HANDOFF_DIR" "worker_done.json" 600 15
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then
@@ -137,7 +137,7 @@ fi
 
 if (( WORKER_FAILED == 0 )); then
   # Step 9: WORKER_RUNNING -> REVIEW_CLAUDE
-  cas_transition WORKER_RUNNING REVIEW_CLAUDE "{\"max_seconds\":1200}"
+  cas_transition WORKER_RUNNING REVIEW_CLAUDE "{\"max_seconds\":600}"
 
   # Step 10: launch Claude reviewer
   echo "[iter${N}] Launching Claude reviewer..."
@@ -145,7 +145,7 @@ if (( WORKER_FAILED == 0 )); then
   bash "${SCRIPT_DIR}/launch_reviewer_claude.sh" --session "$CLAUDE_SESSION"
 
   set +e
-  poll_for_handoff "$HANDOFF_DIR" "reviewer_claude_done.json" 1200 30
+  poll_for_handoff "$HANDOFF_DIR" "reviewer_claude_done.json" 420 15
   POLL_RC=$?
   set -e
   if (( POLL_RC != 0 )); then
@@ -159,7 +159,7 @@ if (( WORKER_FAILED == 0 )); then
   verify_handoff "${HANDOFF_DIR}/reviewer_claude_done.json" "REVIEW_CLAUDE" || true
 
   # Step 12: REVIEW_CLAUDE -> REVIEW_CODEX
-  cas_transition REVIEW_CLAUDE REVIEW_CODEX "{\"max_seconds\":1200}"
+  cas_transition REVIEW_CLAUDE REVIEW_CODEX "{\"max_seconds\":600}"
 
   # Step 13: launch Codex reviewer
   echo "[iter${N}] Launching Codex reviewer..."
@@ -167,7 +167,7 @@ if (( WORKER_FAILED == 0 )); then
   bash "${SCRIPT_DIR}/launch_reviewer_codex.sh" --session "$CODEX_SESSION"
 
   set +e
-  poll_for_handoff "$HANDOFF_DIR" "reviewer_codex_done.json" 1200 30
+  poll_for_handoff "$HANDOFF_DIR" "reviewer_codex_done.json" 420 15
   POLL_RC=$?
   set -e
   if (( POLL_RC != 0 )); then
@@ -192,7 +192,7 @@ export WORKER_FAILED
 bash "${SCRIPT_DIR}/launch_orchestrator.sh" --phase synthesize --session "$SYNTH_SESSION"
 
 set +e
-poll_for_handoff "$HANDOFF_DIR" "orchestrator_synth_done.json" 600 30
+poll_for_handoff "$HANDOFF_DIR" "orchestrator_synth_done.json" 420 15
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then

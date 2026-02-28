@@ -12,8 +12,9 @@ STATE_FILE="${PROJECT_DIR}/state.json"
 # Hard timeout limits (seconds) — OS-level kill, defense against agent infinite loops.
 # These are the absolute max wall-clock time an agent process can run.
 # poll_for_handoff timeouts are shorter; these are the last-resort kill switch.
-TIMEOUT_ORCHESTRATOR=900     # 15 min (poll: 10 min)
-TIMEOUT_WORKER=2400          # 40 min (poll: 30 min)
-TIMEOUT_REVIEWER_CLAUDE=1500 # 25 min (poll: 20 min)
-TIMEOUT_REVIEWER_CODEX=1500  # 25 min (poll: 20 min)
-TIMEOUT_SYNTHESIZER=900      # 15 min (poll: 10 min)
+# Actual smoke timings: orch=2.5m, worker=6.5m, reviewers=3m, synth=6m
+TIMEOUT_ORCHESTRATOR=600     # 10 min (poll: 7 min)
+TIMEOUT_WORKER=900           # 15 min (poll: 10 min)
+TIMEOUT_REVIEWER_CLAUDE=600  # 10 min (poll: 7 min)
+TIMEOUT_REVIEWER_CODEX=600   # 10 min (poll: 7 min)
+TIMEOUT_SYNTHESIZER=600      # 10 min (poll: 7 min)

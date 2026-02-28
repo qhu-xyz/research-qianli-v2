@@ -1,5 +1,7 @@
 # Agentic ML Pipeline Implementation Plan
 
+> **Status: COMPLETE** — All 28 tasks (Phases A–F) and 12 runtime fixes (RT-1 through RT-12) implemented. See `runbook.md` for operational guide.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Implement the full agentic ML research pipeline for shadow price classification — all greenfield files from the v10 design doc.

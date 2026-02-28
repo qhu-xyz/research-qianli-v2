@@ -7,15 +7,37 @@ source "${SCRIPT_DIR}/state_utils.sh"
 # Parse args
 BATCH_NAME=""
 MAX_ITER=3
+FOREGROUND=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --batch-name)   BATCH_NAME="$2"; shift 2 ;;
     --batch-name=*) BATCH_NAME="${1#--batch-name=}"; shift ;;
     --max-iter)     MAX_ITER="$2"; shift 2 ;;
     --max-iter=*)   MAX_ITER="${1#--max-iter=}"; shift ;;
+    --foreground)   FOREGROUND=true; shift ;;
+    --_inside_tmux) FOREGROUND=true; shift ;;  # internal flag, skip re-exec
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
+
+# Auto-wrap in tmux unless already inside tmux or --foreground
+if [[ "$FOREGROUND" == "false" && -z "${TMUX:-}" ]]; then
+  SESSION="pipeline-$(date +%Y%m%d-%H%M%S)"
+  LOG="${PROJECT_DIR}/.logs/sessions/${SESSION}.log"
+  mkdir -p "$(dirname "$LOG")"
+
+  # Re-exec this script inside a detached tmux session
+  ARGS=("$0" --_inside_tmux)
+  [[ -n "$BATCH_NAME" ]] && ARGS+=(--batch-name "$BATCH_NAME")
+  [[ "$MAX_ITER" != "3" ]] && ARGS+=(--max-iter "$MAX_ITER")
+
+  tmux new-session -d -s "$SESSION" "bash ${ARGS[*]} 2>&1 | tee '${LOG}'"
+  echo "Pipeline launched in tmux session: $SESSION"
+  echo "  Attach:  tmux attach -t $SESSION"
+  echo "  Log:     $LOG"
+  echo "  Tail:    tail -f $LOG"
+  exit 0
+fi
 
 # Validate batch name
 if [[ -n "$BATCH_NAME" ]] && ! [[ "$BATCH_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then

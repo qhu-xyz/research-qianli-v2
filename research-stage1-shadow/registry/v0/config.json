@@ -1,15 +1,4 @@
 {
-  "pipeline": {
-    "auction_month": "2021-07",
-    "class_type": "onpeak",
-    "period_type": "f0",
-    "version_id": "v0",
-    "train_months": 10,
-    "val_months": 2,
-    "threshold_beta": 0.7,
-    "threshold_scaling_factor": 1.0,
-    "scale_pos_weight_auto": true
-  },
   "hyperparams": {
     "n_estimators": 200,
     "max_depth": 4,
@@ -36,5 +25,15 @@
     "density_cv",
     "hist_da",
     "hist_da_trend"
-  ]
+  ],
+  "eval_config": {
+    "eval_months": [
+      "2021-07"
+    ],
+    "class_type": "onpeak",
+    "ptype": "f0",
+    "train_months": 10,
+    "val_months": 2,
+    "threshold_beta": 0.7
+  }
 }

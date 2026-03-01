@@ -1,67 +1,105 @@
 {
-  "version": 1,
-  "effective_since": "2026-02-26",
+  "version": 2,
+  "effective_since": "2026-03-01",
   "noise_tolerance": 0.02,
+  "tail_max_failures": 1,
+  "eval_months": {
+    "primary": ["2020-09", "2020-11", "2021-01", "2021-04", "2021-06", "2021-08",
+                 "2021-10", "2021-12", "2022-03", "2022-06", "2022-09", "2022-12"],
+    "stress": ["2020-04", "2020-07", "2021-02", "2021-07", "2022-07", "2022-01"]
+  },
+  "cascade_stages": [
+    {"stage": 1, "ptype": "f0", "blocking": true},
+    {"stage": 2, "ptype": "f1", "blocking": true},
+    {"stage": 3, "ptype": "f2p", "blocking": false}
+  ],
   "gates": {
     "S1-AUC": {
-      "floor": 0.65,
+      "floor": null,
+      "tail_floor": null,
       "direction": "higher",
-      "pending_v0": false
+      "group": "A",
+      "pending_v0": true,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.10
     },
     "S1-AP": {
-      "floor": 0.12,
+      "floor": null,
+      "tail_floor": null,
       "direction": "higher",
-      "pending_v0": false
+      "group": "A",
+      "pending_v0": true,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.10
     },
     "S1-VCAP@100": {
-      "floor": 0.95,
+      "floor": null,
+      "tail_floor": null,
       "direction": "higher",
-      "pending_v0": false,
-      "v0_offset": 0.05
-    },
-    "S1-VCAP@500": {
-      "floor": 0.95,
-      "direction": "higher",
-      "pending_v0": false,
-      "v0_offset": 0.05
-    },
-    "S1-VCAP@1000": {
-      "floor": 0.95,
-      "direction": "higher",
-      "pending_v0": false,
-      "v0_offset": 0.05
+      "group": "A",
+      "pending_v0": true,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.10
     },
     "S1-NDCG": {
-      "floor": 0.4544,
+      "floor": null,
+      "tail_floor": null,
       "direction": "higher",
-      "pending_v0": false,
-      "v0_offset": 0.05
+      "group": "A",
+      "pending_v0": true,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.10
     },
     "S1-BRIER": {
-      "floor": 0.2221,
+      "floor": null,
+      "tail_floor": null,
       "direction": "lower",
-      "pending_v0": false,
-      "v0_offset": 0.02
+      "group": "B",
+      "pending_v0": true,
+      "v0_offset": 0.02,
+      "v0_tail_offset": 0.05
+    },
+    "S1-VCAP@500": {
+      "floor": null,
+      "tail_floor": null,
+      "direction": "higher",
+      "group": "B",
+      "pending_v0": true,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.10
+    },
+    "S1-VCAP@1000": {
+      "floor": null,
+      "tail_floor": null,
+      "direction": "higher",
+      "group": "B",
+      "pending_v0": true,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.10
     },
     "S1-REC": {
-      "floor": 0.4,
+      "floor": 0.10,
+      "tail_floor": 0.0,
       "direction": "higher",
-      "pending_v0": false,
       "group": "B"
     },
     "S1-CAP@100": {
-      "floor": -0.05,
+      "floor": null,
+      "tail_floor": null,
       "direction": "higher",
-      "pending_v0": false,
+      "group": "B",
+      "pending_v0": true,
       "v0_offset": 0.05,
-      "group": "B"
+      "v0_tail_offset": 0.10
     },
     "S1-CAP@500": {
-      "floor": -0.05,
+      "floor": null,
+      "tail_floor": null,
       "direction": "higher",
-      "pending_v0": false,
+      "group": "B",
+      "pending_v0": true,
       "v0_offset": 0.05,
-      "group": "B"
+      "v0_tail_offset": 0.10
     }
   }
 }

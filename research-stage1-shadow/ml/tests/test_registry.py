@@ -138,6 +138,51 @@ def test_populate_v0_gates_brier_direction(tmp_path):
     assert updated["gates"]["S1-AUC"].get("pending_v0") is False
 
 
+def test_populate_v0_gates_v2_tail_floor(tmp_path):
+    """v2 schema: populate both floor and tail_floor."""
+    from ml.populate_v0_gates import populate_v0_gates
+
+    v0 = tmp_path / "registry" / "v0"
+    v0.mkdir(parents=True)
+    (v0 / "metrics.json").write_text(json.dumps({
+        "aggregate": {
+            "mean": {"S1-AUC": 0.72},
+            "min": {"S1-AUC": 0.65},
+            "max": {"S1-BRIER": 0.12},
+        },
+        "per_month": {
+            "2020-09": {"S1-AUC": 0.72, "S1-BRIER": 0.09},
+            "2020-11": {"S1-AUC": 0.65, "S1-BRIER": 0.12},
+            "2021-01": {"S1-AUC": 0.71, "S1-BRIER": 0.10},
+        }
+    }))
+
+    gates_path = tmp_path / "registry" / "gates.json"
+    gates_path.write_text(json.dumps({
+        "version": 2,
+        "noise_tolerance": 0.02,
+        "tail_max_failures": 1,
+        "eval_months": {"primary": ["2020-09", "2020-11", "2021-01"], "stress": []},
+        "cascade_stages": [{"stage": 1, "ptype": "f0", "blocking": True}],
+        "gates": {
+            "S1-AUC": {
+                "floor": None, "tail_floor": None,
+                "direction": "higher", "group": "A",
+                "pending_v0": True, "v0_offset": 0.05, "v0_tail_offset": 0.10
+            }
+        }
+    }))
+
+    result = populate_v0_gates(
+        registry_dir=str(tmp_path / "registry"),
+        gates_path=str(gates_path),
+    )
+    gate = result["gates"]["S1-AUC"]
+    assert gate["pending_v0"] is False
+    assert gate["floor"] == round(0.72 - 0.05, 6)       # mean - offset
+    assert gate["tail_floor"] == round(0.65 - 0.10, 6)   # min - tail_offset
+
+
 def test_populate_v0_gates_idempotent(tmp_path):
     """Running populate twice is a no-op the second time."""
     from ml.populate_v0_gates import populate_v0_gates

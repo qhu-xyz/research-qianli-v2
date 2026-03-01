@@ -148,3 +148,38 @@ def test_evaluate_monitoring_metrics():
     assert "threshold" in metrics
     assert "n_samples" in metrics
     assert "binding_rate" in metrics
+
+
+def test_aggregate_months():
+    """aggregate_months computes mean, std, min, max, bottom_2_mean."""
+    from ml.evaluate import aggregate_months
+    per_month = {
+        "2020-09": {"S1-AUC": 0.72, "S1-BRIER": 0.09},
+        "2020-11": {"S1-AUC": 0.65, "S1-BRIER": 0.12},
+        "2021-01": {"S1-AUC": 0.71, "S1-BRIER": 0.10},
+    }
+    agg = aggregate_months(per_month)
+    assert abs(agg["mean"]["S1-AUC"] - 0.6933) < 0.001
+    assert agg["min"]["S1-AUC"] == 0.65
+    assert agg["max"]["S1-AUC"] == 0.72
+    # bottom_2_mean for AUC (higher=better): worst 2 = (0.65, 0.71) => 0.68
+    assert abs(agg["bottom_2_mean"]["S1-AUC"] - 0.68) < 0.001
+    # For BRIER (lower is better), bottom_2 should be worst 2 (highest values)
+    # bottom_2_mean = (0.12 + 0.10) / 2 = 0.11
+    assert abs(agg["bottom_2_mean"]["S1-BRIER"] - 0.11) < 0.001
+
+
+def test_aggregate_months_empty():
+    """aggregate_months handles empty input."""
+    from ml.evaluate import aggregate_months
+    agg = aggregate_months({})
+    assert agg["mean"] == {}
+
+
+def test_aggregate_months_single():
+    """aggregate_months with single month uses that month's values."""
+    from ml.evaluate import aggregate_months
+    agg = aggregate_months({"2021-01": {"S1-AUC": 0.75}})
+    assert agg["mean"]["S1-AUC"] == 0.75
+    assert agg["bottom_2_mean"]["S1-AUC"] == 0.75
+    assert agg["std"]["S1-AUC"] == 0.0

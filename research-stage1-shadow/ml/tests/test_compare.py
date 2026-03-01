@@ -3,7 +3,15 @@ import json
 import numpy as np
 import pytest
 
-from ml.compare import build_comparison_table, check_gates, evaluate_overall_pass, load_all_versions, run_comparison
+from ml.compare import (
+    build_comparison_table,
+    check_gates,
+    check_gates_multi_month,
+    evaluate_overall_pass,
+    evaluate_overall_pass_multi_month,
+    load_all_versions,
+    run_comparison,
+)
 
 
 @pytest.fixture
@@ -179,3 +187,80 @@ def test_all_pass_shows_both_yes(sample_gates):
     }
     table = build_comparison_table(versions, sample_gates)
     assert "YES (B:YES)" in table
+
+
+# --- Multi-month three-layer gate tests ---
+
+
+def test_check_gates_multi_month_mean():
+    """Layer 1: mean(metric) >= floor."""
+    gates = {
+        "S1-AUC": {"floor": 0.65, "tail_floor": 0.55, "direction": "higher", "group": "A"},
+    }
+    per_month = {"2020-09": {"S1-AUC": 0.70}, "2020-11": {"S1-AUC": 0.68}, "2021-01": {"S1-AUC": 0.72}}
+    results = check_gates_multi_month(per_month, gates, tail_max_failures=1)
+    assert results["S1-AUC"]["mean_passed"] is True
+
+
+def test_check_gates_multi_month_mean_fail():
+    """Layer 1: mean below floor fails."""
+    gates = {
+        "S1-AUC": {"floor": 0.75, "tail_floor": 0.55, "direction": "higher", "group": "A"},
+    }
+    per_month = {"m1": {"S1-AUC": 0.70}, "m2": {"S1-AUC": 0.68}, "m3": {"S1-AUC": 0.72}}
+    results = check_gates_multi_month(per_month, gates, tail_max_failures=1)
+    assert results["S1-AUC"]["mean_passed"] is False
+
+
+def test_check_gates_multi_month_tail_safety():
+    """Layer 2: count(metric < tail_floor) <= tail_max_failures."""
+    gates = {
+        "S1-AUC": {"floor": 0.65, "tail_floor": 0.55, "direction": "higher", "group": "A"},
+    }
+    # 1 month below tail_floor (0.50 < 0.55), tail_max_failures=1 => pass
+    per_month = {"m1": {"S1-AUC": 0.70}, "m2": {"S1-AUC": 0.50}, "m3": {"S1-AUC": 0.72}}
+    results = check_gates_multi_month(per_month, gates, tail_max_failures=1)
+    assert results["S1-AUC"]["tail_passed"] is True
+
+    # 2 months below => fail
+    per_month2 = {"m1": {"S1-AUC": 0.70}, "m2": {"S1-AUC": 0.50}, "m3": {"S1-AUC": 0.40}}
+    results2 = check_gates_multi_month(per_month2, gates, tail_max_failures=1)
+    assert results2["S1-AUC"]["tail_passed"] is False
+
+
+def test_check_gates_multi_month_tail_regression():
+    """Layer 3: mean_bottom_2(new) >= mean_bottom_2(champion) - noise_tol."""
+    gates = {
+        "S1-AUC": {"floor": 0.65, "tail_floor": 0.55, "direction": "higher", "group": "A"},
+    }
+    per_month = {"m1": {"S1-AUC": 0.70}, "m2": {"S1-AUC": 0.60}, "m3": {"S1-AUC": 0.72}}
+    champ_per_month = {"m1": {"S1-AUC": 0.72}, "m2": {"S1-AUC": 0.65}, "m3": {"S1-AUC": 0.74}}
+    # new bottom_2 mean = (0.60 + 0.70) / 2 = 0.65
+    # champ bottom_2 mean = (0.65 + 0.72) / 2 = 0.685
+    # 0.65 < 0.685 - 0.02 = 0.665 => FAIL
+    results = check_gates_multi_month(per_month, gates, tail_max_failures=1,
+                                       champion_per_month=champ_per_month, noise_tolerance=0.02)
+    assert results["S1-AUC"]["tail_regression_passed"] is False
+
+
+def test_check_gates_multi_month_lower_direction():
+    """Lower-is-better (BRIER): directions inverted for all 3 layers."""
+    gates = {
+        "S1-BRIER": {"floor": 0.12, "tail_floor": 0.18, "direction": "lower", "group": "B"},
+    }
+    # mean = 0.10 <= 0.12 => pass; no month > 0.18 => tail pass
+    per_month = {"m1": {"S1-BRIER": 0.09}, "m2": {"S1-BRIER": 0.11}, "m3": {"S1-BRIER": 0.10}}
+    results = check_gates_multi_month(per_month, gates, tail_max_failures=1)
+    assert results["S1-BRIER"]["mean_passed"] is True
+    assert results["S1-BRIER"]["tail_passed"] is True
+
+
+def test_evaluate_overall_pass_multi_month():
+    """Overall pass requires all Group A gates to pass all 3 layers."""
+    results = {
+        "S1-AUC": {"group": "A", "mean_passed": True, "tail_passed": True, "tail_regression_passed": True, "overall_passed": True},
+        "S1-BRIER": {"group": "B", "mean_passed": False, "tail_passed": True, "tail_regression_passed": True, "overall_passed": False},
+    }
+    ga, gb = evaluate_overall_pass_multi_month(results)
+    assert ga is True   # Group A all pass
+    assert gb is False  # Group B mean failed

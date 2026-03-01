@@ -133,6 +133,21 @@ class GateConfig:
                 return False
         return True
 
+    @property
+    def tail_max_failures(self) -> int:
+        """Max months allowed below tail_floor per gate."""
+        return self.data.get("tail_max_failures", 1)
+
+    @property
+    def eval_months(self) -> dict:
+        """Primary and stress evaluation months."""
+        return self.data.get("eval_months", {"primary": [], "stress": []})
+
+    @property
+    def cascade_stages(self) -> list[dict]:
+        """Cascade stage definitions."""
+        return self.data.get("cascade_stages", [])
+
     def pending_v0_gates(self) -> list[str]:
         """Return list of gate names that are still pending v0 calibration."""
         return [

@@ -135,6 +135,135 @@ def evaluate_overall_pass(gate_results: dict[str, dict]) -> tuple[bool, bool]:
     return group_a_passed, group_b_passed
 
 
+def check_gates_multi_month(
+    per_month: dict[str, dict],
+    gates: dict,
+    tail_max_failures: int = 1,
+    champion_per_month: dict[str, dict] | None = None,
+    noise_tolerance: float = 0.02,
+) -> dict[str, dict]:
+    """Three-layer gate check across multiple evaluation months.
+
+    Layer 1: mean(metric) >= floor (or <= for lower-is-better)
+    Layer 2: count(metric violating tail_floor) <= tail_max_failures
+    Layer 3: mean_bottom_2(metric) >= mean_bottom_2(champion) - noise_tolerance
+
+    Parameters
+    ----------
+    per_month : dict
+        {month_id: {gate_name: value, ...}, ...}
+    gates : dict
+        Gate definitions with floor, tail_floor, direction, group.
+    tail_max_failures : int
+        Max months allowed below tail_floor per gate.
+    champion_per_month : dict or None
+        Champion's per-month metrics for tail regression check.
+    noise_tolerance : float
+        Tolerance for tail regression check.
+
+    Returns
+    -------
+    results : dict
+        {gate_name: {mean_value, mean_passed, tail_failures, tail_passed,
+                     bottom_2_mean, tail_regression_passed, group, overall_passed}}
+    """
+    months = sorted(per_month.keys())
+    results = {}
+
+    for gate_name, gate_def in gates.items():
+        floor = gate_def.get("floor")
+        tail_floor = gate_def.get("tail_floor")
+        direction = gate_def["direction"]
+        group = gate_def.get("group", "A")
+
+        values = [per_month[m].get(gate_name) for m in months]
+        values = [v for v in values if v is not None and (not isinstance(v, float) or v == v)]
+
+        if not values:
+            results[gate_name] = {
+                "mean_value": None, "mean_passed": None,
+                "tail_failures": None, "tail_passed": None,
+                "bottom_2_mean": None, "tail_regression_passed": None,
+                "group": group, "overall_passed": None,
+            }
+            continue
+
+        mean_val = sum(values) / len(values)
+
+        # Layer 1: mean check
+        if floor is not None:
+            if direction == "higher":
+                mean_passed = mean_val >= floor
+            else:
+                mean_passed = mean_val <= floor
+        else:
+            mean_passed = None
+
+        # Layer 2: tail safety
+        tail_failures = 0
+        if tail_floor is not None:
+            for v in values:
+                if direction == "higher" and v < tail_floor:
+                    tail_failures += 1
+                elif direction == "lower" and v > tail_floor:
+                    tail_failures += 1
+            tail_passed = tail_failures <= tail_max_failures
+        else:
+            tail_passed = None
+
+        # Layer 3: tail non-regression (mean of bottom 2)
+        sorted_vals = sorted(values) if direction == "higher" else sorted(values, reverse=True)
+        n_bottom = min(2, len(sorted_vals))
+        bottom_2_mean = sum(sorted_vals[:n_bottom]) / n_bottom
+
+        tail_regression_passed = True  # default if no champion
+        if champion_per_month is not None:
+            champ_values = [champion_per_month[m].get(gate_name)
+                            for m in months if m in champion_per_month]
+            champ_values = [v for v in champ_values if v is not None and (not isinstance(v, float) or v == v)]
+            if champ_values:
+                champ_sorted = sorted(champ_values) if direction == "higher" else sorted(champ_values, reverse=True)
+                cn = min(2, len(champ_sorted))
+                champ_bottom_2 = sum(champ_sorted[:cn]) / cn
+                if direction == "higher":
+                    tail_regression_passed = bottom_2_mean >= champ_bottom_2 - noise_tolerance
+                else:
+                    tail_regression_passed = bottom_2_mean <= champ_bottom_2 + noise_tolerance
+
+        overall = all(x is not False for x in [mean_passed, tail_passed, tail_regression_passed])
+
+        results[gate_name] = {
+            "mean_value": round(mean_val, 4),
+            "mean_passed": mean_passed,
+            "tail_failures": tail_failures,
+            "tail_passed": tail_passed,
+            "bottom_2_mean": round(bottom_2_mean, 4),
+            "tail_regression_passed": tail_regression_passed,
+            "group": group,
+            "overall_passed": overall if mean_passed is not None else None,
+        }
+
+    return results
+
+
+def evaluate_overall_pass_multi_month(gate_results: dict[str, dict]) -> tuple[bool, bool]:
+    """Evaluate overall pass from multi-month gate results.
+
+    Returns (group_a_passed, group_b_passed).
+    """
+    group_a_passed = True
+    group_b_passed = True
+    for result in gate_results.values():
+        passed = result.get("overall_passed")
+        group = result.get("group", "A")
+        if passed is not True:
+            if group == "A":
+                group_a_passed = False
+            else:
+                group_b_passed = False
+    return group_a_passed, group_b_passed
+
+
 def build_comparison_table(
     versions: dict[str, dict],
     gates: dict,

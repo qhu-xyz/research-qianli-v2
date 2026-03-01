@@ -83,6 +83,34 @@ def test_gate_config_loads(tmp_path):
     assert gc.noise_tolerance == 0.02
 
 
+def test_gate_config_v2_fields(tmp_path):
+    """GateConfig v2 must expose cascade_stages, tail fields, and eval_months."""
+    import json
+    gates_data = {
+        "version": 2,
+        "noise_tolerance": 0.02,
+        "tail_max_failures": 1,
+        "eval_months": {"primary": ["2020-09"], "stress": ["2021-02"]},
+        "cascade_stages": [
+            {"stage": 1, "ptype": "f0", "blocking": True}
+        ],
+        "gates": {
+            "S1-AUC": {
+                "floor": 0.65, "tail_floor": 0.55,
+                "direction": "higher", "group": "A",
+                "pending_v0": False
+            }
+        }
+    }
+    p = tmp_path / "gates.json"
+    p.write_text(json.dumps(gates_data))
+    gc = GateConfig(str(p))
+    assert gc.data["version"] == 2
+    assert gc.tail_max_failures == 1
+    assert gc.eval_months["primary"] == ["2020-09"]
+    assert gc.cascade_stages[0]["ptype"] == "f0"
+
+
 def test_gate_config_pending_v0(tmp_path):
     gates_file = tmp_path / "gates.json"
     gates_file.write_text(

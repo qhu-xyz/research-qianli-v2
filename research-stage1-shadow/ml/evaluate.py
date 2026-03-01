@@ -172,3 +172,61 @@ def evaluate_classifier(
         "binding_rate": round(binding_rate, 4),
         "pred_binding_rate": round(pred_binding_rate, 4),
     }
+
+
+# Gate metrics that are "lower is better" (worst = highest values)
+_LOWER_IS_BETTER = {"S1-BRIER"}
+
+
+def aggregate_months(per_month: dict[str, dict]) -> dict:
+    """Aggregate per-month metrics into mean, std, min, max, bottom_2_mean.
+
+    Parameters
+    ----------
+    per_month : dict
+        {month_id: {metric_name: value, ...}, ...}
+
+    Returns
+    -------
+    aggregate : dict
+        {"mean": {...}, "std": {...}, "min": {...}, "max": {...}, "bottom_2_mean": {...}}
+    """
+    if not per_month:
+        return {"mean": {}, "std": {}, "min": {}, "max": {}, "bottom_2_mean": {}}
+
+    months = sorted(per_month.keys())
+    all_keys = set()
+    for m in months:
+        all_keys.update(per_month[m].keys())
+
+    mean_d, std_d, min_d, max_d, b2_d = {}, {}, {}, {}, {}
+
+    for key in sorted(all_keys):
+        vals = []
+        for m in months:
+            v = per_month[m].get(key)
+            if v is not None and isinstance(v, (int, float)) and (not isinstance(v, float) or v == v):
+                vals.append(v)
+        if not vals:
+            continue
+
+        mean_d[key] = round(sum(vals) / len(vals), 4)
+        min_d[key] = round(min(vals), 4)
+        max_d[key] = round(max(vals), 4)
+
+        if len(vals) > 1:
+            mu = sum(vals) / len(vals)
+            std_d[key] = round((sum((x - mu) ** 2 for x in vals) / (len(vals) - 1)) ** 0.5, 4)
+        else:
+            std_d[key] = 0.0
+
+        # bottom_2_mean: worst 2 values
+        # For "lower is better" metrics, worst = highest values
+        if key in _LOWER_IS_BETTER:
+            sorted_vals = sorted(vals, reverse=True)  # worst first (highest)
+        else:
+            sorted_vals = sorted(vals)  # worst first (lowest)
+        n_bottom = min(2, len(sorted_vals))
+        b2_d[key] = round(sum(sorted_vals[:n_bottom]) / n_bottom, 4)
+
+    return {"mean": mean_d, "std": std_d, "min": min_d, "max": max_d, "bottom_2_mean": b2_d}

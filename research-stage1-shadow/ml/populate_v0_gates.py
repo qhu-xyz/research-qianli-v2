@@ -43,44 +43,58 @@ def populate_v0_gates(
             "Run the pipeline with --version-id v0 first."
         )
     with open(v0_metrics_path) as f:
-        v0_metrics = json.load(f)
+        v0_data = json.load(f)
 
     # Load gates
     with open(gates_path) as f:
         gates_data = json.load(f)
+
+    # Detect schema: v2 has "aggregate", v1 has flat metrics
+    is_v2 = "aggregate" in v0_data
+    if is_v2:
+        v0_mean = v0_data["aggregate"]["mean"]
+        v0_min = v0_data["aggregate"].get("min", {})
+        v0_max = v0_data["aggregate"].get("max", {})
+    else:
+        v0_mean = v0_data  # flat metrics ARE the mean (single month)
+        v0_min = v0_data
+        v0_max = v0_data
 
     modified = False
     for gate_name, gate_def in gates_data["gates"].items():
         if not gate_def.get("pending_v0", False):
             continue
 
-        v0_value = v0_metrics.get(gate_name)
-        if v0_value is None:
-            print(f"[populate_v0] WARNING: {gate_name} not found in v0 metrics, skipping")
+        mean_val = v0_mean.get(gate_name)
+        if mean_val is None:
+            print(f"[populate_v0] WARNING: {gate_name} not in v0 metrics, skipping")
             continue
 
         v0_offset = gate_def.get("v0_offset", 0.0)
+        v0_tail_offset = gate_def.get("v0_tail_offset", v0_offset)
         direction = gate_def["direction"]
 
         if direction == "higher":
-            # Higher is better: floor = v0 - offset (allow some regression from v0)
-            floor = v0_value - v0_offset
+            gate_def["floor"] = round(mean_val - v0_offset, 6)
+            extreme = v0_min.get(gate_name, mean_val)
+            gate_def["tail_floor"] = round(extreme - v0_tail_offset, 6)
         else:
-            # Lower is better (e.g., BRIER): floor = v0 + offset (allow some increase from v0)
-            floor = v0_value + v0_offset
+            gate_def["floor"] = round(mean_val + v0_offset, 6)
+            extreme = v0_max.get(gate_name, mean_val)
+            gate_def["tail_floor"] = round(extreme + v0_tail_offset, 6)
 
-        gate_def["floor"] = round(floor, 6)
         gate_def["pending_v0"] = False
         modified = True
-        print(f"[populate_v0] {gate_name}: floor = {floor:.6f} "
-              f"(v0={v0_value}, offset={v0_offset}, direction={direction})")
+        print(f"[populate_v0] {gate_name}: floor={gate_def['floor']}, "
+              f"tail_floor={gate_def['tail_floor']} "
+              f"(mean={mean_val}, extreme={extreme}, direction={direction})")
 
     if modified:
         with open(gates_path, "w") as f:
             json.dump(gates_data, f, indent=2)
         print(f"[populate_v0] Updated {gates_path}")
     else:
-        print(f"[populate_v0] No pending gates to populate")
+        print("[populate_v0] No pending gates to populate")
 
     return gates_data
 

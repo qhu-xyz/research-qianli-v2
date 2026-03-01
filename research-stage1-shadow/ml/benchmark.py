@@ -127,35 +127,30 @@ def run_benchmark(
 
     smoke = os.environ.get("SMOKE_TEST", "false").lower() == "true"
 
-    per_month = {}
-
-    if smoke or len(eval_months) == 1:
-        # Sequential (smoke test or single month)
-        for month in eval_months:
-            metrics = _eval_single_month(
-                month, class_type, ptype, hyperparam_config, feature_config, threshold_beta
-            )
-            per_month[month] = metrics
-    else:
-        # Ray-parallel for real data
+    # Init Ray once for all months (data_loader uses Ray internally for loading;
+    # we keep it alive across months to avoid 12 init/shutdown cycles).
+    # NOTE: Ray-parallel dispatch of entire eval months doesn't work because
+    # Ray cluster workers lack polars/sklearn. Instead we run months sequentially,
+    # each using Ray only for data loading via MisoDataLoader.
+    we_inited_ray = False
+    if not smoke:
         import ray
         if not ray.is_initialized():
             from pbase.config.ray import init_ray
             import pmodel
             import ml as shadow_ml
             init_ray(address="ray://10.8.0.36:10001", extra_modules=[pmodel, shadow_ml])
+            we_inited_ray = True
 
-        @ray.remote
-        def _eval_remote(month, ct, pt, hc, fc, tb):
-            return month, _eval_single_month(month, ct, pt, hc, fc, tb)
+    per_month = {}
+    for month in eval_months:
+        metrics = _eval_single_month(
+            month, class_type, ptype, hyperparam_config, feature_config, threshold_beta
+        )
+        per_month[month] = metrics
 
-        futures = [
-            _eval_remote.remote(m, class_type, ptype, hyperparam_config, feature_config, threshold_beta)
-            for m in eval_months
-        ]
-        for month, metrics in ray.get(futures):
-            per_month[month] = metrics
-
+    if we_inited_ray:
+        import ray
         ray.shutdown()
 
     # Aggregate

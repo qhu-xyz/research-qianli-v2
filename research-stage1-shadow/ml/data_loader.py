@@ -75,12 +75,15 @@ def _load_real(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     from shadow_price_prediction.data_loader import MisoDataLoader
     from shadow_price_prediction.config import PredictionConfig
 
-    # Init Ray
+    # Init Ray (skip if already initialized — benchmark runner manages lifecycle)
+    import ray
     from pbase.config.ray import init_ray
     import pmodel
     import ml as shadow_ml
 
-    init_ray(address="ray://10.8.0.36:10001", extra_modules=[pmodel, shadow_ml])
+    we_inited_ray = not ray.is_initialized()
+    if we_inited_ray:
+        init_ray(address="ray://10.8.0.36:10001", extra_modules=[pmodel, shadow_ml])
     print(f"[data_loader] mem after Ray init: {mem_mb():.0f} MB")
 
     # Create source config
@@ -136,9 +139,8 @@ def _load_real(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     gc.collect()
     print(f"[data_loader] fit: {fit_df.shape}, val: {val_df.shape}, mem: {mem_mb():.0f} MB")
 
-    import ray
-
-    ray.shutdown()
-    print(f"[data_loader] Ray shutdown, mem: {mem_mb():.0f} MB")
+    if we_inited_ray:
+        ray.shutdown()
+        print(f"[data_loader] Ray shutdown, mem: {mem_mb():.0f} MB")
 
     return fit_df, val_df

@@ -164,6 +164,69 @@ Write guidance here before launching a batch to steer the orchestrator's strateg
 
 ---
 
+## Gate System (v2) — Three-Layer Promotion Checks
+
+### Overview
+
+Models are evaluated across **12 primary eval months** using a rolling window (10-month train, 2-month val per eval month). Promotion requires passing all three layers on all Group A gates.
+
+### Three Layers
+
+| Layer | What it checks | Formula | Purpose |
+|---|---|---|---|
+| **1. Mean Quality** | Average performance | `mean(metric) >= floor` | Basic quality bar |
+| **2. Tail Safety** | Catastrophic month protection | `count(months below tail_floor) <= 1` | No single-month disasters |
+| **3. Tail Non-Regression** | Worst-case improvement | `bottom_2_mean(new) >= bottom_2_mean(champ) - 0.02` | Worst months must not regress |
+
+### Gate Groups
+
+| Group | Gates | Role |
+|---|---|---|
+| **A (hard)** | S1-AUC, S1-AP, S1-VCAP@100, S1-NDCG | Must pass all 3 layers to promote |
+| **B (monitor)** | S1-BRIER, S1-VCAP@500, S1-VCAP@1000, S1-REC, S1-CAP@100, S1-CAP@500 | Tracked, don't block promotion |
+
+### Cascade Stages
+
+Evaluation follows a strict cascade: **f0 → f1 → f2+**
+- f0 and f1 are **blocking** — must pass before proceeding
+- f2+ is **monitor only** — tracked but doesn't block promotion
+
+### metrics.json Structure (v2)
+
+```json
+{
+  "per_month": {"2020-09": {"S1-AUC": 0.73, ...}, "2020-11": {...}, ...},
+  "aggregate": {
+    "mean": {"S1-AUC": 0.72, ...},
+    "std": {"S1-AUC": 0.03, ...},
+    "min": {"S1-AUC": 0.65, ...},
+    "max": {"S1-AUC": 0.78, ...},
+    "bottom_2_mean": {"S1-AUC": 0.67, ...}
+  },
+  "n_months": 12,
+  "eval_config": {"eval_months": [...], "class_type": "onpeak", "ptype": "f0", ...}
+}
+```
+
+### Running the Benchmark
+
+```bash
+# Smoke (single month, synthetic data)
+SMOKE_TEST=true python ml/benchmark.py --version-id v0 --ptype f0 --eval-months 2021-07
+
+# Real data (12 months via Ray, reads eval_months from gates.json)
+python ml/benchmark.py --version-id v0 --ptype f0 --class-type onpeak
+
+# Populate gate floors from v0 baseline
+python ml/populate_v0_gates.py
+```
+
+### Lower-is-Better Metrics
+
+S1-BRIER has inverted directions: `floor` is a ceiling, `tail_floor` is a ceiling, and `bottom_2_mean` picks the highest (worst) 2 values.
+
+---
+
 ## Timeouts & Safety
 
 ### Poll Timeouts (controller waits this long for handoff)

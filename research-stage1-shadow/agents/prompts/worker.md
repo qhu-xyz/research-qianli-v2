@@ -34,8 +34,13 @@ Implement the changes specified in the direction file:
 6. If tests pass: **Run the pipeline**:
    ```bash
    cd /home/xyz/workspace/pmodel && source .venv/bin/activate && cd "$(pwd)"
+   # Smoke mode (single month, synthetic data — for quick validation):
    SMOKE_TEST=true python ml/pipeline.py --version-id ${VERSION_ID} --auction-month 2021-07 --class-type onpeak --period-type f0
+   # Real mode (multi-month benchmark via Ray — produces per_month + aggregate metrics):
+   # python ml/benchmark.py --version-id ${VERSION_ID} --ptype f0 --class-type onpeak
    ```
+   The benchmark reads eval months from `gates.json` and runs Ray-parallel across 12 months.
+   `metrics.json` will contain `per_month` (per-month metrics) and `aggregate` (mean, std, min, max, bottom_2_mean).
 7. **Write** `registry/${VERSION_ID}/changes_summary.md` describing what you changed and why
 8. **Commit** your changes: `git add ml/ registry/${VERSION_ID}/ && git commit -m "iter${N}: ${brief_description}"`
 9. **Write handoff** (AFTER commit):

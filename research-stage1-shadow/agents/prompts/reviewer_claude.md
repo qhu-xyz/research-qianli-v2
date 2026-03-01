@@ -23,18 +23,43 @@ VERSION_ID=$(jq -r '.version_id // empty' state.json)
 7. `registry/gates.json` — gate definitions
 8. `ml/` codebase — read the actual code changes
 
+# GATE SYSTEM (v2) — Understanding Three-Layer Checks
+
+Metrics are evaluated across **12 primary eval months**. `metrics.json` contains:
+- `per_month`: `{"2020-09": {"S1-AUC": 0.73, ...}, ...}` — individual month performance
+- `aggregate`: `{"mean": {...}, "min": {...}, "max": {...}, "bottom_2_mean": {...}}` — summary stats
+
+**Three layers per gate** (all must pass for Group A):
+1. **Mean Quality**: `aggregate.mean[gate] >= floor` — average performance across all months
+2. **Tail Safety**: At most 1 month below `tail_floor` — prevents catastrophic single-month failures
+3. **Tail Non-Regression**: `aggregate.bottom_2_mean[gate] >= champion's bottom_2_mean - 0.02` — worst 2 months must not regress
+
+**Gate groups:**
+- **Group A (hard)**: S1-AUC, S1-AP, S1-VCAP@100, S1-NDCG — block promotion if any layer fails
+- **Group B (monitor)**: S1-BRIER, S1-VCAP@500, S1-VCAP@1000, S1-REC, S1-CAP@100, S1-CAP@500
+
+**Cascade**: f0 gates evaluated first (blocking), then f1, then f2+ (monitor only)
+
+For S1-BRIER (lower is better), directions are inverted: floor is a ceiling, and worst months are the highest values.
+
+# ITERATION CONTEXT
+
+Read `N` from state.json. If N > 1, you MUST read previous iteration results from `memory/warm/experiment_log.md` and `memory/warm/decision_log.md` to understand what was tried before and what reviewers previously recommended. Your review should build on this history.
+
 # TASK
 
 Provide a thorough technical review:
 
 1. **Code Quality**: Are the changes correct? Any bugs, edge cases, or regressions?
 2. **Hypothesis Validation**: Does the data support the hypothesis? Are the metrics convincing?
-3. **Gate Analysis**:
-   - Which gates improved? By how much?
-   - Which degraded? Is the degradation acceptable?
-   - Are any gates close to flipping pass/fail?
-4. **Statistical Rigor**: Is the sample size adequate? Could results be noise?
-5. **Gate Calibration**: Are current gate floors appropriate? Too easy? Too hard?
+3. **Gate Analysis (Three Layers)**:
+   - **Mean**: Which gates' means improved/degraded vs champion? By how much?
+   - **Tail safety**: Any months below tail_floor? Which months are weakest?
+   - **Tail regression**: Did bottom_2_mean improve or degrade vs champion?
+   - Are any gates close to flipping pass/fail on any layer?
+   - Is there a seasonal pattern in weak months? (e.g., summer vs winter)
+4. **Statistical Rigor**: With 12 eval months, is the improvement consistent or driven by 1-2 months?
+5. **Gate Calibration**: Are current floors/tail_floors appropriate? Too easy? Too hard?
 6. **Recommendations**: What should the next iteration focus on?
 
 # WRITE

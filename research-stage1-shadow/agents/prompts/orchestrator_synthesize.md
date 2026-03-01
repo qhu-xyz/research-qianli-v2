@@ -28,6 +28,24 @@ The first line of your input is `WORKER_FAILED=0` or `WORKER_FAILED=1`. Branch a
 6. `memory/hot/` — all hot memory files
 7. `registry/gates.json` — current gate definitions
 
+# GATE SYSTEM (v2) — Three-Layer Promotion Checks
+
+**metrics.json now contains per_month and aggregate sections.** When assessing gate performance:
+
+1. **Layer 1 — Mean Quality**: `mean(metric) >= floor` — check `aggregate.mean` vs gate floor
+2. **Layer 2 — Tail Safety**: At most 1 month below `tail_floor` — check `per_month` for outlier months
+3. **Layer 3 — Tail Non-Regression**: `mean_bottom_2(new) >= mean_bottom_2(champion) - noise_tolerance` — compare `aggregate.bottom_2_mean` vs champion's
+
+**Promote ONLY if:**
+- All Group A gates (S1-AUC, S1-AP, S1-VCAP@100, S1-NDCG) pass all 3 layers
+- Cascade stages pass: f0 first, then f1
+- Set `decisions.promote_version` to version_id if promoting, null otherwise
+
+**When analyzing results, always check:**
+- Which specific months are weakest? Any seasonal pattern?
+- Did the mean improve but tail get worse? (mean up, bottom_2 down = risky)
+- Compare per-month distributions, not just averages
+
 # TASK
 
 Synthesize the iteration results:
@@ -35,10 +53,11 @@ Synthesize the iteration results:
 ## If WORKER_FAILED=0:
 1. **Compare** planned direction vs actual results
 2. **Analyze** both reviewer critiques independently — do NOT just merge them
-3. **Assess** gate performance: which improved, which degraded, which stayed flat
-4. **Decide**: Should this version be promoted? (Only if all gates pass AND beats champion)
-5. **Update** memory files with learnings
-6. If N < 3: **Plan** next direction based on all feedback
+3. **Assess** gate performance across all 3 layers: mean, tail safety, tail regression
+4. **Check per-month metrics** for seasonal patterns or catastrophic months
+5. **Decide**: Should this version be promoted? (Only if all 3 layers pass for all Group A gates)
+6. **Update** memory files with learnings
+7. If N < 3: **Plan** next direction based on all feedback
 
 ## If WORKER_FAILED=1:
 1. **Record** the failure in experiment log

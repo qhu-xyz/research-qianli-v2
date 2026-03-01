@@ -27,6 +27,31 @@ VERSION_ID=$(jq -r '.version_id // empty' state.json)
 12. `memory/human_input.md` — per-batch human input (if exists)
 13. `human-input/` — static requirements (read requirement.md, reference.md)
 
+# GATE SYSTEM (v2) — Three-Layer Checks
+
+Gates use a **three-layer** promotion check evaluated across **12 primary eval months**:
+
+1. **Layer 1 — Mean Quality**: `mean(metric across months) >= floor`
+2. **Layer 2 — Tail Safety**: `count(months below tail_floor) <= 1` — catches catastrophic single-month failures
+3. **Layer 3 — Tail Non-Regression**: `mean_bottom_2(new) >= mean_bottom_2(champion) - noise_tolerance` — worst 2 months must not regress vs champion
+
+**Gate groups:**
+- **Group A (hard, blocking)**: S1-AUC, S1-AP, S1-VCAP@100, S1-NDCG — ALL must pass all 3 layers
+- **Group B (monitor)**: S1-BRIER, S1-VCAP@500, S1-VCAP@1000, S1-REC, S1-CAP@100, S1-CAP@500 — tracked but don't block promotion
+
+**Cascade stages** (strict): f0 must pass → f1 must pass → f2+ monitor only
+
+**metrics.json structure** (v2):
+```json
+{
+  "per_month": {"2020-09": {"S1-AUC": 0.73, ...}, ...},
+  "aggregate": {"mean": {...}, "std": {...}, "min": {...}, "max": {...}, "bottom_2_mean": {...}},
+  "n_months": 12
+}
+```
+
+When analyzing gate performance, check **per-month breakdown** for tail risk — a model with good mean AUC but one catastrophic month is NOT promotable.
+
 # TASK
 
 Based on all the context above, plan the next iteration:

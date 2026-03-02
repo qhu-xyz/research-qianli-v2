@@ -33,6 +33,17 @@ def prepare_features(
     """
     cols = config.features
     print(f"[features] mem before prepare: {mem_mb():.0f} MB")
+
+    # Compute interaction features from base columns
+    df = df.with_columns([
+        (pl.col("prob_exceed_110") / (pl.col("prob_exceed_90") + 1e-6))
+            .alias("exceed_severity_ratio"),
+        (pl.col("hist_da") * pl.col("prob_exceed_100"))
+            .alias("hist_physical_interaction"),
+        (pl.col("expected_overload") * pl.col("prob_exceed_105"))
+            .alias("overload_exceedance_product"),
+    ])
+
     X = df.select(cols).fill_null(0).to_numpy()
     return X, cols
 

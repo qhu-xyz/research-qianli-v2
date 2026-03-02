@@ -5,7 +5,7 @@ import pytest
 @pytest.fixture
 def synthetic_features():
     rng = np.random.RandomState(42)
-    return rng.randn(100, 14)
+    return rng.randn(100, 17)
 
 
 @pytest.fixture

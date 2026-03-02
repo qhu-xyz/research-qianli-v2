@@ -7,21 +7,25 @@ from ml.features import compute_binary_labels, compute_scale_pos_weight, prepare
 
 
 def test_prepare_features_shape():
-    """prepare_features returns (n_samples, 14) array."""
+    """prepare_features returns (n_samples, 17) array with interaction features."""
     rng = np.random.RandomState(42)
     fc = FeatureConfig()
-    data = {feat: rng.randn(50).tolist() for feat in fc.features}
+    # Only need the 14 base features — interactions are computed in prepare_features
+    base_features = [f[0] for f in fc.step1_features[:14]]
+    data = {feat: rng.randn(50).tolist() for feat in base_features}
     df = pl.DataFrame(data)
 
     X, cols = prepare_features(df, fc)
-    assert X.shape == (50, 14)
-    assert len(cols) == 14
+    assert X.shape == (50, 17)
+    assert len(cols) == 17
 
 
 def test_prepare_features_fills_nulls():
     """Null values are replaced with 0."""
     fc = FeatureConfig()
-    data = {feat: [None, 1.0, 2.0] for feat in fc.features}
+    # Only need the 14 base features — interactions are computed in prepare_features
+    base_features = [f[0] for f in fc.step1_features[:14]]
+    data = {feat: [None, 1.0, 2.0] for feat in base_features}
     df = pl.DataFrame(data)
 
     X, _ = prepare_features(df, fc)

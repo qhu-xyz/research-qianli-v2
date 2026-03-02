@@ -34,6 +34,10 @@ class FeatureConfig:
             # --- Historical DA shadow price ---
             ("hist_da", 1),
             ("hist_da_trend", 1),
+            # --- Interaction features (computed in prepare_features) ---
+            ("exceed_severity_ratio", 1),
+            ("hist_physical_interaction", 1),
+            ("overload_exceedance_product", 1),
         ]
     )
 
@@ -55,14 +59,14 @@ class FeatureConfig:
 class HyperparamConfig:
     """XGBoost hyperparameter configuration."""
 
-    n_estimators: int = 400
-    max_depth: int = 6
-    learning_rate: float = 0.05
+    n_estimators: int = 200
+    max_depth: int = 4
+    learning_rate: float = 0.1
     subsample: float = 0.8
     colsample_bytree: float = 0.8
     reg_alpha: float = 0.1
     reg_lambda: float = 1.0
-    min_child_weight: int = 5
+    min_child_weight: int = 10
     random_state: int = 42
 
     def to_dict(self) -> dict:

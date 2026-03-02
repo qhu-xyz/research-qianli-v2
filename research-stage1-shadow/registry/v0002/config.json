@@ -1,0 +1,53 @@
+{
+  "hyperparams": {
+    "n_estimators": 200,
+    "max_depth": 4,
+    "learning_rate": 0.1,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.0,
+    "min_child_weight": 10,
+    "random_state": 42
+  },
+  "features": [
+    "prob_exceed_110",
+    "prob_exceed_105",
+    "prob_exceed_100",
+    "prob_exceed_95",
+    "prob_exceed_90",
+    "prob_below_100",
+    "prob_below_95",
+    "prob_below_90",
+    "expected_overload",
+    "density_skewness",
+    "density_kurtosis",
+    "density_cv",
+    "hist_da",
+    "hist_da_trend",
+    "exceed_severity_ratio",
+    "hist_physical_interaction",
+    "overload_exceedance_product"
+  ],
+  "eval_config": {
+    "eval_months": [
+      "2020-09",
+      "2020-11",
+      "2021-01",
+      "2021-04",
+      "2021-06",
+      "2021-08",
+      "2021-10",
+      "2021-12",
+      "2022-03",
+      "2022-06",
+      "2022-09",
+      "2022-12"
+    ],
+    "class_type": "onpeak",
+    "ptype": "f0",
+    "train_months": 10,
+    "val_months": 2,
+    "threshold_beta": 0.7
+  }
+}

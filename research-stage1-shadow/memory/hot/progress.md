@@ -5,18 +5,27 @@
 | Field | Value |
 |-------|-------|
 | Batch | hp-tune-20260302-134412 |
-| Iteration | 1 of 3 |
-| State | ORCHESTRATOR_PLANNING → WORKER (pending handoff) |
+| Iteration | 1 of 3 (synthesis complete) |
+| State | ORCHESTRATOR_SYNTHESIZING → next: iter2 |
 | Champion | None (v0 baseline) |
-| Hypothesis | H3: HP tuning (max_depth=6, n_estimators=400, lr=0.05, min_child_weight=5) |
+| Last Hypothesis | H3: HP tuning — **REFUTED** (AUC -0.0025, 0W/11L) |
+| Next Hypothesis | H4: Interaction features (revert HPs + add cross-feature interactions) |
 
-## Iteration 1 Plan Summary
+## Iteration 1 Results Summary
 
-- **Objective**: Improve ranking quality (AUC, AP, NDCG) via hyperparameter tuning
-- **Changes**: 4 hyperparameter adjustments in `ml/config.py` → `HyperparamConfig`
-- **Expected**: AUC +0.005–0.015, AP +0.01–0.03, NDCG +0.005–0.015
-- **Risk**: Low — no architectural changes, well-understood XGBoost tuning
-- **Direction file**: `memory/direction_iter1.md`
+- **Version**: v0003
+- **Changes**: max_depth 4→6, n_estimators 200→400, lr 0.1→0.05, min_child_weight 10→5
+- **Outcome**: All Group A metrics regressed. AUC -0.0025 (0W/11L), AP -0.0015 (4W/8L), NDCG -0.0010 (4W/8L). BRIER improved -0.004 (12W/0L, Group B only).
+- **Promoted**: No
+- **Key Insight**: Model is feature-limited, not complexity-limited. HP tuning is the wrong lever.
+
+## Iteration 2 Plan Summary
+
+- **Objective**: Improve ranking quality via feature engineering
+- **Changes**: Revert HPs to v0 defaults + add 3 interaction features in `ml/features.py` + update `ml/config.py`
+- **Expected**: AUC +0.005–0.010, AP +0.01–0.02
+- **Risk**: Low — additive features on v0 baseline, no architectural changes
+- **Direction file**: `memory/direction_iter2.md`
 
 ## History
 
@@ -24,4 +33,5 @@
 |-------|------|--------|
 | smoke-v6 | Infrastructure validation | PASS (determinism confirmed) |
 | smoke-v7 | Bug fixes + beta experiment | Fixes merged, H2 failed (beta direction inverted) |
-| hp-tune-20260302-134412 iter1 | HP tuning (first real-data experiment) | Planning complete, awaiting worker |
+| hp-tune iter1 | HP tuning (v0003) | H3 refuted — no Group A improvement, AUC degraded |
+| hp-tune iter2 | Feature engineering | Planned — interaction features + HP revert |

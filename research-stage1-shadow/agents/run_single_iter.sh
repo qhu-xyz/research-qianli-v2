@@ -215,7 +215,7 @@ export WORKER_FAILED
 bash "${SCRIPT_DIR}/launch_orchestrator.sh" --phase synthesize --session "$SYNTH_SESSION"
 
 set +e
-poll_for_handoff "$HANDOFF_DIR" "orchestrator_synth_done.json" 420 15
+poll_for_handoff "$HANDOFF_DIR" "orchestrator_synth_done.json" 600 15
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then

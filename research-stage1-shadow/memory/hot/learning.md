@@ -39,3 +39,26 @@
 - Group A gates all pass with ~0.05 headroom from mean to floor
 - S1-BRIER (Group B) tightest: only 0.02 headroom (floor=0.170 vs mean=0.150)
 - S1-VCAP@100 has negative floor (-0.035) — effectively non-binding
+
+## From v0003 — HP Tuning Experiment (iter1, real data)
+
+### Model Complexity vs Feature Informativeness
+- **v0 HP defaults are near-optimal** — standard XGBoost tuning (depth 4→6, lr 0.1→0.05, trees 200→400, min_child_weight 10→5) produced zero improvement on Group A ranking metrics
+- **Model is feature-limited, not complexity-limited** — deeper trees cannot extract more discriminative signal from these 14 features
+- AUC degraded in 11/12 months (p≈0.003) — a real, systematic effect, not noise
+- BRIER improved in 12/12 months (p≈0.0002) — deeper/slower trees improve calibration but hurt discrimination
+- This means: the probability estimates become better-calibrated but the ranking order gets marginally worse
+
+### Calibration vs Discrimination Tradeoff
+- Deeper trees + lower learning rate → better calibrated probabilities (lower Brier) but slightly worse separation (lower AUC)
+- For our business objective (precision at high threshold), ranking quality (AUC/AP) matters more than calibration (BRIER)
+- This tradeoff means HP tuning alone cannot simultaneously improve both — need new signal (features)
+
+### Late-2022 Distribution Shift
+- Weakest months (2022-09, 2022-12) remain equally weak in v0003 — tree complexity doesn't help
+- The shift may require temporal features (season, trend) or expanded training window to address
+
+### Statistical Testing Insight
+- Month-level win/loss counts (0W/11L for AUC) are more informative than mean deltas (Δ=-0.0025)
+- A delta within noise tolerance can still be statistically significant when directionally consistent across months
+- Future iterations should track win/loss counts alongside mean deltas

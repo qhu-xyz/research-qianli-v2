@@ -64,3 +64,32 @@
 - Codex found new HIGH issue: threshold `>` vs `>=` mismatch (PR curve inclusive, apply_threshold exclusive) may suppress positives.
 - All code changes clean, no regressions.
 **Open Issues**: threshold `>` vs `>=` mismatch (Codex HIGH, new), threshold leakage (Codex HIGH, carried), dead config scale_pos_weight_auto (MEDIUM, carried), version allocator (MEDIUM, carried), misleading beta docstring in threshold.py (Claude LOW, new), DRY opportunity in compare.py (Claude LOW, new), missing-metric pass disagreement between table/JSON (Codex MEDIUM, new)
+
+---
+
+## Iteration 1 — v0003 (H3: Hyperparameter tuning — first real-data experiment)
+
+**Batch**: hp-tune-20260302-134412
+**Date**: 2026-03-02
+**Hypothesis**: H3 — Deeper trees (max_depth=6), slower learning (lr=0.05), more trees (n_estimators=400), finer splits (min_child_weight=5) improve ranking quality over v0 defaults.
+**Changes**: 4 hyperparameter adjustments in `ml/config.py` → `HyperparamConfig`. No feature, threshold, or pipeline changes.
+**Result**: **HYPOTHESIS REFUTED** — All Group A ranking metrics regressed slightly. AUC degradation statistically significant (0W/11L/1T, p≈0.003).
+
+| Gate | v0 Mean | v0003 Mean | Delta | v0 Bot2 | v0003 Bot2 | Δ Bot2 | Pass |
+|------|---------|------------|-------|---------|------------|--------|------|
+| S1-AUC | 0.8348 | 0.8323 | **-0.0025** | 0.8105 | 0.8089 | -0.0016 | YES |
+| S1-AP | 0.3936 | 0.3921 | **-0.0015** | 0.3322 | 0.3299 | -0.0023 | YES |
+| S1-VCAP@100 | 0.0149 | 0.0164 | +0.0015 | 0.0014 | 0.0007 | -0.0007 | YES |
+| S1-NDCG | 0.7333 | 0.7323 | **-0.0010** | 0.6716 | 0.6675 | -0.0041 | YES |
+| S1-BRIER | 0.1503 | 0.1462 | **-0.0041** ✓ | — | — | — | YES |
+
+**Overall Pass**: YES (all 3 layers pass for all Group A gates)
+**Promoted**: No — no Group A improvement over v0
+**Per-month consistency**: AUC worse in 11/12 months, AP worse in 8/12, NDCG worse in 8/12. BRIER improved in 12/12 months.
+**Weakest months unchanged**: 2022-09 (AP=0.309), 2022-12 (AUC=0.809), 2021-04 (NDCG=0.662)
+**Key Learnings**:
+- v0 HP defaults were already near-optimal. Standard "deeper + slower" XGBoost tuning did not improve ranking quality.
+- Model is **feature-limited, not complexity-limited** — deeper trees can't extract more signal from these 14 features.
+- Deeper trees DO improve calibration (BRIER 12/12 months better) but hurt discrimination (AUC worse).
+- Late-2022 distribution shift not addressable via tree complexity.
+**Code Issues**: Clean implementation, no new bugs. Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), dead config (LOW), Layer 3 disabled when champion=null (MEDIUM).

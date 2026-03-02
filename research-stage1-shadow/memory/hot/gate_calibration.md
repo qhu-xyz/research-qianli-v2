@@ -40,3 +40,11 @@ Calibrated from real-data v0 benchmark (commit d167090). Gate floors set as:
 - **Layer 1**: mean(metric) >= floor (or <= for BRIER)
 - **Layer 2**: count(months below tail_floor) <= 1
 - **Layer 3**: bottom_2_mean >= champion_bottom_2_mean - 0.02
+
+## Iteration 1 Observations (v0003, 2026-03-02)
+
+- All floors remain appropriate — v0003 passed all 3 layers with ~0.048 headroom on mean
+- No gate calibration changes recommended (only 1 real-data iteration beyond v0)
+- Codex suggested metric-specific noise_tolerance (tighter for AUC/AP/NDCG, looser for VCAP@100) — good idea but premature; revisit after 3-4 iterations
+- Layer 3 is effectively disabled when champion=null (defaults to pass) — acceptable for now
+- BRIER headroom actually increased (v0003 BRIER=0.146 vs floor=0.170, headroom now +0.024 vs v0's +0.020)

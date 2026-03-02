@@ -43,3 +43,19 @@ Both fixes should be applied in iter2 to maximize the chance of non-zero recall.
 
 ### D10: Continue deferring threshold leakage
 **Rationale**: Codex reiterated this as HIGH. Still impractical at n=20. Remains deferred to real data.
+
+---
+
+## Iteration 1 Synthesis (hp-tune-20260302-134412) — 2026-03-02
+
+### D11: No promotion for v0003
+**Rationale**: v0003 shows no improvement on any Group A ranking metric. AUC degraded in 11/12 months (statistically significant, p≈0.003). AP and NDCG degraded in 8/12 months. Only positive signal is BRIER -0.004 (Group B calibration, not ranking). Gates pass due to 0.05 headroom, not improvement. Both reviewers independently recommend against promotion. H3 refuted.
+
+### D12: No gate calibration changes
+**Rationale**: Only 1 real-data iteration beyond v0. Premature to tighten floors. Codex suggests metric-specific noise_tolerance — valid but needs 3-4 data points. Layer 3 non-regression effectively disabled when champion=null — acceptable since v0 is reference baseline. Revisit after iter2/iter3.
+
+### D13: Revert HP changes, pivot to feature engineering for iter2
+**Rationale**: Model is feature-limited, not complexity-limited. Evidence: (1) deeper trees didn't improve discrimination despite 2x more rounds; (2) AUC degraded systematically across 11/12 months; (3) BRIER improved (better calibration) while AUC worsened (worse discrimination) — ranking signal from 14 features is saturated. Both reviewers agree features are the bottleneck. Revert to v0 defaults, add interaction features.
+
+### D14: Continue deferring threshold methodology fixes
+**Rationale**: Threshold leakage (HIGH) and `>` vs `>=` mismatch (MEDIUM) affect threshold-dependent metrics only (REC, CAP, precision, BRIER). All Group A blocking gates are threshold-independent ranking metrics. Structural fix best done at HUMAN_SYNC. Issues affect v0 and v0003 equally.

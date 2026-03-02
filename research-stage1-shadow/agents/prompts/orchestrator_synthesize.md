@@ -69,17 +69,20 @@ Synthesize the iteration results:
 
 1. Update `memory/warm/experiment_log.md` — append iteration results
 2. Update `memory/warm/decision_log.md` — append decisions
-3. Update `memory/hot/critique_summary.md` — synthesized reviewer feedback
-4. Update `memory/hot/gate_calibration.md` — if gates seem miscalibrated
-5. Update `memory/hot/learning.md` — accumulated learnings
-6. If N < 3: Write `memory/direction_iter{N+1}.md`
-7. If N == 3:
-   - Archive: create `memory/archive/{BATCH_ID}/executive_summary.md`
-   - Update `memory/archive/index.md`
-   - Reset warm files to stubs
-   - Distill key learnings into `memory/hot/learning.md`
+3. Update `memory/warm/hypothesis_log.md` — append tested hypothesis with result (confirmed/failed/inconclusive) and key numbers
+4. Update `memory/hot/critique_summary.md` — synthesized reviewer feedback
+5. Update `memory/hot/gate_calibration.md` — if gates seem miscalibrated
+6. Update `memory/hot/learning.md` — accumulated learnings
+7. Update `memory/hot/progress.md` — current status, champion, iteration result summary
+8. If promoting: update `memory/hot/champion.md` — new champion version, key metrics, promotion rationale
+9. If N < 3: Write `memory/direction_iter{N+1}.md`
+10. If N == 3:
+    - Archive: create `memory/archive/{BATCH_ID}/executive_summary.md`
+    - Update `memory/archive/index.md`
+    - Reset warm files to stubs
+    - Distill key learnings into `memory/hot/learning.md`
 
-8. Write your handoff signal with structured decisions:
+11. Write your handoff signal with structured decisions:
 ```bash
 ARTIFACT="memory/direction_iter${N}.md"  # or executive_summary if N==3
 SHA=$(sha256sum "$ARTIFACT" | cut -d' ' -f1)

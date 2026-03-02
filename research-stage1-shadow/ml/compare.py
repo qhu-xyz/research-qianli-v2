@@ -367,6 +367,104 @@ def build_comparison_table(
     return "\n".join(rows)
 
 
+def build_three_layer_detail(
+    version_id: str,
+    metrics: dict,
+    gates: dict,
+    champion_metrics: dict | None = None,
+    noise_tolerance: float = 0.02,
+    tail_max_failures: int = 1,
+) -> str:
+    """Build detailed three-layer gate analysis for a single v2 version.
+
+    Returns Markdown with:
+    - Three-layer pass/fail table per gate
+    - Per-month breakdown for Group A gates
+    - Weakest months summary
+    """
+    if not _is_v2_metrics(metrics):
+        return ""
+
+    per_month = _extract_per_month(metrics)
+    champion_pm = _extract_per_month(champion_metrics) if champion_metrics else None
+    mm_results = check_gates_multi_month(
+        per_month, gates, tail_max_failures, champion_pm, noise_tolerance
+    )
+
+    lines = [f"### {version_id} — Three-Layer Detail\n"]
+
+    # Layer summary table
+    lines.append("| Gate | Group | Mean | Floor | L1 Mean | Tail Fail | L2 Tail | Bot2 Mean | L3 Regr | Overall |")
+    lines.append("|------|-------|------|-------|---------|-----------|---------|-----------|---------|---------|")
+
+    for gate_name, r in mm_results.items():
+        group = r.get("group", "A")
+        mean_val = r.get("mean_value")
+        floor = gates[gate_name].get("floor")
+        l1 = "P" if r.get("mean_passed") else "F" if r.get("mean_passed") is False else "?"
+        tail_f = r.get("tail_failures", "?")
+        l2 = "P" if r.get("tail_passed") else "F" if r.get("tail_passed") is False else "?"
+        b2 = r.get("bottom_2_mean")
+        l3 = "P" if r.get("tail_regression_passed") else "F" if r.get("tail_regression_passed") is False else "?"
+        overall = "P" if r.get("overall_passed") else "F" if r.get("overall_passed") is False else "?"
+
+        mean_str = f"{mean_val:.4f}" if mean_val is not None else "--"
+        floor_str = f"{floor:.4f}" if floor is not None else "--"
+        b2_str = f"{b2:.4f}" if b2 is not None else "--"
+
+        lines.append(f"| {gate_name} | {group} | {mean_str} | {floor_str} | {l1} | {tail_f} | {l2} | {b2_str} | {l3} | {overall} |")
+
+    lines.append("")
+
+    # Per-month breakdown for Group A gates
+    months = sorted(per_month.keys())
+    group_a_gates = [g for g, d in gates.items() if d.get("group", "A") == "A"]
+
+    if months and group_a_gates:
+        lines.append("**Per-month (Group A gates):**\n")
+        header = "| Month | " + " | ".join(group_a_gates) + " |"
+        sep = "|-------|" + "|".join(["--------"] * len(group_a_gates)) + "|"
+        lines.append(header)
+        lines.append(sep)
+
+        for month in months:
+            cells = []
+            for gate in group_a_gates:
+                v = per_month[month].get(gate)
+                tail_floor = gates[gate].get("tail_floor")
+                if v is not None:
+                    # Mark if below tail_floor
+                    direction = gates[gate]["direction"]
+                    below = False
+                    if tail_floor is not None:
+                        if direction == "higher" and v < tail_floor:
+                            below = True
+                        elif direction == "lower" and v > tail_floor:
+                            below = True
+                    mark = " **!**" if below else ""
+                    cells.append(f"{v:.4f}{mark}")
+                else:
+                    cells.append("--")
+            lines.append(f"| {month} | " + " | ".join(cells) + " |")
+
+        lines.append("")
+        lines.append("(**!** = below tail_floor)\n")
+
+    # Weakest months summary
+    if months and group_a_gates:
+        lines.append("**Weakest months:**\n")
+        for gate in group_a_gates:
+            vals = [(m, per_month[m][gate]) for m in months if per_month[m].get(gate) is not None]
+            if vals:
+                vals.sort(key=lambda x: x[1] if gates[gate]["direction"] == "higher" else -x[1])  # type: ignore[operator]
+                worst = vals[:2]
+                worst_str = ", ".join(f"{m}={v:.4f}" for m, v in worst)
+                lines.append(f"- {gate}: {worst_str}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def run_comparison(
     batch_id: str,
     iteration: int,
@@ -461,13 +559,28 @@ def run_comparison(
         "table": table,
     }
 
+    # Build detailed three-layer breakdowns for v2 versions
+    detail_sections = []
+    for version_id, metrics in sorted(versions.items()):
+        if _is_v2_metrics(metrics):
+            detail = build_three_layer_detail(
+                version_id, metrics, gates, champion_metrics,
+                noise_tolerance, tail_max_failures,
+            )
+            if detail:
+                detail_sections.append(detail)
+
     # Write Markdown report
     if output_path:
         report = f"# Comparison Report\n\n"
         report += f"**Batch:** {batch_id}  **Iteration:** {iteration}\n"
         report += f"**Champion:** {champion_version or 'None'}\n"
         report += f"**Timestamp:** {comparison['timestamp']}\n\n"
-        report += table + "\n"
+        report += "## Summary Table\n\n"
+        report += table + "\n\n"
+        if detail_sections:
+            report += "## Three-Layer Gate Detail\n\n"
+            report += "\n".join(detail_sections)
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w") as f:

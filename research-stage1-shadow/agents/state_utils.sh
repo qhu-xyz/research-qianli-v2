@@ -38,6 +38,7 @@ cas_transition() {
   jq --arg s "$new_state" --arg t "$now" --argjson f "$_fields" \
     '.state = $s | .entered_at = $t | . + $f' "$STATE_FILE" > "$tmpfile"
   mv "$tmpfile" "$STATE_FILE"
+  echo "STATE: ${expected} -> ${new_state} [${now}]"
 }
 
 get_expected_artifact() {
@@ -84,8 +85,10 @@ poll_for_handoff() {
   current_state=$(jq -r '.state' "$STATE_FILE")
   local timeout_file="${handoff_dir}/timeout_${current_state}.json"
 
+  echo "POLL: waiting for ${filename} (timeout=${timeout_s}s, interval=${interval_s}s)"
   while (( elapsed < timeout_s )); do
     if [[ -f "$handoff_path" ]]; then
+      echo "POLL: ${filename} received after ${elapsed}s"
       return 0
     fi
     if [[ -f "$timeout_file" ]]; then
@@ -94,6 +97,7 @@ poll_for_handoff() {
     fi
     sleep "$interval_s"
     elapsed=$((elapsed + interval_s))
+    echo "POLL: ... ${elapsed}s/${timeout_s}s waiting for ${filename}"
   done
   echo "POLL: timed out after ${timeout_s}s waiting for $filename" >&2
   return 1

@@ -10,6 +10,7 @@ source "${SCRIPT_DIR}/state_utils.sh"
 HANDOFF_DIR="${PROJECT_DIR}/handoff/${BATCH_ID}/iter${N}"
 mkdir -p "$HANDOFF_DIR"
 
+ITER_START=$SECONDS
 echo "=== Iteration ${N} starting ==="
 
 # Step 0: env vars already exported by run_pipeline.sh
@@ -35,6 +36,10 @@ if (( POLL_RC != 0 )); then
   echo "FATAL: orchestrator plan timed out at iter ${N}" >&2
   exit 1
 fi
+
+echo "[iter${N}] Orchestrator plan completed in $(( SECONDS - ITER_START ))s"
+ORCH_LOG="${PROJECT_DIR}/.logs/sessions/${SESSION}.log"
+[[ -f "$ORCH_LOG" ]] && echo "[iter${N}] --- last 5 lines of orchestrator plan log ---" && tail -5 "$ORCH_LOG" | sed 's/^/  | /' && echo "[iter${N}] --- end log snippet ---"
 
 # RT-6: validate orchestrator handoff JSON
 if ! jq empty "${HANDOFF_DIR}/orchestrator_plan_done.json" 2>/dev/null; then
@@ -73,6 +78,11 @@ if (( POLL_RC != 0 )); then
   echo "FATAL: worker timed out at iter ${N}" >&2
   exit 1
 fi
+
+WORKER_ELAPSED=$(( SECONDS - ITER_START ))
+echo "[iter${N}] Worker phase completed in ${WORKER_ELAPSED}s (cumulative)"
+WORKER_LOG="${PROJECT_DIR}/.logs/sessions/${WORKER_SESSION}.log"
+[[ -f "$WORKER_LOG" ]] && echo "[iter${N}] --- last 5 lines of worker log ---" && tail -5 "$WORKER_LOG" | sed 's/^/  | /' && echo "[iter${N}] --- end log snippet ---"
 
 # Step 7a: check worker handoff (RT-6: validate JSON before parsing)
 if ! jq empty "${HANDOFF_DIR}/worker_done.json" 2>/dev/null; then
@@ -161,6 +171,10 @@ if (( WORKER_FAILED == 0 )); then
     exit 1
   fi
 
+  echo "[iter${N}] Claude review completed in $(( SECONDS - ITER_START ))s (cumulative)"
+  CLAUDE_LOG="${PROJECT_DIR}/.logs/sessions/${CLAUDE_SESSION}.log"
+  [[ -f "$CLAUDE_LOG" ]] && echo "[iter${N}] --- last 5 lines of Claude reviewer log ---" && tail -5 "$CLAUDE_LOG" | sed 's/^/  | /' && echo "[iter${N}] --- end log snippet ---"
+
   # Step 11: verify Claude review
   verify_handoff "${HANDOFF_DIR}/reviewer_claude_done.json" "REVIEW_CLAUDE" || true
 
@@ -183,6 +197,9 @@ if (( WORKER_FAILED == 0 )); then
   fi
 
   # Step 14: (poll complete or timeout)
+  echo "[iter${N}] Codex review completed in $(( SECONDS - ITER_START ))s (cumulative)"
+  CODEX_LOG="${PROJECT_DIR}/.logs/sessions/${CODEX_SESSION}.log"
+  [[ -f "$CODEX_LOG" ]] && echo "[iter${N}] --- last 5 lines of Codex reviewer log ---" && tail -5 "$CODEX_LOG" | sed 's/^/  | /' && echo "[iter${N}] --- end log snippet ---"
 
   # Step 15: REVIEW_CODEX -> ORCHESTRATOR_SYNTHESIZING
   cas_transition REVIEW_CODEX ORCHESTRATOR_SYNTHESIZING "{\"max_seconds\":600}"
@@ -208,6 +225,10 @@ if (( POLL_RC != 0 )); then
   exit 1
 fi
 
+echo "[iter${N}] Synthesis completed in $(( SECONDS - ITER_START ))s (cumulative)"
+SYNTH_LOG="${PROJECT_DIR}/.logs/sessions/${SYNTH_SESSION}.log"
+[[ -f "$SYNTH_LOG" ]] && echo "[iter${N}] --- last 5 lines of synthesis log ---" && tail -5 "$SYNTH_LOG" | sed 's/^/  | /' && echo "[iter${N}] --- end log snippet ---"
+
 # RT-6: validate synthesis handoff JSON
 if ! jq empty "${HANDOFF_DIR}/orchestrator_synth_done.json" 2>/dev/null; then
   echo "[iter${N}] WARNING: synthesis handoff JSON malformed — skipping promotion" >&2
@@ -219,6 +240,24 @@ if [[ -n "$PROMOTE" ]]; then
   echo "[iter${N}] Promoting version: $PROMOTE"
   cd "$PROJECT_DIR" && source "$VENV_ACTIVATE"
   python -c "from ml.registry import promote_version; promote_version('${PROJECT_DIR}/registry', '${PROMOTE}', '${PROJECT_DIR}/registry/champion.json')"
+  # Update champion.md so next iteration's agents see current champion
+  PROMOTE_METRICS=$(python -c "
+import json
+with open('${PROJECT_DIR}/registry/${PROMOTE}/metrics.json') as f:
+    m = json.load(f)
+agg = m.get('aggregate', {}).get('mean', m)
+print(f'AUC={agg.get(\"S1-AUC\", \"?\"):.4f}, AP={agg.get(\"S1-AP\", \"?\"):.4f}, NDCG={agg.get(\"S1-NDCG\", \"?\"):.4f}, BRIER={agg.get(\"S1-BRIER\", \"?\"):.4f}')
+" 2>/dev/null || echo "metrics unavailable")
+  cat > "${PROJECT_DIR}/memory/hot/champion.md" << CHAMPEOF
+# Champion
+
+**Current champion: ${PROMOTE}** (promoted at iter${N} of batch ${BATCH_ID})
+
+Key metrics (mean across eval months): ${PROMOTE_METRICS}
+
+See \`registry/${PROMOTE}/metrics.json\` for full per-month breakdown.
+CHAMPEOF
+  echo "[iter${N}] Updated memory/hot/champion.md"
 fi
 
 # Step 17a: commit synthesis outputs (O-3 + HP-2)
@@ -234,4 +273,5 @@ else
   cas_transition ORCHESTRATOR_SYNTHESIZING IDLE '{}'
 fi
 
-echo "=== Iteration ${N} complete ==="
+ITER_ELAPSED=$(( SECONDS - ITER_START ))
+echo "=== Iteration ${N} complete — total ${ITER_ELAPSED}s ($(( ITER_ELAPSED / 60 ))m$(( ITER_ELAPSED % 60 ))s) ==="

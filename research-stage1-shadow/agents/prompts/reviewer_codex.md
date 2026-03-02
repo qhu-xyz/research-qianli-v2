@@ -13,12 +13,13 @@ Read the following files (in order):
 1. `human-input/business_context.md` — **READ FIRST**: domain context, business objective (precision > recall), feature descriptions, v0 baseline
 2. `memory/direction_iter${N}.md` — what was planned
 2. `registry/${VERSION_ID}/changes_summary.md` — what the worker changed
-3. `reports/${BATCH_ID}/iter${N}/comparison.md` — gate comparison table
-4. `memory/warm/experiment_log.md` — experiment history
-5. `memory/hot/gate_calibration.md` — gate calibration notes
-6. `memory/warm/decision_log.md` — decision history
-7. `registry/gates.json` — gate definitions
-8. All files in `ml/` — the ML codebase
+3. `reports/${BATCH_ID}/iter${N}/comparison.md` — gate comparison table (includes per-month breakdown and three-layer detail)
+4. `registry/${VERSION_ID}/metrics.json` — raw metrics with `per_month` and `aggregate` sections (use for seasonal analysis, tail risk, bottom_2_mean)
+5. `memory/warm/experiment_log.md` — experiment history
+6. `memory/hot/gate_calibration.md` — gate calibration notes
+7. `memory/warm/decision_log.md` — decision history
+8. `registry/gates.json` — gate definitions
+9. All files in `ml/` — the ML codebase
 
 # GATE SYSTEM (v2) — Understanding Three-Layer Checks
 

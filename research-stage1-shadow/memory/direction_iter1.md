@@ -1,155 +1,142 @@
-# Direction — Iteration 1 (hp-tune-20260302-144146)
+# Direction — Iteration 1 (feat-eng-20260302-154125)
 
 ## Hypothesis
 
-**H4: Interaction features provide new discriminative signal for ranking quality.**
+**H5: Training window expansion (10→14 months) improves ranking quality by exposing the model to more diverse market regimes, directly addressing the late-2022 distribution shift.**
 
-The model is feature-limited at AUC ~0.835 with 14 independent features. Previous iteration (H3, v0003) proved that HP tuning cannot improve ranking — deeper trees + slower learning degraded AUC in 11/12 months while only improving calibration (BRIER). The 14 features have reached their informational ceiling for independent-feature splits.
+Revert to v0's 14 base features (remove 3 interaction features from v0002) to isolate the training window effect.
 
-Adding physically-motivated interaction features that capture cross-feature combinations should provide new discriminative signal that XGBoost depth-4 trees cannot easily discover through single-feature splits (a 2-feature interaction requires 2 splits, consuming half the tree depth; a pre-computed interaction needs only 1 split).
+## Rationale
+
+Two independent levers have failed to break the AUC ceiling at ~0.835:
+- **v0003** (HP tuning): AUC -0.0025, 0W/11L — model is not complexity-limited
+- **v0002** (interaction features): AUC +0.0000, 5W/6L/1T — interactions don't add new information
+
+Both reviewers and the previous orchestrator converge on: **the dominant remaining problem is temporal non-stationarity (late-2022 distribution shift)**. The 10-month rolling training window may not capture enough regime diversity.
+
+Evidence for distribution shift:
+- Weakest months: 2022-09 (AP=0.315), 2022-12 (AUC=0.809), 2022-06 (REC=0.313)
+- Interaction features helped early months (2020-09 to 2021-04) but not late months (2022+)
+- Late-2022 weakness unchanged across HP tuning AND interaction features
+
+Why remove interaction features:
+- v0002 showed bottom-2 regressed on 3/4 Group A metrics (AP -0.0017, VCAP@100 -0.0008, NDCG -0.0013)
+- Gains concentrated in distribution middle, not tails
+- VCAP@500 -0.0043 and VCAP@1000 -0.0031 (hurt broader ranking)
+- Clean single-variable comparison (v0 features + new window) gives the clearest signal
 
 ## Specific Changes
 
-### 1. Revert HyperparamConfig to v0 defaults (CRITICAL — do this first)
+### 1. Fix benchmark.py train_months plumbing (BUG — blocking for this experiment)
 
-**File**: `ml/config.py`, class `HyperparamConfig`
+**Problem**: `_eval_single_month` creates `PipelineConfig` with default `train_months=10`, ignoring any override. The `run_benchmark` overrides set `train_months` on `pc_dummy` but never pass it to `_eval_single_month`.
 
-The config currently has v0003 values from the previous batch. These MUST be reverted:
+**File**: `ml/benchmark.py`
 
-| Param | Current (v0003) | Revert to (v0) |
-|-------|----------------|----------------|
-| `n_estimators` | 400 | **200** |
-| `max_depth` | 6 | **4** |
-| `learning_rate` | 0.05 | **0.1** |
-| `min_child_weight` | 5 | **10** |
+**Changes**:
+- Add `train_months: int = 10` and `val_months: int = 2` parameters to `_eval_single_month` signature
+- Pass them when constructing `PipelineConfig` inside `_eval_single_month`:
+  ```python
+  config = PipelineConfig(
+      auction_month=auction_month,
+      class_type=class_type,
+      period_type=ptype,
+      threshold_beta=threshold_beta,
+      train_months=train_months,
+      val_months=val_months,
+  )
+  ```
+- Extract `train_months` and `val_months` from `pc_dummy` in `run_benchmark` after `_apply_overrides`, and pass them to `_eval_single_month`:
+  ```python
+  train_months = pc_dummy.train_months
+  val_months = pc_dummy.val_months
+  ```
+- Fix the hardcoded `"train_months": 10` on line 178 — use the actual value:
+  ```python
+  "train_months": train_months,
+  "val_months": val_months,
+  ```
 
-All other HP defaults (`subsample=0.8`, `colsample_bytree=0.8`, `reg_alpha=0.1`, `reg_lambda=1.0`, `random_state=42`) remain unchanged.
+### 2. Remove interaction features — revert to v0's 14 base features
 
-### 2. Add 3 interaction features to FeatureConfig
+**File**: `ml/config.py`
+- Remove the 3 interaction feature tuples from `FeatureConfig.step1_features`:
+  - `("exceed_severity_ratio", 1)`
+  - `("hist_physical_interaction", 1)`
+  - `("overload_exceedance_product", 1)`
+- Update docstring: features property should say "14 items" (already does, but verify)
 
-**File**: `ml/config.py`, class `FeatureConfig`
+**File**: `ml/features.py`
+- Remove the `df.with_columns([...])` block that computes the 3 interaction features (lines 38-45)
+- Fix docstrings: "14 feature columns" is correct after removal; "shape (n_samples, 14)" is correct
 
-Append these 3 features to `step1_features` (after the existing 14):
+**File**: `ml/data_loader.py`
+- Fix docstring on line 24: "14 feature columns" is correct after removal
 
-```python
-# --- Interaction features (computed in prepare_features) ---
-("exceed_severity_ratio", 1),       # prob_exceed_110 / (prob_exceed_90 + 1e-6)
-("hist_physical_interaction", 1),   # hist_da * prob_exceed_100
-("overload_exceedance_product", 1), # expected_overload * prob_exceed_105
-```
+### 3. Set train_months=14 in PipelineConfig default
 
-Total features: 14 → 17. All 3 new features get monotone constraint +1 (higher = more likely to bind).
-
-### 3. Compute interaction features in prepare_features
-
-**File**: `ml/features.py`, function `prepare_features`
-
-Before the `df.select(cols)` line, compute the 3 new columns from existing features using polars expressions:
-
-```python
-def prepare_features(
-    df: pl.DataFrame, config: FeatureConfig
-) -> tuple[np.ndarray, list[str]]:
-    cols = config.features
-    print(f"[features] mem before prepare: {mem_mb():.0f} MB")
-
-    # Compute interaction features from base columns
-    df = df.with_columns([
-        # Tail concentration: how much exceedance is in the extreme tail
-        (pl.col("prob_exceed_110") / (pl.col("prob_exceed_90") + 1e-6))
-            .alias("exceed_severity_ratio"),
-        # Historical × physical confirmation
-        (pl.col("hist_da") * pl.col("prob_exceed_100"))
-            .alias("hist_physical_interaction"),
-        # Severity-weighted likelihood
-        (pl.col("expected_overload") * pl.col("prob_exceed_105"))
-            .alias("overload_exceedance_product"),
-    ])
-
-    X = df.select(cols).fill_null(0).to_numpy()
-    return X, cols
-```
-
-**Key design choice**: Features are computed in `prepare_features()`, not in the data loader. This means:
-- No changes to `data_loader.py` (real or smoke mode)
-- Smoke test data works automatically (interactions computed from random base features)
-- All 14 base columns remain available as inputs to the interaction computation
+**File**: `ml/config.py`
+- Change `train_months: int = 10` to `train_months: int = 14` in `PipelineConfig`
 
 ### 4. Update tests
 
-Existing tests should still pass since the default `FeatureConfig()` now includes 17 features and `prepare_features()` computes the interactions. Verify:
-- `tests/test_features.py`: Feature count assertion changes from 14 → 17
-- `tests/test_pipeline.py`: Smoke test should pass end-to-end with 17 features
-- `tests/test_config.py`: Feature list length assertion may need updating
+**File**: `ml/tests/test_config.py`
+- Update assertion `assert pc.train_months == 10` → `assert pc.train_months == 14`
+- Update any feature count assertions from 17 back to 14
 
-If any test hardcodes `14` for feature count, update to `17`.
+**File**: `ml/tests/test_features.py` (if exists)
+- Remove test data for interaction features
+- Update expected feature count assertions from 17 to 14
 
-### 5. Run benchmark
+### 5. Add schema guard for base feature columns (from Codex review, MEDIUM)
 
-After all code changes + tests pass:
+**File**: `ml/features.py`
+- Before `df.select(cols)`, add validation that all base columns exist in the DataFrame:
+  ```python
+  missing = [c for c in cols if c not in df.columns]
+  if missing:
+      raise ValueError(f"Missing feature columns in DataFrame: {missing}")
+  ```
+
+## Run Configuration
+
+The worker should run benchmark with:
 ```bash
 cd /home/xyz/workspace/pmodel && source .venv/bin/activate
 cd /home/xyz/workspace/research-qianli-v2/research-stage1-shadow
-python ml/benchmark.py --version-id ${VERSION_ID} --ptype f0 --class-type onpeak
+
+python -m ml.benchmark --version-id ${VERSION_ID} --ptype f0 --class-type onpeak
 ```
 
-Then run compare:
-```bash
-python ml/compare.py --gates-path registry/gates.json --registry-dir registry
-```
-
-## Feature Rationale
-
-### exceed_severity_ratio = prob_exceed_110 / (prob_exceed_90 + 1e-6)
-
-**Physical meaning**: Measures tail concentration of exceedance probability. A constraint with prob_exceed_110=0.30 and prob_exceed_90=0.40 (ratio=0.75) is far more severe than one with prob_exceed_110=0.01 and prob_exceed_90=0.40 (ratio=0.025). Both have similar prob_exceed_90, but the first has most of its exceedance in the extreme tail, indicating near-certain heavy binding.
-
-**Why XGBoost can't easily discover this**: With monotone constraints, prob_exceed_110 and prob_exceed_90 are both constrained (+1 and +1). The ratio captures a RELATIVE signal (concentration) that requires the model to split on both features in a specific order, using 2 of 4 available depth levels.
-
-### hist_physical_interaction = hist_da × prob_exceed_100
-
-**Physical meaning**: Combines two independent information sources — historical binding (has this constraint bound before?) and physical likelihood (is the current flow distribution likely to exceed the limit?). When both are high, the constraint is a very strong binding candidate. When either is low, the signal is weak. This AND-like combination is exactly what matters for precision: we want constraints where BOTH signals agree.
-
-**Business relevance**: This is the most important feature for precision. A constraint with high hist_da but low physical exceedance may have changed (line upgrade, topology change). A constraint with high physical exceedance but no history is unproven. Both signals together = high confidence.
-
-### overload_exceedance_product = expected_overload × prob_exceed_105
-
-**Physical meaning**: Expected MW overload × probability of significant (>105%) exceedance. This captures "how badly AND how likely" in a single number. A constraint with 50 MW expected overload and 40% chance of exceeding 105% is a stronger binding candidate than one with 100 MW overload but only 5% chance of exceedance.
-
-**Why it helps VCAP@100**: This feature directly captures the VALUE component — constraints with high overload × high exceedance probability tend to produce larger shadow prices, improving value capture at top-K.
+No `--overrides` needed since `train_months=14` is set as the new default.
 
 ## Expected Impact
 
-| Metric | v0 Mean | Expected Direction | Rationale |
-|--------|---------|-------------------|-----------|
-| S1-AUC | 0.8348 | +0.005 to +0.015 | New discriminative signal for separation |
-| S1-AP | 0.3936 | +0.010 to +0.025 | Better ranking of positives in imbalanced setting |
-| S1-NDCG | 0.7333 | +0.005 to +0.015 | Better ranking quality at top positions |
-| S1-VCAP@100 | 0.0149 | +0.005 to +0.020 | overload_exceedance_product targets value capture directly |
-| S1-BRIER | 0.1503 | ±0.002 | Neutral — features help ranking, not calibration |
+| Metric | Direction | Rationale |
+|--------|-----------|-----------|
+| S1-AUC | +0.002–0.008 | More diverse training data → better generalization, especially late-2022 |
+| S1-AP | +0.005–0.015 | Ranking quality should improve with broader regime coverage |
+| S1-NDCG | +0.002–0.010 | Better ordering of borderline cases |
+| S1-VCAP@100 | ~neutral | Top-100 captures extreme cases that may not benefit from more training data |
+| S1-BRIER | ~neutral | Calibration effects are unclear; monitor closely |
 
-**Win/loss target**: AUC improvement in ≥8/12 months (vs 0/11 for v0003). If < 6/12, the features aren't providing consistent signal.
+**Primary success metric**: AUC improvement in late-2022 months (2022-09, 2022-12).
+**Secondary**: AUC win count ≥ 8/12 months.
 
 ## Risk Assessment
 
-### Low Risk
-- **No HP changes vs v0** — reverting to proven defaults isolates the feature effect
-- **Additive features** — 14 base features unchanged; 3 new features can only add signal
-- **Monotone constraints preserved** — all 3 new features have physically justified +1 constraints
-- **No data changes** — same 12 eval months, same train/val splits, same data loader
+1. **Stale pattern inclusion** (MEDIUM): Older months in the training window may contain patterns that no longer hold. The 14-month window includes data from ~1 year before the auction month. If market dynamics changed, this could hurt rather than help. Mitigation: compare early-months vs late-months performance to detect this.
 
-### Medium Risk
-- **Feature noise**: If interaction features are noisy (high variance across months), they could slightly degrade stability. Mitigated by: monotone constraints prevent overfitting to noise direction; subsample=0.8 + colsample=0.8 provide regularization.
-- **Collinearity**: `exceed_severity_ratio` is correlated with `prob_exceed_110` (numerator). XGBoost handles collinearity well (greedy split selection), but the tree may split redundantly. If AUC doesn't improve, this is a possible explanation.
+2. **Data loading time** (LOW): Loading 4 additional months of training data per eval month increases runtime. At ~270K rows/month, this adds ~1.1M rows per eval month (~40% more data). Training time scales roughly linearly with data size. Total benchmark time may increase from ~45min to ~60min. Within worker timeout.
 
-### Not a Risk
-- **BRIER regression**: These features improve ranking, not calibration. BRIER should be neutral (±0.002). The 0.02 headroom to BRIER floor (0.170) is safe.
-- **Gate failures**: v0 passes all gates with ~0.05 headroom. Even a small regression would not breach floors.
+3. **Overfitting risk** (LOW): More training data generally reduces overfitting, not increases it. This is the safest direction available.
 
-## Success Criteria
+4. **train_months plumbing fix could introduce bugs** (LOW): The benchmark.py fix is mechanical — adding parameter passthrough. Test by verifying that v0 baseline results are reproduced when train_months=10 is explicitly passed.
 
-1. **Primary**: AUC mean > 0.8348 (any improvement over v0)
-2. **Primary**: AP mean > 0.3936 (any improvement over v0)
-3. **Consistency**: AUC improved in ≥8/12 months (statistical significance)
-4. **No regression**: All Group A gates pass all 3 layers
-5. **Tail safety**: Bottom-2 AUC ≥ 0.810 (v0 = 0.811)
+## Validation Checklist
+
+- [ ] All existing tests pass after changes
+- [ ] Benchmark with train_months=10 (explicit override) reproduces v0 metrics (±0.001) — confirms the plumbing fix doesn't break anything
+- [ ] Benchmark with train_months=14 (new default) completes successfully for all 12 months
+- [ ] No month produces empty training or validation set with the expanded window
+- [ ] eval_config in metrics.json correctly shows train_months=14

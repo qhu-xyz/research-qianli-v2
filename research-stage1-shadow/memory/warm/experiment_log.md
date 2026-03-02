@@ -1,5 +1,9 @@
 # Experiment Log
 
+> **NOTE**: Experiments below smoke-v6 and smoke-v7 used SMOKE_TEST data (n=20).
+> Gate floors have since been recalibrated from real v0 (12 months, ~270K rows/month).
+> See memory/hot/gate_calibration.md for current floors.
+
 ## Iteration 1 — v0001 (Infrastructure Validation)
 
 **Batch**: smoke-v6-20260227-190225

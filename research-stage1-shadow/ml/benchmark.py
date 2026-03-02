@@ -33,8 +33,8 @@ def _eval_single_month(
     hyperparam_config: HyperparamConfig,
     feature_config: FeatureConfig,
     threshold_beta: float = 0.7,
-) -> dict:
-    """Train + evaluate on a single auction month. Returns metrics dict."""
+) -> dict | None:
+    """Train + evaluate on a single auction month. Returns metrics dict or None if skipped."""
     print(f"[benchmark] Evaluating {auction_month} (ptype={ptype}), mem: {mem_mb():.0f} MB")
 
     config = PipelineConfig(
@@ -47,6 +47,12 @@ def _eval_single_month(
     # Load data (train + val)
     train_df, val_df = load_data(config)
     print(f"[benchmark]   train={train_df.shape}, val={val_df.shape}")
+
+    if val_df.shape[0] == 0:
+        print(f"[benchmark]   SKIP {auction_month}: empty validation set (ptype={ptype})")
+        del train_df, val_df
+        gc.collect()
+        return None
 
     # Prepare features
     X_train, _ = prepare_features(train_df, feature_config)
@@ -136,18 +142,26 @@ def run_benchmark(
     if not smoke:
         import ray
         if not ray.is_initialized():
+            os.environ.setdefault("RAY_ADDRESS", "ray://10.8.0.36:10001")
             from pbase.config.ray import init_ray
             import pmodel
             import ml as shadow_ml
-            init_ray(address="ray://10.8.0.36:10001", extra_modules=[pmodel, shadow_ml])
+            init_ray(extra_modules=[pmodel, shadow_ml])
             we_inited_ray = True
 
     per_month = {}
+    skipped = []
     for month in eval_months:
         metrics = _eval_single_month(
             month, class_type, ptype, hyperparam_config, feature_config, threshold_beta
         )
+        if metrics is None:
+            skipped.append(month)
+            continue
         per_month[month] = metrics
+
+    if skipped:
+        print(f"[benchmark] Skipped {len(skipped)} months with empty val: {skipped}")
 
     if we_inited_ray:
         import ray
@@ -168,6 +182,8 @@ def run_benchmark(
         "per_month": per_month,
         "aggregate": agg,
         "n_months": len(per_month),
+        "n_months_requested": len(eval_months),
+        "skipped_months": skipped,
         "threshold_per_month": {m: per_month[m].get("threshold") for m in per_month},
     }
 
@@ -192,7 +208,8 @@ def run_benchmark(
     with open(version_dir / "meta.json", "w") as f:
         json.dump(meta, f, indent=2)
 
-    print(f"[benchmark] Benchmark complete: {len(per_month)} months evaluated")
+    skip_msg = f", {len(skipped)} skipped" if skipped else ""
+    print(f"[benchmark] Benchmark complete: {len(per_month)} months evaluated{skip_msg}")
     return result
 
 

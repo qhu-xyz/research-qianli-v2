@@ -4,6 +4,9 @@ import numpy as np
 import pytest
 
 from ml.compare import (
+    _extract_flat_metrics,
+    _extract_per_month,
+    _is_v2_metrics,
     build_comparison_table,
     check_gates,
     check_gates_multi_month,
@@ -264,3 +267,151 @@ def test_evaluate_overall_pass_multi_month():
     ga, gb = evaluate_overall_pass_multi_month(results)
     assert ga is True   # Group A all pass
     assert gb is False  # Group B mean failed
+
+
+# --- v2 format detection and integration tests ---
+
+
+def test_is_v2_metrics_true():
+    """v2 format has per_month + aggregate."""
+    data = {"per_month": {"m1": {}}, "aggregate": {"mean": {}}}
+    assert _is_v2_metrics(data) is True
+
+
+def test_is_v2_metrics_false_flat():
+    """v1 flat format does not have per_month."""
+    data = {"S1-AUC": 0.75, "S1-BRIER": 0.10}
+    assert _is_v2_metrics(data) is False
+
+
+def test_extract_flat_metrics_v2():
+    """Extract mean values from v2 aggregate."""
+    data = {
+        "per_month": {"m1": {"S1-AUC": 0.70}},
+        "aggregate": {"mean": {"S1-AUC": 0.72}},
+    }
+    flat = _extract_flat_metrics(data)
+    assert flat["S1-AUC"] == 0.72
+
+
+def test_extract_flat_metrics_v1():
+    """v1 data returned as-is."""
+    data = {"S1-AUC": 0.75}
+    flat = _extract_flat_metrics(data)
+    assert flat["S1-AUC"] == 0.75
+
+
+def test_extract_per_month_v2():
+    """Extract per_month from v2 data."""
+    data = {
+        "per_month": {"m1": {"S1-AUC": 0.70}},
+        "aggregate": {"mean": {}},
+    }
+    pm = _extract_per_month(data)
+    assert "m1" in pm
+    assert pm["m1"]["S1-AUC"] == 0.70
+
+
+def test_extract_per_month_v1():
+    """v1 returns empty dict."""
+    data = {"S1-AUC": 0.75}
+    pm = _extract_per_month(data)
+    assert pm == {}
+
+
+def test_build_comparison_table_v2_metrics(sample_gates):
+    """build_comparison_table works with v2 metrics format."""
+    versions = {
+        "v0": {
+            "per_month": {
+                "m1": {"S1-AUC": 0.70, "S1-BRIER": 0.08, "S1-REC": 0.50},
+                "m2": {"S1-AUC": 0.72, "S1-BRIER": 0.09, "S1-REC": 0.55},
+            },
+            "aggregate": {
+                "mean": {"S1-AUC": 0.71, "S1-BRIER": 0.085, "S1-REC": 0.525},
+            },
+        },
+    }
+    # Add tail_floor to gates for multi-month check
+    gates = {
+        "S1-AUC": {"floor": 0.65, "tail_floor": 0.55, "direction": "higher"},
+        "S1-BRIER": {"floor": 0.10, "tail_floor": 0.15, "direction": "lower"},
+        "S1-REC": {"floor": 0.40, "tail_floor": 0.30, "direction": "higher", "group": "B"},
+    }
+    table = build_comparison_table(versions, gates, tail_max_failures=1)
+    # v0 should show mean values and pass (all above floors)
+    assert "0.7100" in table
+    assert "YES" in table
+
+
+def test_build_comparison_table_mixed_v1_v2(sample_gates):
+    """Handles mix of v1 and v2 versions in the same table."""
+    gates = {
+        "S1-AUC": {"floor": 0.65, "tail_floor": 0.55, "direction": "higher"},
+        "S1-BRIER": {"floor": 0.10, "tail_floor": 0.15, "direction": "lower"},
+        "S1-REC": {"floor": 0.40, "tail_floor": 0.30, "direction": "higher", "group": "B"},
+    }
+    versions = {
+        "v0": {
+            "per_month": {
+                "m1": {"S1-AUC": 0.70, "S1-BRIER": 0.08, "S1-REC": 0.50},
+                "m2": {"S1-AUC": 0.72, "S1-BRIER": 0.09, "S1-REC": 0.55},
+            },
+            "aggregate": {
+                "mean": {"S1-AUC": 0.71, "S1-BRIER": 0.085, "S1-REC": 0.525},
+            },
+        },
+        "v0001": {"S1-AUC": 0.70, "S1-BRIER": 0.08, "S1-REC": 0.50},  # v1 flat
+    }
+    table = build_comparison_table(versions, gates, tail_max_failures=1)
+    lines = table.strip().split("\n")
+    # Header + separator + 2 versions = 4 lines
+    assert len(lines) == 4
+    # Pipe count consistency
+    pipe_counts = [line.count("|") for line in lines]
+    assert len(set(pipe_counts)) == 1
+
+
+def test_run_comparison_v2_metrics(tmp_path):
+    """run_comparison correctly handles v2 format metrics."""
+    reg = tmp_path / "registry"
+    reg.mkdir()
+    (reg / "comparisons").mkdir()
+    v0 = reg / "v0"
+    v0.mkdir()
+    v2_metrics = {
+        "per_month": {
+            "m1": {"S1-AUC": 0.70, "S1-BRIER": 0.08},
+            "m2": {"S1-AUC": 0.72, "S1-BRIER": 0.09},
+        },
+        "aggregate": {
+            "mean": {"S1-AUC": 0.71, "S1-BRIER": 0.085},
+        },
+    }
+    (v0 / "metrics.json").write_text(json.dumps(v2_metrics))
+    (reg / "champion.json").write_text('{"version": null, "promoted_at": null}')
+
+    gates = {
+        "version": 2,
+        "noise_tolerance": 0.02,
+        "tail_max_failures": 1,
+        "gates": {
+            "S1-AUC": {"floor": 0.65, "tail_floor": 0.55, "direction": "higher"},
+            "S1-BRIER": {"floor": 0.10, "tail_floor": 0.15, "direction": "lower"},
+        },
+    }
+    (reg / "gates.json").write_text(json.dumps(gates))
+
+    result = run_comparison(
+        batch_id="test_v2",
+        iteration=1,
+        registry_dir=str(reg),
+        gates_path=str(reg / "gates.json"),
+        champion_path=str(reg / "champion.json"),
+    )
+
+    # v0 gate results should be multi-month format
+    v0_gates = result["versions"]["v0"]
+    assert "mean_value" in v0_gates["S1-AUC"]  # multi-month result
+    assert v0_gates["S1-AUC"]["mean_passed"] is True
+    assert result["pass_summary"]["v0"]["group_a_passed"] is True

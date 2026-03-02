@@ -77,13 +77,13 @@ def _load_real(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
 
     # Init Ray (skip if already initialized — benchmark runner manages lifecycle)
     import ray
-    from pbase.config.ray import init_ray
-    import pmodel
-    import ml as shadow_ml
-
     we_inited_ray = not ray.is_initialized()
     if we_inited_ray:
-        init_ray(address="ray://10.8.0.36:10001", extra_modules=[pmodel, shadow_ml])
+        os.environ.setdefault("RAY_ADDRESS", "ray://10.8.0.36:10001")
+        from pbase.config.ray import init_ray
+        import pmodel
+        import ml as shadow_ml
+        init_ray(extra_modules=[pmodel, shadow_ml])
     print(f"[data_loader] mem after Ray init: {mem_mb():.0f} MB")
 
     # Create source config
@@ -92,9 +92,16 @@ def _load_real(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
 
     loader = MisoDataLoader(pred_config)
 
-    # Compute training window: load [M-12, M] where M = auction_month
+    # Compute training window: load [M-lookback, M] where M = auction_month.
+    # Lookback must account for forecast horizon: for ptype fN, the last N
+    # months' market targets fall at or beyond train_end and get clipped by
+    # the source loader's future-month guard (market_month >= train_end).
+    # Extending lookback by the horizon pushes val months far enough back
+    # that their market months are before train_end.
     auction_month = pd.Timestamp(config.auction_month)
-    lookback = config.train_months + config.val_months
+    ptype = config.period_type or "f0"
+    horizon = int(ptype[1:]) if ptype.startswith("f") else 3
+    lookback = config.train_months + config.val_months + horizon
     train_start = auction_month - pd.DateOffset(months=lookback)
     train_end = auction_month
 

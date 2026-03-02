@@ -518,11 +518,15 @@ def _load_real(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     pred_config.class_type = config.class_type
     loader = MisoDataLoader(pred_config)
 
-    # Compute training window
+    # Compute training window — extend lookback by forecast horizon so that
+    # val months' market targets don't get clipped by the source loader's
+    # future-month guard (market_month >= train_end).
     auction_month = pd.Timestamp(config.auction_month)
-    lookback = config.train_months + config.val_months
+    ptype = config.period_type or "f0"
+    horizon = int(ptype[1:]) if ptype.startswith("f") else 3
+    lookback = config.train_months + config.val_months + horizon
     train_start = auction_month - pd.DateOffset(months=lookback)
-    train_end = auction_month - pd.DateOffset(months=0)  # exclusive
+    train_end = auction_month  # exclusive: labels must be from months < this
 
     # Determine required period types
     required_ptypes = {config.period_type}

@@ -159,6 +159,29 @@ def run_pipeline(
             "max_fbeta": max_fbeta,
         }
 
+        # Wrap flat metrics in v2 format for consistency with benchmark.py output
+        auction_month_str = config.auction_month or "unknown"
+        v2_metrics = {
+            "eval_config": {
+                "eval_months": [auction_month_str],
+                "class_type": config.class_type,
+                "ptype": config.period_type,
+                "train_months": config.train_months,
+                "val_months": config.val_months,
+                "threshold_beta": config.threshold_beta,
+            },
+            "per_month": {auction_month_str: metrics},
+            "aggregate": {
+                "mean": {k: v for k, v in metrics.items() if isinstance(v, (int, float))},
+                "std": {k: 0.0 for k, v in metrics.items() if isinstance(v, (int, float))},
+                "min": {k: v for k, v in metrics.items() if isinstance(v, (int, float))},
+                "max": {k: v for k, v in metrics.items() if isinstance(v, (int, float))},
+                "bottom_2_mean": {k: v for k, v in metrics.items() if isinstance(v, (int, float))},
+            },
+            "n_months": 1,
+            "threshold_per_month": {auction_month_str: threshold},
+        }
+
         # Save model to temp location
         model_dir = registry_dir / version_id / "model"
         # register_version creates the directory, so we save model after registration
@@ -167,7 +190,7 @@ def run_pipeline(
                 registry_dir=registry_dir,
                 version_id=version_id,
                 config=resolved_config,
-                metrics=metrics,
+                metrics=v2_metrics,
                 meta=meta,
             )
         except FileExistsError:
@@ -177,7 +200,7 @@ def run_pipeline(
             with open(version_dir / "config.json", "w") as f:
                 json_mod.dump(resolved_config, f, indent=2)
             with open(version_dir / "metrics.json", "w") as f:
-                json_mod.dump(metrics, f, indent=2)
+                json_mod.dump(v2_metrics, f, indent=2)
             with open(version_dir / "meta.json", "w") as f:
                 json_mod.dump(meta, f, indent=2)
 

@@ -33,10 +33,13 @@ cd /home/xyz/workspace/pmodel && source .venv/bin/activate
 
 ### Ray Init (required for real data loading, NOT needed in SMOKE_TEST mode)
 ```python
+import os
+os.environ["RAY_ADDRESS"] = "ray://10.8.0.36:10001"
+
 from pbase.config.ray import init_ray
 import pmodel
 import ml as shadow_ml
-init_ray(address='ray://10.8.0.36:10001', extra_modules=[pmodel, shadow_ml])
+init_ray(extra_modules=[pmodel, shadow_ml])
 ```
 
 ### Per-Agent Context Slices (what memory each agent MUST read)

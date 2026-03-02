@@ -25,12 +25,17 @@ Replace the single-month synthetic evaluation (n=20) with a rolling-window multi
 
 ### Rolling Window
 
-For each eval month `M`, train on `[M-12, M-2]` (10 months fit), validate on `[M-2, M]` (2 months val), test on month `M` itself.
+For each eval month `M` with ptype of horizon `H`, train on a window of `10 + 2 + H` months ending at `M`. The extra `H` months compensate for the source loader's future-month guard: rows where `market_month >= M` have no labels at prediction time and are clipped. Without the horizon buffer, the last `H` val-window months produce empty validation sets (their market months land at or beyond `M`).
 
 ```
-  M-12          M-2    M
-   |--- fit (10mo) ---|-- val (2mo) --|- test (M) -|
+  f0 (H=0):  M-12 |--- fit (10mo) ---|-- val (2mo) --|- eval (M) -|
+  f1 (H=1):  M-13 |--- fit (10mo) ---|-- val (2mo) -|- buffer -|- eval (M) -|
+  f2 (H=2):  M-14 |--- fit (10mo) ---|-- val (2mo) -|-- buffer --|- eval (M) -|
 ```
+
+**Why the buffer is needed:** Each training/val row predicts binding in `market_month = auction_month + H`. At prediction time (start of month `M`), labels only exist for market months that have fully elapsed (< `M`). The source loader enforces this via `if market_month >= train_end: skip`. For the last `H` auction months in the window, `market_month = auction_month + H >= M`, so they're skipped. The buffer shifts the val window earlier by `H` months so val rows have known labels.
+
+**Implementation:** `ml/data_loader.py` computes `lookback = train_months + val_months + horizon` where `horizon = int(ptype[1:])` for f-series ptypes.
 
 ### Eval Month Selection (18 months total)
 

@@ -264,13 +264,36 @@ def evaluate_overall_pass_multi_month(gate_results: dict[str, dict]) -> tuple[bo
     return group_a_passed, group_b_passed
 
 
+def _is_v2_metrics(data: dict) -> bool:
+    """Check if metrics data is v2 format (has per_month + aggregate)."""
+    return isinstance(data, dict) and "per_month" in data and "aggregate" in data
+
+
+def _extract_flat_metrics(data: dict) -> dict:
+    """Extract flat {gate_name: value} from either v1 or v2 metrics."""
+    if _is_v2_metrics(data):
+        return data["aggregate"].get("mean", {})
+    return data
+
+
+def _extract_per_month(data: dict) -> dict[str, dict]:
+    """Extract per_month dict from v2 metrics, empty dict for v1."""
+    if _is_v2_metrics(data):
+        return data.get("per_month", {})
+    return {}
+
+
 def build_comparison_table(
     versions: dict[str, dict],
     gates: dict,
     champion_metrics: dict | None = None,
     noise_tolerance: float = 0.02,
+    tail_max_failures: int = 1,
 ) -> str:
     """Build a Markdown comparison table across all versions.
+
+    Handles both v1 (flat) and v2 (per_month + aggregate) metrics formats.
+    For v2, uses three-layer multi-month gate checks.
 
     Returns a Markdown string with one row per version,
     columns for each gate metric with pass/fail indicators.
@@ -284,19 +307,37 @@ def build_comparison_table(
     rows = [header, separator]
 
     for version_id, metrics in sorted(versions.items()):
-        gate_results = check_gates(metrics, gates, champion_metrics, noise_tolerance)
+        # Get display values and pass/fail per gate, handling both formats
+        if _is_v2_metrics(metrics):
+            per_month = _extract_per_month(metrics)
+            champion_pm = _extract_per_month(champion_metrics) if champion_metrics else None
+            mm_results = check_gates_multi_month(
+                per_month, gates, tail_max_failures, champion_pm, noise_tolerance
+            )
+            gate_display = {
+                name: (r.get("mean_value"), r.get("overall_passed"), r.get("group", "A"))
+                for name, r in mm_results.items()
+            }
+        else:
+            champion_flat = _extract_flat_metrics(champion_metrics) if champion_metrics else None
+            flat_results = check_gates(metrics, gates, champion_flat, noise_tolerance)
+            gate_display = {
+                name: (r.get("value"), r.get("passed"), r.get("group", "A"))
+                for name, r in flat_results.items()
+            }
 
         cells = []
         group_a_passed = True
         group_b_passed = True
         for gate_name in gate_names:
-            result = gate_results.get(gate_name, {})
-            value = result.get("value")
-            passed = result.get("passed")
-            group = result.get("group", "A")
+            value, passed, group = gate_display.get(gate_name, (None, None, "A"))
 
             if value is None:
                 cells.append("--")
+                if group == "A":
+                    group_a_passed = False
+                else:
+                    group_b_passed = False
             elif isinstance(value, float) and (value != value):  # NaN check
                 cells.append("NaN")
                 if group == "A":
@@ -363,6 +404,7 @@ def run_comparison(
         gates_data = json.load(f)
     gates = gates_data["gates"]
     noise_tolerance = gates_data.get("noise_tolerance", 0.02)
+    tail_max_failures = gates_data.get("tail_max_failures", 1)
 
     # Load champion
     champion_metrics = None
@@ -379,17 +421,29 @@ def run_comparison(
     versions = load_all_versions(registry_dir)
 
     # Build comparison table
-    table = build_comparison_table(versions, gates, champion_metrics, noise_tolerance)
+    table = build_comparison_table(
+        versions, gates, champion_metrics, noise_tolerance, tail_max_failures
+    )
 
-    # Per-version gate results
+    # Per-version gate results (v2-aware)
     per_version = {}
     per_version_pass = {}
     for version_id, metrics in versions.items():
-        gate_results = check_gates(
-            metrics, gates, champion_metrics, noise_tolerance
-        )
-        per_version[version_id] = gate_results
-        ga, gb = evaluate_overall_pass(gate_results)
+        if _is_v2_metrics(metrics):
+            per_month = _extract_per_month(metrics)
+            champion_pm = _extract_per_month(champion_metrics) if champion_metrics else None
+            gate_results = check_gates_multi_month(
+                per_month, gates, tail_max_failures, champion_pm, noise_tolerance
+            )
+            per_version[version_id] = gate_results
+            ga, gb = evaluate_overall_pass_multi_month(gate_results)
+        else:
+            champion_flat = _extract_flat_metrics(champion_metrics) if champion_metrics else None
+            gate_results = check_gates(
+                metrics, gates, champion_flat, noise_tolerance
+            )
+            per_version[version_id] = gate_results
+            ga, gb = evaluate_overall_pass(gate_results)
         per_version_pass[version_id] = {
             "group_a_passed": ga,
             "group_b_passed": gb,

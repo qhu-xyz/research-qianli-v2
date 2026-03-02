@@ -1,5 +1,9 @@
 # Decision Log
 
+> **NOTE**: Decisions D1–D10 below were made during SMOKE_TEST runs (n=20).
+> Gate floors have since been recalibrated from real v0 (12 months, ~270K rows/month).
+> D2/D7 (no floor changes) are superseded — floors are now calibrated from real data.
+
 ## Iteration 1 Synthesis — 2026-02-28
 
 ### D1: No promotion for v0001

@@ -36,13 +36,19 @@ def mem_mb():
 
 ## Ray Usage (MANDATORY)
 
-Any script or notebook that uses pbase data loaders MUST initialize Ray first:
+Any script or notebook that uses pbase data loaders MUST initialize Ray first.
 
+Initialization — set env var BEFORE `init_ray()`:
 ```python
+import os
+os.environ["RAY_ADDRESS"] = "ray://10.8.0.36:10001"
+
 from pbase.config.ray import init_ray
 import pmodel
-init_ray(address='ray://10.8.0.36:10001', extra_modules=[pmodel])
+
+init_ray(extra_modules=[pmodel])  # add lightgbm if needed: extra_modules=[pmodel, lgb]
 ```
+For notebooks, use `%env RAY_ADDRESS=ray://10.8.0.36:10001` in the first cell instead.
 
 ### What requires Ray
 - `MisoCalculator.get_mcp_df()` — nodal MCPs
@@ -53,8 +59,12 @@ init_ray(address='ray://10.8.0.36:10001', extra_modules=[pmodel])
 
 ### Rules
 - Call `init_ray()` ONCE at script start, BEFORE any data access
-- Do NOT use `ray.put()` — pbase handles serialization internally
-- Add `lightgbm` to `extra_modules` only if using LightGBM: `extra_modules=[pmodel, lgb]`
+- **Never** use `multiprocessing`, `concurrent.futures`, `joblib`, `dask`, or `threading` — always use Ray
+- Use `@ray.remote(scheduling_strategy="SPREAD")` for all parallel tasks — always include `SPREAD`
+- Use `ray_map_bounded` from `pbase.utils.ray` for bounded concurrency (preferred over raw `ray.get(futures)`)
+- Use `ray.put(big_obj)` for large shared data — pass the ref to `.remote()` calls to avoid repeated serialization
+- Migrate away from `parallel_equal_pool` — use `@ray.remote` + `ray_map_bounded` instead (avoids deadlocks under nesting)
+- See the `parallel-with-ray` skill for full patterns (composable functions, ObjectRef optimization, conversion procedure)
 - The Ray cluster address `ray://10.8.0.36:10001` is the standard dev cluster
 
 ## Versioned Experiments (MANDATORY)

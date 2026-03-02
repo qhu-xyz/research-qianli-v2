@@ -130,8 +130,14 @@ if (( WORKER_FAILED == 0 )); then
     echo "[iter${N}] Running comparison..."
     mkdir -p "${PROJECT_DIR}/reports/${BATCH_ID}/iter${N}"
     cd "$PROJECT_DIR" && source "$VENV_ACTIVATE"
+    set +e
     python ml/compare.py --batch-id "$BATCH_ID" --iteration "$N" \
-      --output "reports/${BATCH_ID}/iter${N}/comparison.md" || true
+      --output "reports/${BATCH_ID}/iter${N}/comparison.md"
+    COMPARE_RC=$?
+    set -e
+    if (( COMPARE_RC != 0 )); then
+      echo "[iter${N}] WARNING: compare.py exited with code ${COMPARE_RC} — reviews will proceed without comparison report" >&2
+    fi
   fi
 fi
 

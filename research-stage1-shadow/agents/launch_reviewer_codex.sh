@@ -21,10 +21,18 @@ done
 PROMPT_TEMPLATE="${PROJECT_DIR}/agents/prompts/reviewer_codex.md"
 [[ -f "$PROMPT_TEMPLATE" ]] || { echo "ERROR: prompt not found: $PROMPT_TEMPLATE"; exit 1; }
 
-# Use envsubst for targeted variable substitution (HP-5)
-PROMPT_TEXT=$(BATCH_ID="${BATCH_ID}" N="${N}" VERSION_ID="${VERSION_ID}" \
-  envsubst '${BATCH_ID} ${N} ${VERSION_ID}' \
-  < "$PROMPT_TEMPLATE")
+# Substitute template variables in prompt (HP-5)
+# Prefer envsubst for clean substitution; fall back to sed if unavailable
+if command -v envsubst >/dev/null 2>&1; then
+  PROMPT_TEXT=$(BATCH_ID="${BATCH_ID}" N="${N}" VERSION_ID="${VERSION_ID}" \
+    envsubst '${BATCH_ID} ${N} ${VERSION_ID}' \
+    < "$PROMPT_TEMPLATE")
+else
+  PROMPT_TEXT=$(sed -e "s/\${BATCH_ID}/${BATCH_ID}/g" \
+                    -e "s/\${N}/${N}/g" \
+                    -e "s/\${VERSION_ID}/${VERSION_ID}/g" \
+                    "$PROMPT_TEMPLATE")
+fi
 
 LOG="${PROJECT_DIR}/.logs/sessions/${SESSION}.log"
 mkdir -p "$(dirname "$LOG")"

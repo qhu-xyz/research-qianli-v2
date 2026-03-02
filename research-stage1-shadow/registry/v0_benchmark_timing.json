@@ -1,0 +1,31 @@
+{
+  "f1": {
+    "elapsed_seconds": 1410.7,
+    "elapsed_minutes": 23.5,
+    "n_months_requested": 10,
+    "n_months_evaluated": 9,
+    "n_months_skipped": 1,
+    "skipped_months": [
+      "2021-08"
+    ],
+    "status": "success"
+  },
+  "f2": {
+    "elapsed_seconds": 578.2,
+    "elapsed_minutes": 9.6,
+    "n_months_requested": 7,
+    "n_months_evaluated": 4,
+    "n_months_skipped": 3,
+    "skipped_months": [
+      "2020-09",
+      "2021-08",
+      "2022-09"
+    ],
+    "status": "success"
+  },
+  "f0": {
+    "elapsed_minutes": "~35 (previous run)",
+    "n_months": 12,
+    "status": "success"
+  }
+}

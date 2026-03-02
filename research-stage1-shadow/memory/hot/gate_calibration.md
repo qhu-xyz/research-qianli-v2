@@ -1,37 +1,42 @@
-# Gate Calibration — After Iteration 1
+# Gate Calibration — Real v0 Baseline (12 months, f0, onpeak)
 
-## Current State (SMOKE_TEST, n=20, n_positive=2)
+Calibrated from real-data v0 benchmark (commit d167090). Gate floors set as:
+- `floor = v0_mean - v0_offset`
+- `tail_floor = v0_extreme - v0_tail_offset`
 
-| Gate | v0 Value | Floor | Headroom | Risk | Notes |
-|------|----------|-------|----------|------|-------|
-| S1-AUC | 0.7500 | 0.65 | +0.10 | Low | Reasonable |
-| S1-AP | 0.5909 | 0.12 | +0.47 | Low | Floor very generous — consider raising after real data |
-| S1-VCAP@100 | 1.0000 | 0.95 | +0.05 | N/A | Saturated at n=20, untested |
-| S1-VCAP@500 | 1.0000 | 0.95 | +0.05 | N/A | Saturated (K >> n) |
-| S1-VCAP@1000 | 1.0000 | 0.95 | +0.05 | N/A | Saturated (K >> n) |
-| S1-NDCG | 0.5044 | 0.4544 | +0.05 | Medium | Exactly v0_offset, no margin |
-| S1-BRIER | 0.2021 | 0.2221 | +0.02 | **HIGH** | Tightest gate — any threshold change risks flipping |
-| S1-REC (B) | 0.0000 | 0.40 | -0.40 | **FAIL** | Primary iter2 target |
-| S1-CAP@100 (B) | 0.0000 | -0.05 | +0.05 | Low | Trivially passes (negative floor) |
-| S1-CAP@500 (B) | 0.0000 | -0.05 | +0.05 | Low | Trivially passes (negative floor) |
+## Group A (blocking) — Must Pass All 3 Layers for Promotion
+
+| Gate | v0 Mean | v0 Min | Floor | Tail Floor | Headroom (mean) | Headroom (worst) |
+|------|---------|--------|-------|------------|-----------------|------------------|
+| S1-AUC | 0.8348 | 0.8088 | 0.7848 | 0.7088 | +0.0500 | +0.1000 |
+| S1-AP | 0.3936 | 0.3150 | 0.3436 | 0.2150 | +0.0500 | +0.1000 |
+| S1-VCAP@100 | 0.0149 | 0.0005 | -0.0351 | -0.0995 | +0.0500 | +0.1000 |
+| S1-NDCG | 0.7333 | 0.6601 | 0.6833 | 0.5601 | +0.0500 | +0.1000 |
+
+## Group B (monitor) — Informational, Does Not Block Promotion
+
+| Gate | v0 Mean | v0 Extreme | Floor | Tail Floor | Headroom (mean) | Notes |
+|------|---------|------------|-------|------------|-----------------|-------|
+| S1-BRIER | 0.1503 | 0.1586 (max) | 0.1703 | 0.2086 | +0.0200 | Lower is better |
+| S1-VCAP@500 | 0.0908 | 0.0433 | 0.0408 | -0.0567 | +0.0500 | |
+| S1-VCAP@1000 | 0.1591 | 0.0809 | 0.1091 | -0.0191 | +0.0500 | |
+| S1-REC | 0.4192 | 0.3130 | 0.1000 | 0.0000 | +0.3192 | Very loose floor |
+| S1-CAP@100 | 0.7825 | 0.3600 | 0.7325 | 0.2600 | +0.0500 | High variance (std=0.25) |
+| S1-CAP@500 | 0.7740 | 0.4180 | 0.7240 | 0.3180 | +0.0500 | High variance (std=0.19) |
 
 ## Key Observations
 
-1. **S1-BRIER is the binding constraint** for any threshold-lowering strategy. Lowering threshold will cause the model to predict more positives, which shifts Brier score. With only 0.02 headroom, this gate could easily flip.
+1. **S1-VCAP@100 has negative floors** — v0 min was only 0.0005, with 0.10 tail_offset the tail_floor is -0.0995. Effectively non-binding unless a version produces strongly negative VCAP.
 
-2. **S1-REC requires the model to predict positives**. Current threshold 0.82 pushes pred_binding_rate to 0.0. Lowering threshold_beta from 0.7 to ~0.3 should lower the F-beta optimal threshold substantially, allowing some positive predictions.
+2. **S1-CAP@100 and S1-CAP@500 have HIGH variance** (std 0.25 and 0.19). Worst months (0.36 and 0.42) are far below mean. The tail_floor is loose but the mean floor is tight — a version needs consistently high CAP to pass Layer 1.
 
-3. **VCAP@K gates are meaningless at n=20**. These will only matter on real data where K << n_samples.
+3. **S1-REC floor is very loose** (0.10 vs v0 mean of 0.42). Any model that predicts some positives will pass.
 
-4. **noise_tolerance=0.02 is coarse at n=20** (Codex). One AUC pairwise swap = ~0.028. Don't read too much into small deltas.
+4. **S1-BRIER is the tightest Group B gate** — only 0.02 headroom from v0 mean to floor. Threshold changes that increase positive predictions tend to increase Brier score.
 
-## Recommendations
-- **No floor changes yet** — insufficient data for recalibration
-- **Monitor S1-BRIER closely in iter2** — any threshold change is a risk
-- **Recalibrate all floors after first real-data run** with uncertainty-aware thresholds
+5. **S1-AUC is the most stable metric** (std=0.015) — hardest to improve but also hardest to accidentally break.
 
-## After Iteration 1 (smoke-v7) — No Changes
-
-Both reviewers again agree: no gate floor changes justified. Iteration produced zero delta (hypothesis failed — beta direction was inverted). When beta > 1 is applied in iter2, S1-BRIER is almost certain to shift because producing positive predictions changes calibration. If S1-BRIER flips (value exceeds 0.2221 floor), assess whether the floor is too tight at n=20 and recommend recalibration at HUMAN_SYNC.
-
-Additional Codex observation: `S1-VCAP@K` and `S1-CAP@K` should become informational when K >= n_samples, as they're mathematically saturated.
+## Three-Layer Check Reference
+- **Layer 1**: mean(metric) >= floor (or <= for BRIER)
+- **Layer 2**: count(months below tail_floor) <= 1
+- **Layer 3**: bottom_2_mean >= champion_bottom_2_mean - 0.02

@@ -1,5 +1,8 @@
 # Hypothesis Log
 
+> **NOTE**: H1–H2 below were tested during SMOKE_TEST runs (n=20).
+> H2 status is FAILED (beta direction was inverted). See experiment_log.md for details.
+
 ## H1 (Iteration 1): Infrastructure determinism — CONFIRMED
 **Hypothesis**: Running pipeline with identical v0 config produces bit-for-bit identical metrics.
 **Result**: Confirmed — all 10 metrics exactly match v0 (zero delta).

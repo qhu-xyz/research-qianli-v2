@@ -69,7 +69,7 @@ WORKER_SESSION="worker-${BATCH_ID}-iter${N}"
 bash "${SCRIPT_DIR}/launch_worker.sh" --session "$WORKER_SESSION"
 
 set +e
-poll_for_handoff "$HANDOFF_DIR" "worker_done.json" 600 15
+poll_for_handoff "$HANDOFF_DIR" "worker_done.json" 3000 30
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then

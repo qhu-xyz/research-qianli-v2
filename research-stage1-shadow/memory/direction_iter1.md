@@ -1,109 +1,102 @@
-# Direction — Iteration 1 (Batch: hp-tune-20260302-132826)
+# Direction — Iteration 1 (Batch hp-tune-20260302-134412)
 
-## Hypothesis (H3: Hyperparameter Tuning for Ranking Quality)
+## Hypothesis
 
-Increasing tree depth and boosting rounds while reducing learning rate will improve ranking quality (AUC, AP, NDCG) by allowing the model to capture more complex feature interactions in the 270K-row dataset. The v0 baseline used conservative defaults (max_depth=4, n_estimators=200, learning_rate=0.1) that were never tuned for this data. With adequate regularization already in place (subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1, reg_lambda=1.0), deeper trees at a slower learning rate should generalize well.
+**H3: Hyperparameter tuning improves ranking quality over untuned v0 defaults.**
+
+The v0 baseline uses XGBoost defaults (max_depth=4, n_estimators=200, lr=0.1, min_child_weight=10) that were never optimized on real data (~270K rows/month, 14 features, 7.5% binding rate). Deeper trees with slower learning should better capture feature interactions and improve discrimination without overfitting, given the dataset size and existing regularization.
 
 ## Specific Changes
 
-### File: `ml/config.py` — `HyperparamConfig` class
+### File: `ml/config.py` → `HyperparamConfig`
 
-Change exactly these 4 default values in the `HyperparamConfig` dataclass:
+Change exactly these 4 defaults:
 
 ```python
-# BEFORE (v0 defaults):
+# BEFORE (v0 defaults)
 n_estimators: int = 200
 max_depth: int = 4
 learning_rate: float = 0.1
 min_child_weight: int = 10
 
-# AFTER (v0001):
+# AFTER (iter1)
 n_estimators: int = 400
 max_depth: int = 6
 learning_rate: float = 0.05
 min_child_weight: int = 5
 ```
 
-**Do NOT change any other parameters.** Keep:
+**Do NOT change any other parameter.** Specifically, keep:
 - `subsample: float = 0.8` (unchanged)
 - `colsample_bytree: float = 0.8` (unchanged)
 - `reg_alpha: float = 0.1` (unchanged)
 - `reg_lambda: float = 1.0` (unchanged)
 - `random_state: int = 42` (unchanged)
 
-### File: `ml/config.py` — `PipelineConfig` class
+### File: `ml/config.py` → `PipelineConfig`
 
 **No changes.** Keep:
-- `threshold_beta: float = 0.7` (precision-favoring, business requirement)
-- `threshold_scaling_factor: float = 1.0`
-- `train_months: int = 10`
-- `val_months: int = 2`
+- `threshold_beta: float = 0.7` (unchanged — precision-favoring, business requirement)
+- `threshold_scaling_factor: float = 1.0` (unchanged)
+- `train_months: int = 10` (unchanged)
+- `val_months: int = 2` (unchanged)
 
-### File: `ml/config.py` — `FeatureConfig` class
+### File: `ml/config.py` → `FeatureConfig`
 
-**No changes.** Keep all 14 features and their monotone constraints exactly as-is.
+**No changes.** Keep all 14 features and monotone constraints as-is.
 
-## What to Run
+## Rationale for Each Change
 
-1. Apply the hyperparameter changes above
-2. Run `python -m pytest ml/tests/ -v` to verify tests pass
-3. Run the full pipeline: train + evaluate across all 12 primary eval months (f0, onpeak)
-4. Run `validate` to confirm metrics.json schema compliance
-5. Run `compare` against v0 baseline to check gates
-6. Write `changes_summary.md` in `registry/${VERSION_ID}/` documenting:
-   - Exact hyperparameter changes
-   - Per-month metrics comparison table (all 12 months)
-   - Gate pass/fail status for all 3 layers
-   - Any anomalies in specific months (especially late-2022)
+| Param | v0 | New | Why |
+|---|---|---|---|
+| `max_depth` | 4 | 6 | At 270K rows, depth 4 likely underfits. Depth 6 allows 3-way feature interactions (e.g., prob_exceed_110 × hist_da × density_skewness) without extreme complexity. |
+| `n_estimators` | 200 | 400 | More boosting rounds compensate for the halved learning rate. Combined effect: slower, more careful learning. |
+| `learning_rate` | 0.1 | 0.05 | Halved rate + doubled trees is a standard XGBoost pattern for better generalization. Each tree contributes less, reducing overfitting risk from deeper trees. |
+| `min_child_weight` | 10 | 5 | Allows finer leaf splits. At 270K rows with ~20K positives per month, min_child_weight=5 is still conservative. Enables the model to capture rarer binding patterns. |
 
 ## Expected Impact
 
-| Metric | v0 Mean | Expected Direction | Reasoning |
-|--------|---------|-------------------|-----------|
-| S1-AUC | 0.835 | +0.005 to +0.015 | Deeper trees + more rounds improve discrimination |
-| S1-AP | 0.394 | +0.010 to +0.030 | AP is more sensitive to improved top-ranking |
-| S1-NDCG | 0.733 | +0.005 to +0.015 | Better overall ranking quality |
-| S1-VCAP@100 | 0.015 | +0.005 to +0.020 | Better top-of-list separation of high-value constraints |
-| S1-BRIER | 0.150 | +/- 0.005 | May shift slightly; monitor but HP changes rarely hurt calibration |
-| Precision | 0.442 | Stable or +slight | Better ranking → better precision at same threshold |
+### Group A (blocking) — target improvements:
+| Gate | v0 Mean | Expected | Reasoning |
+|------|---------|----------|-----------|
+| S1-AUC | 0.835 | 0.840–0.850 | Better discrimination from deeper trees + slower learning |
+| S1-AP | 0.394 | 0.405–0.425 | AP benefits most from better ranking of rare positives (7.5% binding rate) |
+| S1-NDCG | 0.733 | 0.740–0.750 | Better ordering of predicted probabilities |
+| S1-VCAP@100 | 0.015 | 0.015–0.030 | May improve if model better separates high-value constraints, but highly variable (std=0.012) |
 
-**Bottom line**: The primary target is lifting AUC, AP, and NDCG means. Even modest improvements (+0.005 AUC, +0.01 AP) demonstrate the hypothesis and establish a new champion candidate.
+### Group B (monitor) — expected effects:
+| Gate | v0 Mean | Expected Direction |
+|------|---------|-------------------|
+| S1-BRIER | 0.150 | Stable or slight increase. Floor=0.170, headroom=0.02. Flag if >0.165. |
+| S1-REC | 0.419 | Stable — threshold is tuned per-month, ranking changes may shift it slightly |
+| S1-CAP@100 | 0.783 | Likely stable — high variance (std=0.25) makes this hard to shift systematically |
 
-## Gate Analysis — What to Watch
-
-### Group A (blocking) — all should pass easily
-- **S1-AUC**: Floor=0.785, v0 mean=0.835. Need to stay above 0.785 mean, no month below 0.709. Very comfortable.
-- **S1-AP**: Floor=0.344, v0 mean=0.394. Need to stay above 0.344 mean. Watch 2022-09 (v0 worst: 0.315).
-- **S1-VCAP@100**: Floor=-0.035 (negative). Effectively non-binding.
-- **S1-NDCG**: Floor=0.683, v0 mean=0.733. Watch 2021-04 (v0 worst: 0.660).
-
-### Group B (monitor) — track but don't block
-- **S1-BRIER**: Tightest gate. Floor=0.170, v0 mean=0.150. Only 0.02 headroom. If BRIER mean exceeds 0.165, flag as a concern for reviewers.
-- **S1-REC**: Very loose floor (0.10). Will pass easily.
-- **S1-CAP@100/500**: High variance — may shift month-to-month. Not blocking.
-
-### Layer 3 — Non-Regression Check
-Champion is v0 (since no promotion yet). New model's bottom_2_mean for each Group A metric must be >= v0's bottom_2_mean - 0.02:
-- S1-AUC bottom_2: v0=0.811 → must be >= 0.791
-- S1-AP bottom_2: v0=0.332 → must be >= 0.312
-- S1-NDCG bottom_2: v0=0.672 → must be >= 0.652
-- S1-VCAP@100 bottom_2: v0=0.001 → must be >= -0.019
+### Tail risk:
+- **Bottom-2 AUC** (v0: 0.811 from months 2022-12, 2022-09) should improve — deeper trees help with harder periods
+- **Bottom-2 AP** (v0: 0.332 from months 2022-09, 2022-12) is the main target — these late-2022 months may have distribution shift that deeper trees can handle better
+- **Bottom-2 NDCG** (v0: 0.672 from months 2021-04, 2021-06) should improve modestly
 
 ## Risk Assessment
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Overfitting (deeper trees memorize noise) | Low-Medium | AUC/AP degrade on test months | Learning rate halved (0.05), regularization intact. If test months degrade, revert max_depth to 5. |
-| BRIER degradation | Low | Monitor gate approaches ceiling | HP changes alone rarely hurt calibration. If mean BRIER > 0.165, flag in changes_summary. |
-| Compute timeout | Low | Worker times out during training | 400 trees × 12 months ≈ 2x v0 compute. Should fit in 600s timeout with margin. |
-| Late-2022 months get worse | Medium | Bottom-2 regression on AP | These months (2022-09, 2022-12) were already v0's weakest. If they degrade, the improvement in other months may compensate. Document per-month deltas. |
+### Low risk:
+- **Overfitting**: Mitigated by lower learning rate (0.05), existing regularization (subsample=0.8, colsample=0.8, L1=0.1, L2=1.0), and moderate depth (6, not extreme). 270K rows per month provides ample data.
+- **Gate regression**: All Group A gates have +0.05 headroom from mean to floor. Even a slight regression on some months won't break gates. Layer 3 (bottom_2 non-regression) requires bottom_2_mean >= champion_bottom_2_mean - 0.02, and v0 is the baseline.
 
-## Rationale for This First Move
+### Medium risk:
+- **BRIER degradation**: Only 0.02 headroom, but BRIER is Group B (non-blocking). Deeper trees may slightly hurt calibration. If BRIER mean exceeds 0.165, note it for reviewers.
+- **Compute time**: 400 trees × depth 6 ≈ 2-3x more compute than v0 (200 × depth 4). Should fit within worker timeout (3000s), but monitor.
 
-Hyperparameter tuning is the lowest-risk, highest-signal first experiment for a new real-data batch:
+### No risk:
+- **Precision degradation**: These are ranking-quality changes. The threshold (beta=0.7) is tuned per-month from validation data and is independent of tree hyperparameters. Precision at the tuned threshold may actually improve if the model's probability estimates become more accurate.
 
-1. **No code architecture changes** — only 4 numeric constants change
-2. **Well-understood mechanism** — more trees + slower learning + deeper splits is a standard XGBoost improvement path
-3. **Directly addresses business objective** — ranking improvements (AUC, AP, NDCG) improve precision at any threshold
-4. **Establishes improvement baseline** — if HP tuning lifts metrics, we know the v0 defaults were suboptimal and future iterations can refine further (e.g., feature engineering, training window adjustments)
-5. **Human directive** — this is explicitly what the human requested for the first real-data batch
+## Worker Checklist
+
+1. Read `VERSION_ID` from `${PROJECT_DIR}/state.json` (not worktree copy)
+2. Modify `ml/config.py` → `HyperparamConfig` (4 param changes only)
+3. Run `python -m ml.pipeline run --version-id ${VERSION_ID}` for all 12 eval months
+4. Run `python -m ml.pipeline validate --version-id ${VERSION_ID}`
+5. Run `python -m ml.pipeline compare --version-id ${VERSION_ID} --baseline v0`
+6. Verify all Group A gates pass all 3 layers
+7. Check BRIER is below 0.165 (note if between 0.165–0.170)
+8. Commit changes, write `changes_summary.md` and `comparison.md`
+9. Write handoff JSON with status and results

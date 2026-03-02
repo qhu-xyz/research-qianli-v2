@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| Batch | hp-tune-20260302-132826 |
+| Batch | hp-tune-20260302-134412 |
 | Iteration | 1 of 3 |
 | State | ORCHESTRATOR_PLANNING → WORKER (pending handoff) |
 | Champion | None (v0 baseline) |
@@ -24,4 +24,4 @@
 |-------|------|--------|
 | smoke-v6 | Infrastructure validation | PASS (determinism confirmed) |
 | smoke-v7 | Bug fixes + beta experiment | Fixes merged, H2 failed (beta direction inverted) |
-| hp-tune-* iter1 | HP tuning (first real-data experiment) | In progress |
+| hp-tune-20260302-134412 iter1 | HP tuning (first real-data experiment) | Planning complete, awaiting worker |

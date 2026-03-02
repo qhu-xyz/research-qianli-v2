@@ -31,7 +31,7 @@ poll_for_handoff "$HANDOFF_DIR" "orchestrator_plan_done.json" 420 15
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then
-  tmux kill-session -t "$SESSION" 2>/dev/null || true
+  kill_agent_tree "$SESSION"
   cas_transition ORCHESTRATOR_PLANNING IDLE "{\"error\":\"orchestrator plan timeout at iter ${N}\"}"
   echo "FATAL: orchestrator plan timed out at iter ${N}" >&2
   exit 1
@@ -73,7 +73,7 @@ poll_for_handoff "$HANDOFF_DIR" "worker_done.json" 3000 30
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then
-  tmux kill-session -t "$WORKER_SESSION" 2>/dev/null || true
+  kill_agent_tree "$WORKER_SESSION"
   cas_transition WORKER_RUNNING IDLE "{\"error\":\"worker timeout at iter ${N}\"}"
   echo "FATAL: worker timed out at iter ${N}" >&2
   exit 1
@@ -165,7 +165,7 @@ if (( WORKER_FAILED == 0 )); then
   POLL_RC=$?
   set -e
   if (( POLL_RC != 0 )); then
-    tmux kill-session -t "$CLAUDE_SESSION" 2>/dev/null || true
+    kill_agent_tree "$CLAUDE_SESSION"
     cas_transition REVIEW_CLAUDE IDLE "{\"error\":\"Claude reviewer timeout at iter ${N}\"}"
     echo "FATAL: Claude reviewer timed out at iter ${N}" >&2
     exit 1
@@ -191,7 +191,7 @@ if (( WORKER_FAILED == 0 )); then
   POLL_RC=$?
   set -e
   if (( POLL_RC != 0 )); then
-    tmux kill-session -t "$CODEX_SESSION" 2>/dev/null || true
+    kill_agent_tree "$CODEX_SESSION"
     # Codex timeout is non-fatal — continue with synthesis
     echo "[iter${N}] Codex reviewer timed out — continuing"
   fi
@@ -215,11 +215,11 @@ export WORKER_FAILED
 bash "${SCRIPT_DIR}/launch_orchestrator.sh" --phase synthesize --session "$SYNTH_SESSION"
 
 set +e
-poll_for_handoff "$HANDOFF_DIR" "orchestrator_synth_done.json" 600 15
+poll_for_handoff "$HANDOFF_DIR" "orchestrator_synth_done.json" 1200 15
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then
-  tmux kill-session -t "$SYNTH_SESSION" 2>/dev/null || true
+  kill_agent_tree "$SYNTH_SESSION"
   cas_transition ORCHESTRATOR_SYNTHESIZING IDLE "{\"error\":\"synthesis timeout at iter ${N}\"}"
   echo "FATAL: synthesis orchestrator timed out at iter ${N}" >&2
   exit 1

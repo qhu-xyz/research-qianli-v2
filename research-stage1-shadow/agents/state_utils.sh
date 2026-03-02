@@ -74,6 +74,41 @@ verify_handoff() {
   return 0
 }
 
+kill_agent_tree() {
+  # Kill all processes spawned by a tmux session, then kill the session.
+  # Prevents orphan processes (e.g., claude --print surviving tmux kill-session).
+  local session="$1"
+  local shell_pid
+  shell_pid=$(tmux list-panes -t "$session" -F '#{pane_pid}' 2>/dev/null | head -1)
+  if [[ -n "$shell_pid" ]]; then
+    # Recursively collect all descendant PIDs via /proc
+    local _all_pids=""
+    _collect_descendants() {
+      local pid=$1
+      local children
+      children=$(cat /proc/$pid/task/$pid/children 2>/dev/null || true)
+      for child in $children; do
+        _all_pids="$_all_pids $child"
+        _collect_descendants "$child"
+      done
+    }
+    _all_pids="$shell_pid"
+    _collect_descendants "$shell_pid"
+    # SIGTERM all (leaf-first = reverse order)
+    local reversed
+    reversed=$(echo "$_all_pids" | tr ' ' '\n' | tac | tr '\n' ' ')
+    for p in $reversed; do
+      kill -TERM "$p" 2>/dev/null || true
+    done
+    sleep 2
+    # SIGKILL any survivors
+    for p in $reversed; do
+      kill -KILL "$p" 2>/dev/null || true
+    done
+  fi
+  tmux kill-session -t "$session" 2>/dev/null || true
+}
+
 poll_for_handoff() {
   # Poll for handoff file or timeout artifact
   # Returns 0 for normal handoff, 1 for timeout/error

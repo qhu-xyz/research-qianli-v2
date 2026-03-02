@@ -18,4 +18,4 @@ TIMEOUT_ORCHESTRATOR=600     # 10 min (poll: 7 min)
 TIMEOUT_WORKER=3600          # 60 min (poll: 50 min) — real-data benchmark takes 35-50m
 TIMEOUT_REVIEWER_CLAUDE=600  # 10 min (poll: 7 min)
 TIMEOUT_REVIEWER_CODEX=600   # 10 min (poll: 7 min)
-TIMEOUT_SYNTHESIZER=900      # 15 min (poll: 10 min) — synthesis reads all files + writes 7 memory files + direction
+TIMEOUT_SYNTHESIZER=1500     # 25 min (poll: 20 min) — synthesis observed at ~14 min; reads ~15 files + writes 8 files

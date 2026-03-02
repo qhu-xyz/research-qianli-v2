@@ -4,14 +4,23 @@
 
 | Field | Value |
 |-------|-------|
-| Batch | hp-tune-20260302-134412 |
-| Iteration | 1 of 3 (synthesis complete) |
-| State | ORCHESTRATOR_SYNTHESIZING → next: iter2 |
+| Batch | hp-tune-20260302-144146 |
+| Iteration | 1 of 3 (planning complete) |
+| State | ORCHESTRATOR_PLANNING → WORKER |
 | Champion | None (v0 baseline) |
-| Last Hypothesis | H3: HP tuning — **REFUTED** (AUC -0.0025, 0W/11L) |
-| Next Hypothesis | H4: Interaction features (revert HPs + add cross-feature interactions) |
+| Current Hypothesis | H4: Interaction features (3 new cross-feature interactions + HP revert to v0) |
+| Previous Hypothesis | H3: HP tuning — **REFUTED** (AUC -0.0025, 0W/11L) |
 
-## Iteration 1 Results Summary
+## Iteration 1 Plan Summary
+
+- **Objective**: Improve ranking quality via feature engineering (3 interaction features)
+- **Changes**: (1) Revert HPs to v0 defaults, (2) Add 3 interaction features in `ml/features.py`, (3) Update `ml/config.py` FeatureConfig
+- **New features**: exceed_severity_ratio, hist_physical_interaction, overload_exceedance_product
+- **Expected**: AUC +0.005–0.015, AP +0.010–0.025
+- **Risk**: Low — additive features on v0 baseline, no architectural changes
+- **Direction file**: `memory/direction_iter1.md`
+
+## Prior Batch Results (hp-tune-20260302-134412)
 
 - **Version**: v0003
 - **Changes**: max_depth 4→6, n_estimators 200→400, lr 0.1→0.05, min_child_weight 10→5
@@ -19,19 +28,11 @@
 - **Promoted**: No
 - **Key Insight**: Model is feature-limited, not complexity-limited. HP tuning is the wrong lever.
 
-## Iteration 2 Plan Summary
-
-- **Objective**: Improve ranking quality via feature engineering
-- **Changes**: Revert HPs to v0 defaults + add 3 interaction features in `ml/features.py` + update `ml/config.py`
-- **Expected**: AUC +0.005–0.010, AP +0.01–0.02
-- **Risk**: Low — additive features on v0 baseline, no architectural changes
-- **Direction file**: `memory/direction_iter2.md`
-
 ## History
 
 | Batch | Type | Result |
 |-------|------|--------|
 | smoke-v6 | Infrastructure validation | PASS (determinism confirmed) |
 | smoke-v7 | Bug fixes + beta experiment | Fixes merged, H2 failed (beta direction inverted) |
-| hp-tune iter1 | HP tuning (v0003) | H3 refuted — no Group A improvement, AUC degraded |
-| hp-tune iter2 | Feature engineering | Planned — interaction features + HP revert |
+| hp-tune-20260302-134412 iter1 | HP tuning (v0003) | H3 refuted — no Group A improvement, AUC degraded |
+| hp-tune-20260302-144146 iter1 | Interaction features | Planned — 3 new features + HP revert |

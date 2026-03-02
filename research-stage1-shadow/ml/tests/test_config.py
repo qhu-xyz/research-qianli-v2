@@ -43,22 +43,22 @@ def test_feature_names_match_expected():
 
 def test_hyperparam_defaults():
     hc = HyperparamConfig()
-    assert hc.n_estimators == 200
-    assert hc.max_depth == 4
-    assert hc.learning_rate == 0.1
+    assert hc.n_estimators == 400
+    assert hc.max_depth == 6
+    assert hc.learning_rate == 0.05
     assert hc.subsample == 0.8
     assert hc.colsample_bytree == 0.8
     assert hc.reg_alpha == 0.1
     assert hc.reg_lambda == 1.0
-    assert hc.min_child_weight == 10
+    assert hc.min_child_weight == 5
     assert hc.random_state == 42
 
 
 def test_hyperparam_to_dict():
     hc = HyperparamConfig()
     d = hc.to_dict()
-    assert d["n_estimators"] == 200
-    assert d["max_depth"] == 4
+    assert d["n_estimators"] == 400
+    assert d["max_depth"] == 6
     assert len(d) == 9
 
 

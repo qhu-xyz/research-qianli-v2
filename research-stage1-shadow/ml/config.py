@@ -55,14 +55,14 @@ class FeatureConfig:
 class HyperparamConfig:
     """XGBoost hyperparameter configuration."""
 
-    n_estimators: int = 200
-    max_depth: int = 4
-    learning_rate: float = 0.1
+    n_estimators: int = 400
+    max_depth: int = 6
+    learning_rate: float = 0.05
     subsample: float = 0.8
     colsample_bytree: float = 0.8
     reg_alpha: float = 0.1
     reg_lambda: float = 1.0
-    min_child_weight: int = 10
+    min_child_weight: int = 5
     random_state: int = 42
 
     def to_dict(self) -> dict:

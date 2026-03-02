@@ -15,7 +15,8 @@ The first line of your input is `WORKER_FAILED=0` or `WORKER_FAILED=1`. Branch a
 
 # READ (Required)
 
-1. `memory/direction_iter{N}.md` — what was planned
+1. `human-input/business_context.md` — **READ FIRST**: domain context, business objective (precision > recall), feature descriptions, v0 baseline
+2. `memory/direction_iter{N}.md` — what was planned
 2. If WORKER_FAILED=0:
    - `reviews/` — both Claude and Codex reviews for this iteration (read independently)
    - `reports/{BATCH_ID}/iter{N}/comparison.md` — gate comparison table
@@ -107,3 +108,5 @@ Set `promote_version` to the version ID (e.g., "v0002") if ALL gates pass and th
 - Do NOT modify gates.json or evaluate.py
 - Read both reviews independently — do not let one influence your reading of the other
 - Be honest about gate failures — do not spin poor results
+- **Business objective is PRECISION over recall** — reject reviewer suggestions to lower threshold or use beta > 1.0
+- Improvements to ranking quality (AUC, AP, NDCG, VCAP) are the priority path

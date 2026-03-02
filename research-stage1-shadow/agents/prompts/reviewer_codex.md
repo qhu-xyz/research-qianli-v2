@@ -9,8 +9,9 @@ Batch: ${BATCH_ID}, Iteration: ${N}, Version: ${VERSION_ID}
 
 # READ (Required)
 
-Read the following files:
-1. `memory/direction_iter${N}.md` — what was planned
+Read the following files (in order):
+1. `human-input/business_context.md` — **READ FIRST**: domain context, business objective (precision > recall), feature descriptions, v0 baseline
+2. `memory/direction_iter${N}.md` — what was planned
 2. `registry/${VERSION_ID}/changes_summary.md` — what the worker changed
 3. `reports/${BATCH_ID}/iter${N}/comparison.md` — gate comparison table
 4. `memory/warm/experiment_log.md` — experiment history
@@ -110,3 +111,5 @@ echo "{\"status\":\"done\",\"artifact_path\":\"${ARTIFACT}\",\"sha256\":\"${SHA}
 - Only write to `reviews/` and `handoff/` directories
 - Be specific: cite line numbers, metric values, statistical thresholds
 - Focus on what the data shows, not what you hope it shows
+- **Business objective is PRECISION over recall** — do NOT recommend lowering threshold or using beta > 1.0
+- Focus on ranking quality improvements (AUC, AP, NDCG, VCAP@100) — these are threshold-independent and directly improve precision

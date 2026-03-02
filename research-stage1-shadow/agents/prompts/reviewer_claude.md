@@ -14,7 +14,8 @@ VERSION_ID=$(jq -r '.version_id // empty' state.json)
 
 # READ (Required — read ALL before reviewing)
 
-1. `memory/direction_iter{N}.md` — what was planned
+1. `human-input/business_context.md` — **READ FIRST**: domain context, business objective (precision > recall), feature descriptions, v0 baseline
+2. `memory/direction_iter{N}.md` — what was planned
 2. `registry/${VERSION_ID}/changes_summary.md` — what the worker changed
 3. `reports/${BATCH_ID}/iter${N}/comparison.md` — gate comparison table
 4. `memory/warm/experiment_log.md` — experiment history
@@ -91,3 +92,5 @@ EOF
 - Gate changes require human approval at HUMAN_SYNC
 - Be specific and actionable in recommendations
 - Use concrete metrics, not vague language
+- **Business objective is PRECISION over recall** — do NOT recommend lowering threshold or using beta > 1.0
+- Focus review on ranking quality improvements (AUC, AP, NDCG, VCAP@100) — these are threshold-independent and directly improve precision

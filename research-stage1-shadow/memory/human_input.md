@@ -1,39 +1,45 @@
-# Human Input — First Batch
+# Human Input — First Real-Data Batch
 
 ## Objective
-Run the shadow price classifier pipeline in SMOKE_TEST mode to verify the full agentic loop works end-to-end. This is an infrastructure validation batch, not a real experiment.
 
-## What to test this batch
-- Iteration 1: Run the pipeline with default hyperparameters (same as v0 baseline). The goal is NOT to beat v0 — it's to verify that every component works: version allocation, pipeline execution, gate comparison, reviews, and synthesis.
-- If the worker produces identical metrics to v0, that's fine — it confirms determinism.
-- Focus the review on whether the infrastructure is correct, not on ML improvements.
+Improve ranking quality (AUC, AP, NDCG) via hyperparameter tuning. The v0 baseline used default XGBoost params that were never optimized on real data. This is the lowest-risk, highest-signal first move.
 
-## Context
-- We are running on synthetic data (100 rows, SMOKE_TEST=true)
-- v0 baseline exists with populated gate floors
-- This is the first real batch — there is no prior experiment history
-- Auction month: 2021-07, class: onpeak, period: f0
+## Business Constraint
 
-## r1
-on structure
-- this is a sandbox environment right? meaning that once the round gets triggered i can close this session and all the modules in pipeline works
-- what is the exact command for me to begin a 3-iter-per-report?
-- where do i see the summary reports from the rounds?
-- what does cron job currently do?
-- so we are ONLY using both subscriptions from claude and openAI right, I DON"T want to use api
-- now does the pipeline support these two scenarios? 
-1. i type in command: "i think we should generate more useful features" then orchestrator picks up and gimme the worker command -> coder codes -> 2 reviewers review *independently* -> review summary given by orchestrator, who gives out a final opinion 
-2. if we running in 3-iter-per-report: orchestrator picks up last rounds report and gimme the worker command -> coder codes -> 2 reviewers review *independently* -> review summary given by orchestrator, who gives out a final opinion
-- do u think adding cron job helps?
-- do u think we can set the whole process, the controller script in tmux by default?
-- "Not worth it until we build actual recovery logic." -> why don't we do that?
-- also, is there **any risk** that the agents stuck in infinite loop? any risk that we burn tokens without knowing when and how to quit?
+**Precision over recall.** Capital is limited. Do NOT lower the threshold, do NOT increase recall at the cost of precision, do NOT use threshold_beta > 1.0. The current threshold (~0.83) and beta (0.7) are intentionally conservative and should remain so.
 
+## What to Change
 
-- now compare your implementation with the design md file and the implementation md file. have you implemented everything? (or have you implemented everything that makes sense? we even added something in our current design, so you need to compare **everything** and update to the latest. if sth is in design or implementation file but not done, do it.)
-    - my teammates may want to build a similar closed loop involving **pipeline, state, multiple reviewers from miltiple agents** your file should help them in that they will run into no friction in knowing the essences and easy pitfalls.
-- also, **create a runbook.md** for this whole repo, so next time when I talk with any claude code agent, they know how the pipeline is roughly set up and how to evoke it.
+Hyperparameter tuning focused on ranking quality. Suggested starting config:
 
-On the ML pipeline itself
-- what are the dataset used gimme details
-- what are the gates used currently? promotion is defined by how?
+| Param | v0 | Proposed | Rationale |
+|---|---|---|---|
+| `max_depth` | 4 | 6 | Deeper trees capture more complex feature interactions in 270K-row data |
+| `n_estimators` | 200 | 400 | More boosting rounds with slower learning |
+| `learning_rate` | 0.1 | 0.05 | Slower learning + more trees = better generalization |
+| `min_child_weight` | 10 | 5 | Allow finer leaf splits in large dataset |
+
+All other params (subsample, colsample_bytree, reg_alpha, reg_lambda, threshold_beta) stay at v0 defaults.
+
+## What NOT to Change
+- Do NOT change threshold_beta (keep 0.7)
+- Do NOT change features (iteration 2+ can explore this)
+- Do NOT change training window (keep 10+2)
+- Do NOT change the threshold scaling factor
+
+## Expected Impact
+- Group A ranking metrics (AUC, AP, NDCG) should improve — deeper trees + more rounds = better discrimination
+- BRIER may shift slightly — monitor but don't worry unless it exceeds 0.170 ceiling
+- Precision should stay stable or improve — ranking improvements help precision at any threshold
+- VCAP@100 may improve if the model better separates high-value binding constraints
+
+## Risk Assessment
+- Overfitting: deeper trees (max_depth=6) could overfit. Mitigated by lower learning rate (0.05) and existing regularization (subsample=0.8, colsample=0.8, reg_alpha=0.1, reg_lambda=1.0)
+- BRIER degradation: unlikely from pure HP changes but has only 0.02 headroom — flag if close
+- Compute time: 400 trees × 12 months is ~2x longer than v0 benchmark. Should still fit in worker timeout.
+
+## Success Criteria
+- AUC mean > 0.835 (any improvement over v0)
+- AP mean > 0.394 (any improvement)
+- All Group A gates pass all 3 layers
+- No Group A gate regresses on bottom_2_mean

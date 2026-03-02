@@ -17,10 +17,11 @@ PROJECT_DIR is set in your environment. Use it for reading state and writing han
 
 # READ (Required)
 
-1. `memory/direction_iter{N}.md` — orchestrator's direction (this IS in the worktree, committed by the controller)
-2. `memory/hot/champion.md` — champion info
-3. `memory/hot/learning.md` — accumulated learnings
-4. `memory/hot/runbook.md` — safety rules (READ THIS CAREFULLY)
+1. `human-input/business_context.md` — **READ FIRST**: domain context, business objective (precision > recall), feature descriptions, available levers
+2. `memory/direction_iter{N}.md` — orchestrator's direction (this IS in the worktree, committed by the controller)
+3. `memory/hot/champion.md` — champion info
+4. `memory/hot/learning.md` — accumulated learnings
+5. `memory/hot/runbook.md` — safety rules (READ THIS CAREFULLY)
 
 # TASK
 
@@ -34,13 +35,19 @@ Implement the changes specified in the direction file:
 6. If tests pass: **Run the pipeline**:
    ```bash
    cd /home/xyz/workspace/pmodel && source .venv/bin/activate && cd "$(pwd)"
-   # Smoke mode (single month, synthetic data — for quick validation):
-   SMOKE_TEST=true python ml/pipeline.py --version-id ${VERSION_ID} --auction-month 2021-07 --class-type onpeak --period-type f0
-   # Real mode (multi-month benchmark via Ray — produces per_month + aggregate metrics):
-   # python ml/benchmark.py --version-id ${VERSION_ID} --ptype f0 --class-type onpeak
    ```
-   The benchmark reads eval months from `gates.json` and runs Ray-parallel across 12 months.
-   `metrics.json` will contain `per_month` (per-month metrics) and `aggregate` (mean, std, min, max, bottom_2_mean).
+   Check the `SMOKE_TEST` environment variable to decide which mode:
+   - **If `SMOKE_TEST=true`** (synthetic n=20 data, fast validation):
+     ```bash
+     SMOKE_TEST=true python ml/pipeline.py --version-id ${VERSION_ID} --auction-month 2021-07 --class-type onpeak --period-type f0
+     ```
+   - **If `SMOKE_TEST` is unset or false** (REAL DATA — this is the default for production batches):
+     ```bash
+     python ml/benchmark.py --version-id ${VERSION_ID} --ptype f0 --class-type onpeak
+     ```
+     This runs the 12-month rolling window benchmark via Ray. It reads eval months from `gates.json`.
+     `metrics.json` will contain `per_month` (per-month metrics) and `aggregate` (mean, std, min, max, bottom_2_mean).
+     **This takes several minutes.** Wait for it to complete before proceeding.
 7. **Write** `registry/${VERSION_ID}/changes_summary.md` describing what you changed and why
 8. **Commit** your changes: `git add ml/ registry/${VERSION_ID}/ && git commit -m "iter${N}: ${brief_description}"`
 9. **Write handoff** (AFTER commit):

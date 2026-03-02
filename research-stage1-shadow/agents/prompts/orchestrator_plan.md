@@ -13,7 +13,8 @@ VERSION_ID=$(jq -r '.version_id // empty' state.json)
 
 # READ (Required — read ALL of these before planning)
 
-1. `memory/hot/progress.md` — current status
+1. `human-input/business_context.md` — **READ FIRST**: domain context, business objective (precision > recall), feature descriptions, available levers, v0 baseline summary
+2. `memory/hot/progress.md` — current status
 2. `memory/hot/champion.md` — champion version info
 3. `memory/hot/learning.md` — accumulated learning
 4. `memory/hot/gate_calibration.md` — gate calibration notes
@@ -25,7 +26,8 @@ VERSION_ID=$(jq -r '.version_id // empty' state.json)
 10. `registry/gates.json` — promotion gate definitions
 11. Champion metrics: if `registry/champion.json` has a version, read its `registry/{version}/metrics.json`. If champion is null, read `registry/v0/metrics.json` instead.
 12. `memory/human_input.md` — per-batch human input (if exists)
-13. `human-input/` — static requirements (read requirement.md, reference.md)
+13. `human-input/requirement.md` — static requirements
+14. `human-input/reference.md` — reference architecture
 
 # GATE SYSTEM (v2) — Three-Layer Checks
 
@@ -89,5 +91,7 @@ EOF
 - Do NOT run training
 - Do NOT modify gates.json or evaluate.py
 - Keep direction file focused and actionable
-- If iteration 1: establish baseline hypothesis from human requirements
+- **Business objective is PRECISION over recall** — do NOT suggest lowering threshold or using beta > 1.0
+- Focus improvements on ranking quality (AUC, AP, NDCG, VCAP) — these are threshold-independent and directly improve precision at any threshold
+- If iteration 1: establish baseline hypothesis from human requirements and business_context.md
 - If iteration 2+: build on previous results and reviewer feedback

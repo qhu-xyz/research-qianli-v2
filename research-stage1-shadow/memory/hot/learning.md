@@ -1,55 +1,41 @@
 # Learning
 
-## From Iteration 1 (Infrastructure Validation — smoke-v6)
+## From Infrastructure Validation (smoke-v6, smoke-v7 — synthetic n=20 data)
 
 ### Pipeline
 - Pipeline is fully deterministic: seed=42 for data + XGBoost produces bit-for-bit identical metrics across runs
 - Version registry structure works: config.json, metrics.json, meta.json, changes_summary.md, comparison.md, model/classifier.ubj.gz
-- 70/70 tests pass (4 new in smoke-v7 iter1)
 
-### Gate Insights
-- S1-BRIER is the tightest gate (0.02 headroom) — binding constraint for any threshold changes
-- S1-AP floor (0.12) is very generous — 0.47 headroom
-- VCAP@K gates are untested at n=20 (saturated to 1.0)
-- S1-REC fails because threshold=0.82 yields zero positive predictions
+### F-beta Formula (CRITICAL — got this wrong once)
+- **beta < 1 → weights PRECISION more** (higher threshold, fewer positives)
+- **beta > 1 → weights RECALL more** (lower threshold, more positives)
+- **beta = 1 → standard F1** (equal weighting)
+- F_beta = (1 + beta^2) * P * R / (beta^2 * P + R)
+- Business objective is precision > recall, so keep beta <= 1.0
 
-### Methodological
-- Threshold leakage: threshold is optimized and evaluated on same validation split — overstates threshold-dependent metrics. Not fixable at n=20 but must address for real data.
-- noise_tolerance=0.02 is not statistically meaningful at n=20 (one AUC swap ≈ 0.028)
+### Code Quality
+- `apply_threshold` uses strict `>` while `precision_recall_curve` thresholds are inclusive `>=` — known mismatch, minor impact at real data scale (270K rows) vs significant at n=20
 
 ### Reviewer Dynamics
 - Codex found deeper structural bugs; Claude had better practical gate analysis
 - Reading reviews independently is valuable — they catch different things
 
-## From Iteration 1 (H2 threshold_beta — smoke-v7)
+## From v0 Real-Data Baseline (12 months, f0, onpeak)
 
-### F-beta Formula (CRITICAL — got this wrong)
-- **beta < 1 → weights PRECISION more** (higher threshold, fewer positives)
-- **beta > 1 → weights RECALL more** (lower threshold, more positives)
-- **beta = 1 → standard F1** (equal weighting)
-- F_β = (1 + β²) × P × R / (β² × P + R)
-- The direction_iter1.md had this inverted, causing hypothesis H2 to have zero effect
-- Worker correctly diagnosed the error post-hoc — good safety net
+### Key Numbers
+- AUC=0.835 (std=0.015) — strong, stable ranking
+- AP=0.394 (std=0.041) — moderate, room for improvement
+- VCAP@100=0.015 (std=0.012) — very low value capture at top-100
+- Precision=0.442 — when predicting bind, right 44% of the time
+- Threshold=0.834 — conservative, precision-favoring (beta=0.7)
 
-### Threshold Semantics Mismatch (Codex HIGH, new)
-- `precision_recall_curve` thresholds are inclusive (>=), but `apply_threshold` in threshold.py uses strict `>`
-- At discrete n=20, samples exactly at the boundary get excluded
-- This makes realized predictions strictly more conservative than the optimized operating point
-- Could be a contributing factor to zero positives — must fix in iter2
+### Weakest Months
+- 2022-09: AP=0.315, AUC=0.833 — worst AP
+- 2022-12: AUC=0.809, AP=0.362 — worst AUC
+- 2022-06: REC=0.313 — worst recall
+- Late 2022 consistently weaker — possible distribution shift
 
-### Bug Fixes Validated
-- from_phase guard: `NotImplementedError` for phases > 1 prevents silent crashes
-- Group B pass policy: compare.py now correctly separates Group A (blocking) from Group B (informational)
-- Model gzip: automatic compression after save, uncompressed file deleted
-- All three changes were clean, well-tested, no regressions
-
-### Code Quality Observations
-- Misleading docstring in threshold.py:8 ("0.7 = moderate recall/precision balance") — wrong, beta=0.7 favors precision. Likely contributed to the inverted hypothesis.
-- DRY issue: build_comparison_table re-implements Group A/B tracking instead of calling evaluate_overall_pass
-- Missing-metric handling differs between markdown table and JSON output (Codex MEDIUM)
-
-### Open Issues (carried forward)
-- Threshold leakage (both HIGH) — deferred to real data
-- Dead config scale_pos_weight_auto (MEDIUM)
-- Version allocator not wired (MEDIUM)
-- Memory scaling for real data (MEDIUM)
+### Gate Headroom
+- Group A gates all pass with ~0.05 headroom from mean to floor
+- S1-BRIER (Group B) tightest: only 0.02 headroom (floor=0.170 vs mean=0.150)
+- S1-VCAP@100 has negative floor (-0.035) — effectively non-binding

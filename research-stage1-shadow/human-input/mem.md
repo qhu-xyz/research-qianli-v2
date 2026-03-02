@@ -76,3 +76,12 @@ if so:
 
 My reasoning to skip the guard: 
 The guard prevents training on labels that don't exist yet at prediction time. ==> is this a valid concern? I am not sure. for example, for the same ptype, ctype, different auction month, they do not interfere with each other because their market month is different. so even though yes, the target of the market month in val may go beyond what we have during inference
+
+
+## on metrics
+1. perhaps lower recall allow can increase recall while preserving precision but what is the point in that? 
+2. from a business perspect, if binding rate at 7.5%, i don't want the prediction to predict that 20 pct will bind. Our capital is limited, so we should priotize precision. 
+
+## on the pipeline
+- after updating the memory files, do the agents know from then on which files to update?
+- cross-reference the agent design files and the pipeline against our current changes. do they have ALL relevant information needed? for example, do reviewers get what this project is and what they need to do? do the summarizer or orchestrator or whatever AI is, know what the next step should take from reviewers information and other info, is there any gaps keeping them from making the best decision?

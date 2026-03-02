@@ -62,3 +62,35 @@
 - Month-level win/loss counts (0W/11L for AUC) are more informative than mean deltas (Δ=-0.0025)
 - A delta within noise tolerance can still be statistically significant when directionally consistent across months
 - Future iterations should track win/loss counts alongside mean deltas
+
+## From v0002 — Interaction Features (iter1, hp-tune-20260302-144146)
+
+### Feature Interactions Don't Break the AUC Ceiling
+- 3 physically-motivated interaction features (exceed_severity_ratio, hist_physical_interaction, overload_exceedance_product) produced AUC +0.0000 (5W/6L/1T)
+- XGBoost depth-4 already discovers most useful 2-feature interactions — pre-computing saves 1 split but adds no new information
+- AP +0.0010 (7W/5L) and NDCG +0.0016 (8W/4L) are marginal and noise-level
+- The AUC ceiling at ~0.835 is now **confirmed across two independent levers** (HP tuning AND interactions)
+
+### Interaction Features Help Top-K But Hurt Broader Ranking
+- VCAP@100 +0.0009 (slight improvement at top-100)
+- VCAP@500 -0.0043 and VCAP@1000 -0.0031 (regression at broader K)
+- Interactions act as "confidence boosters" for extreme cases but add noise to borderline predictions
+- Bottom-2 regressed on 3/4 Group A metrics — gains concentrated in distribution middle, not tails
+
+### Temporal Pattern in Feature Effectiveness
+- Early months (2020-09 through 2021-04) consistently benefit from interactions
+- Late months (2022-03, 2022-09, 2022-12) neutral or negative
+- This confirms the **late-2022 distribution shift** as the dominant remaining problem
+- Feature engineering within the current feature set cannot address temporal non-stationarity
+
+### Cumulative Evidence — What Works and What Doesn't
+| Lever | Result | Conclusion |
+|-------|--------|------------|
+| HP tuning (v0003) | AUC -0.0025, 0W/11L | Wrong lever — model not complexity-limited |
+| Interaction features (v0002) | AUC +0.0000, 5W/6L/1T | Wrong lever — information ceiling reached |
+| **Next**: Longer training window | Untested | Addresses distribution shift directly |
+
+### Outlier Sensitivity
+- Always check for single-month outliers driving mean improvements
+- 2021-01 NDCG outlier (+0.042) accounts for most of v0002 NDCG mean gain; without it, delta is ~-0.002
+- Report "mean excluding best month" alongside raw mean for honest assessment

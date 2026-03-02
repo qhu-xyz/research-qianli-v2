@@ -1,36 +1,39 @@
-# Critique Summary — Iteration 1 (hp-tune-20260302-134412, v0003)
+# Critique Summary — Iteration 1 (hp-tune-20260302-144146, v0002)
 
 ## Reviewer Agreement (high confidence)
-1. **Do not promote v0003** — no Group A improvement, AUC degraded systematically
-2. **Model is feature-limited, not complexity-limited** — HP tuning is the wrong lever
-3. **Clean code implementation** — no new bugs introduced, diff matches direction exactly
-4. **Late-2022 weakness persists** — distribution shift not addressed by tree complexity
-5. **Threshold methodology issues are real but pre-existing** — don't invalidate v0003 vs v0 comparison
+1. **Do not promote v0002** — no meaningful Group A improvement; statistically neutral
+2. **AUC ceiling confirmed at ~0.835** — two independent levers (HP tuning, interactions) both failed to move it
+3. **Clean code implementation** — no new bugs introduced; feature computation correct and idiomatic
+4. **Late-2022 weakness persists** — 2022-09 (AP=0.314), 2022-12 (AUC=0.809, VCAP@100=0.000)
+5. **Next direction: temporal/seasonal features or longer training windows** — both recommend new approaches beyond current feature set
+6. **Threshold methodology debt remains** — leakage (HIGH) and `>` vs `>=` (MEDIUM) are pre-existing
 
 ## Claude-Specific Insights
-- AUC 0W/11L is statistically significant (p≈0.003) — not noise, a real systematic effect
-- BRIER 12W/0L also significant (p≈0.0002) — deeper trees genuinely improve calibration
-- Recommends feature engineering: interaction features, temporal features, feature selection
-- Recommends full HP revert to v0 defaults before iter2
-- Gate calibration: appropriate as-is, no changes needed with only 1 data point
+- Deep statistical analysis: AUC 5W/6L/1T is noise; 2021-01 NDCG outlier (+0.042) drives mean improvement
+- Bottom-2 regressed on 3/4 Group A metrics — gains concentrated in middle, not tails
+- VCAP@500/VCAP@1000 regression: interactions help top-100 but hurt broader ranking
+- Recommends longer training windows (12-14 months) as simpler lever before new features
+- Also suggests constraint-level features and cross-constraint context as longer-term options
+- Gate calibration appropriate — VCAP@100 effectively non-binding but premature to tighten
 
 ## Codex-Specific Insights
-- Layer 3 non-regression disabled when champion=null (compare.py:219) — de facto no regression protection
-- noise_tolerance=0.02 is loose for AUC (std=0.015) — suggests metric-specific tolerances after more data
-- Threshold-selection leakage (HIGH): benchmark evaluates on same split used for threshold tuning
-- Dead config `scale_pos_weight_auto` misleads experiment interpretation
-- Recommends month-level consistency checks (≥8/12 non-negative deltas) before accepting mean gains
+- Treats iteration as statistically neutral; emphasizes not robustly positive
+- New finding (MEDIUM): missing schema guard for interaction feature base columns
+- Layer 3 tolerance (0.02) very loose relative to observed bottom_2 deltas (0.001-0.002)
+- Recommends seasonality/temporal-shift features targeting 2022-09 and 2022-12
 
 ## Synthesis Assessment
-- Claude's statistical analysis is compelling — the month-level win/loss counts provide stronger evidence than mean deltas alone
-- Codex's structural code findings (leakage, Layer 3 disabled) are valid but deferred to HUMAN_SYNC
-- Both reviewers converge on the same fundamental insight: these 14 features have reached their ranking ceiling at AUC ~0.835
-- Divergence on HP strategy is minor: Claude says revert fully, Codex says small local steps — reverting is correct since v0 is proven and any local variation has shown zero upside
+- Both reviewers independently reach identical conclusion: don't promote, AUC ceiling is real
+- Claude provides stronger statistical reasoning; Codex adds actionable code improvements
+- Key convergent insight: within-feature-set engineering cannot break through
+- Late-2022 pattern (early months improve, late months don't) is the strongest signal for next focus
 
 ## Open Code Issues (carried forward)
 | Issue | Severity | Source | Status |
 |-------|----------|--------|--------|
 | Threshold-selection leakage | HIGH | Codex (smoke-v6) | Deferred to HUMAN_SYNC |
 | Threshold `>` vs `>=` mismatch | MEDIUM | Codex (smoke-v7) | Deferred to HUMAN_SYNC |
-| Layer 3 disabled when champion=null | MEDIUM | Codex (iter1) | Accepted (v0 is reference) |
+| Missing schema guard for interactions | MEDIUM | Codex (iter1/v0002) | Include in iter2 |
+| Layer 3 disabled when champion=null | MEDIUM | Codex (iter1/v0003) | Accepted (v0 is reference) |
+| Stale docstrings (14→17) | LOW | Both (iter1/v0002) | Include in iter2 |
 | Dead config `scale_pos_weight_auto` | LOW | Codex (smoke-v6) | Deferred |

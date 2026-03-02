@@ -48,3 +48,13 @@ Calibrated from real-data v0 benchmark (commit d167090). Gate floors set as:
 - Codex suggested metric-specific noise_tolerance (tighter for AUC/AP/NDCG, looser for VCAP@100) — good idea but premature; revisit after 3-4 iterations
 - Layer 3 is effectively disabled when champion=null (defaults to pass) — acceptable for now
 - BRIER headroom actually increased (v0003 BRIER=0.146 vs floor=0.170, headroom now +0.024 vs v0's +0.020)
+
+## Iteration 1 Observations (v0002, hp-tune-20260302-144146)
+
+- All floors remain appropriate — v0002 passed all 3 layers with ~0.05 headroom on mean (identical to v0)
+- No gate calibration changes recommended (2 real-data iterations beyond v0 — still premature)
+- Layer 3 still effectively disabled (champion=null) — bottom_2 deltas vs v0 are very small: AUC +0.000, AP -0.002, VCAP@100 -0.001, NDCG -0.001. All within 0.02 tolerance.
+- Codex notes Layer 3 tolerance (0.02) is very loose relative to observed deltas (0.001-0.002) — valid, but need more data points to set appropriate metric-specific tolerances
+- VCAP@100 floor (-0.035) remains non-binding. v0002 VCAP@100 min=0.0000, still far above tail_floor (-0.0995). High variance metric (std=0.013, min=0.000, max=0.046).
+- BRIER headroom back to +0.020 (v0002 BRIER=0.1505 vs floor=0.170) — interaction features had negligible calibration effect
+- **Cumulative**: After 2 real-data experiments, no version has improved beyond v0 on Group A metrics. Gates are not too tight (not blocking good candidates) — there simply haven't been improvements to promote yet.

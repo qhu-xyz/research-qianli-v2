@@ -59,3 +59,25 @@ Both fixes should be applied in iter2 to maximize the chance of non-zero recall.
 
 ### D14: Continue deferring threshold methodology fixes
 **Rationale**: Threshold leakage (HIGH) and `>` vs `>=` mismatch (MEDIUM) affect threshold-dependent metrics only (REC, CAP, precision, BRIER). All Group A blocking gates are threshold-independent ranking metrics. Structural fix best done at HUMAN_SYNC. Issues affect v0 and v0003 equally.
+
+---
+
+## Iteration 1 Synthesis (hp-tune-20260302-144146) — 2026-03-02
+
+### D15: No promotion for v0002
+**Rationale**: v0002 (interaction features) shows no meaningful improvement over v0 on any Group A metric. AUC unchanged (+0.0000, 5W/6L/1T). AP +0.0010 and NDCG +0.0016 are within noise (<0.05σ). Bottom-2 regressed on 3/4 Group A metrics. VCAP@500 and VCAP@1000 both regressed. The 2021-01 NDCG outlier (+0.042) drives the mean improvement. Both reviewers independently recommend against promotion.
+
+### D16: No gate calibration changes
+**Rationale**: 2 real-data iterations (v0003, v0002), both neutral-to-negative vs v0. Premature to tighten floors. Layer 3 remains effectively disabled (champion=null). Revisiting metric-specific noise_tolerance deferred to after 3-4 iterations per Codex suggestion. VCAP@100 effectively non-binding (negative floor) — noted but premature to act.
+
+### D17: Pivot to training window expansion for iter2
+**Rationale**: Two iterations have exhausted the within-feature-set levers:
+- v0003 (HP tuning): AUC 0W/11L — complexity not the bottleneck
+- v0002 (interaction features): AUC 5W/6L/1T — interactions don't break the ceiling
+The persistent late-2022 weakness and pattern that early months benefit more than late months suggests the 10-month rolling window may be too short for distribution shifts. Expanding train_months 10→14 is the next logical lever: more diverse training examples without requiring new data sources. Keep 3 interaction features (marginally positive, computationally cheap).
+
+### D18: Keep interaction features in iter2
+**Rationale**: The 3 interaction features showed marginally positive signal for ranking (NDCG 8W/4L, AP 7W/5L). Computationally cheap, don't hurt discrimination (AUC neutral), and may interact positively with longer training windows. Remove only if iter2 shows they actively harm results.
+
+### D19: Continue deferring threshold methodology fixes
+**Rationale**: Same as D14 — threshold-dependent metrics only. Group A gates are threshold-independent. Fix at HUMAN_SYNC.

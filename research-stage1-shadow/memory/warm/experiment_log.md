@@ -93,3 +93,34 @@
 - Deeper trees DO improve calibration (BRIER 12/12 months better) but hurt discrimination (AUC worse).
 - Late-2022 distribution shift not addressable via tree complexity.
 **Code Issues**: Clean implementation, no new bugs. Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), dead config (LOW), Layer 3 disabled when champion=null (MEDIUM).
+
+---
+
+## Iteration 1 — v0002 (H4: Interaction features — second real-data experiment)
+
+**Batch**: hp-tune-20260302-144146
+**Date**: 2026-03-02
+**Hypothesis**: H4 — Pre-computed interaction features (3 new) provide discriminative signal that depth-4 trees cannot efficiently discover through single-feature splits.
+**Changes**: (1) Reverted HPs to v0 defaults (isolating feature effect from v0003), (2) Added 3 interaction features: exceed_severity_ratio, hist_physical_interaction, overload_exceedance_product. Total features: 14→17. All monotone +1.
+**Result**: **HYPOTHESIS NOT SUPPORTED** — AUC unchanged, ranking metrics marginally positive but within noise.
+
+| Gate | v0 Mean | v0002 Mean | Delta | v0 Bot2 | v0002 Bot2 | Δ Bot2 | Pass |
+|------|---------|------------|-------|---------|------------|--------|------|
+| S1-AUC | 0.8348 | 0.8348 | +0.0000 | 0.8105 | 0.8105 | +0.0000 | YES |
+| S1-AP | 0.3936 | 0.3946 | +0.0010 | 0.3322 | 0.3305 | -0.0017 | YES |
+| S1-VCAP@100 | 0.0149 | 0.0158 | +0.0009 | 0.0014 | 0.0006 | -0.0008 | YES |
+| S1-NDCG | 0.7333 | 0.7349 | +0.0016 | 0.6716 | 0.6703 | -0.0013 | YES |
+| S1-BRIER | 0.1503 | 0.1505 | +0.0002 | — | — | — | YES |
+
+**Overall Pass**: YES (all 3 layers pass for all Group A gates)
+**Promoted**: No — no meaningful improvement over v0
+**Per-month consistency**: AUC 5W/6L/1T, AP 7W/5L, NDCG 8W/4L
+**Weakest months unchanged**: 2022-09 (AP=0.314), 2022-12 (AUC=0.809, VCAP@100=0.000), 2021-04 (NDCG=0.663)
+**Notable**: VCAP@500 -0.0043 and VCAP@1000 -0.0031 (interactions help top-100 but hurt broader ranking). 2021-01 NDCG outlier (+0.042) drives most of the mean improvement.
+**Key Learnings**:
+- AUC ceiling at ~0.835 is confirmed across two independent levers: HP tuning (v0003) and interaction features (v0002)
+- XGBoost depth-4 can already discover most useful feature interactions — pre-computing them saves tree depth but doesn't unlock new patterns
+- Interaction features help ranking (NDCG 8W/4L) more than discrimination (AUC 5W/6L) — consistent with improving ordering of already-positive cases, not improving the separation boundary
+- Early months (2020–2021H1) benefit more than late months (2022) — distribution shift is the real bottleneck
+- Bottom-2 regressed on 3/4 Group A metrics: gains concentrated in middle of distribution, not tails
+**Code Issues**: No new bugs introduced. New MEDIUM: missing schema guard for interaction feature base columns (Codex). Stale docstrings (14→17 mismatch, both reviewers). Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), dead config (LOW), Layer 3 disabled (MEDIUM).

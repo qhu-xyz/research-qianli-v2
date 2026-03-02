@@ -26,3 +26,20 @@
 **Key Insight**: v0 defaults were already near-optimal. The model is **feature-limited, not complexity-limited**. Deeper trees improve probability calibration but slightly worsen discrimination. The 14 features have reached their informational ceiling for ranking quality at AUC ~0.835.
 
 **Lesson**: Standard XGBoost HP tuning (deeper + slower + finer) is not a viable path to improvement for this dataset. Next lever: feature engineering to provide new discriminative signal.
+
+---
+
+## H4 (real data, iter1): Interaction features provide new discriminative signal — NOT SUPPORTED
+**Batch**: hp-tune-20260302-144146, **Version**: v0002
+**Changes**: Reverted HPs to v0 defaults + added 3 interaction features (exceed_severity_ratio, hist_physical_interaction, overload_exceedance_product). Features: 14→17.
+**Expected**: AUC +0.005–0.015, AP +0.010–0.025, AUC wins ≥8/12
+**Actual**:
+- AUC: +0.0000 (5W/6L/1T) — zero effect
+- AP: +0.0010 (7W/5L) — marginal, noise-level
+- NDCG: +0.0016 (8W/4L) — driven by 2021-01 outlier (+0.042)
+- VCAP@500: -0.0043, VCAP@1000: -0.0031 (regression at broader K)
+- Bottom-2: regressed on AP, VCAP@100, NDCG
+
+**Key Insight**: XGBoost depth-4 already discovers most useful interactions. Pre-computing them saves tree depth but adds no new information. AUC ceiling at ~0.835 confirmed across both HP tuning and feature interactions.
+
+**Lesson**: Feature engineering within the current feature set cannot break the AUC ceiling. Next lever: expand training window (10→14 months) to address late-2022 distribution shift.

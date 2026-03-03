@@ -35,7 +35,10 @@ def prepare_features(
     print(f"[features] mem before prepare: {mem_mb():.0f} MB")
 
     # Compute interaction features only if requested by config
-    interaction_cols = {"exceed_severity_ratio", "hist_physical_interaction", "overload_exceedance_product"}
+    interaction_cols = {
+        "exceed_severity_ratio", "hist_physical_interaction", "overload_exceedance_product",
+        "band_severity", "sf_exceed_interaction", "hist_seasonal_band",
+    }
     if interaction_cols & set(cols):
         df = df.with_columns([
             (pl.col("prob_exceed_110") / (pl.col("prob_exceed_90") + 1e-6))
@@ -44,6 +47,12 @@ def prepare_features(
                 .alias("hist_physical_interaction"),
             (pl.col("expected_overload") * pl.col("prob_exceed_105"))
                 .alias("overload_exceedance_product"),
+            (pl.col("prob_band_95_100") * pl.col("expected_overload"))
+                .alias("band_severity"),
+            (pl.col("sf_max_abs") * pl.col("prob_exceed_100"))
+                .alias("sf_exceed_interaction"),
+            (pl.col("hist_da_max_season") * pl.col("prob_band_100_105"))
+                .alias("hist_seasonal_band"),
         ])
 
     # Verify source-loader features exist (not computed here — must come from data_loader)

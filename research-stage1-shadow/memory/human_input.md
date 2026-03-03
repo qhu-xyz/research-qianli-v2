@@ -1,45 +1,49 @@
-# Human Input — First Real-Data Batch
+# Human Input — Feature Engineering Batch (3 iterations)
 
-## Objective
+## What We've Learned (3 real-data experiments)
 
-Improve ranking quality (AUC, AP, NDCG) via hyperparameter tuning. The v0 baseline used default XGBoost params that were never optimized on real data. This is the lowest-risk, highest-signal first move.
+1. **HP tuning is a dead end.** v0 defaults are near-optimal. Deeper trees hurt AUC, help BRIER. Don't waste iterations on HP changes.
+2. **Interaction features alone don't break through.** AUC +0.0000 with 3 interactions. XGBoost depth-4 already discovers most interactions.
+3. **Training window expansion (10→14) is the first positive lever.** AUC +0.0013 (7W/4L), VCAP@100 +0.0034 (9W/3L). Retain 14-month window as the new default.
+4. **The AUC ceiling is ~0.835 with 14 base features.** Three independent levers confirm this. Breaking through requires fundamentally new discriminative signal.
+5. **2022-09 is the hardest month.** Binding rate 6.63% (lowest). Three levers all failed there. May need features we don't have yet.
 
-## Business Constraint
+## Strategy for This Batch
 
-**Precision over recall.** Capital is limited. Do NOT lower the threshold, do NOT increase recall at the cost of precision, do NOT use threshold_beta > 1.0. The current threshold (~0.83) and beta (0.7) are intentionally conservative and should remain so.
+### Iter 1: Combine the two positive levers (H6)
+- **Retain 14-month training window** (train_months=14)
+- **Add 3 interaction features** (products of exceedance × severity × historical signals)
+- **Keep v0 HP defaults** (proven near-optimal)
+- Tests whether window expansion + interaction features are additive
+- Expected: AUC 0.836-0.840 if additive, ~0.835 if not
 
-## What to Change
+### Iter 2-3: Depends on iter 1, but strategic priorities are:
+- If H6 shows additivity → refine: try more/different interactions, or train_months=18
+- If H6 shows no additivity → the current feature set has a hard ceiling. Try:
+  - **Feature selection**: Drop low-signal features (shape features density_skewness/kurtosis/cv have unconstrained monotone — they may add noise). Test with 11 features instead of 14.
+  - **Ratio features**: prob_exceed_110 / prob_exceed_90 (tail concentration), expected_overload / prob_exceed_100 (conditional severity)
+  - **Temporal aggregation**: If the pipeline supports it, consider rolling averages of hist_da (but only if no data leakage)
 
-Hyperparameter tuning focused on ranking quality. Suggested starting config:
+### Bug fixes (do in iter 1 or 2):
+- **f2p parsing crash** (Codex HIGH): `int("2p")` fails for cascade stage. Fix in benchmark.py.
+- **Dual-default fragility** (Claude MEDIUM): train_months hardcoded in benchmark.py function signatures AND PipelineConfig. Single source of truth.
 
-| Param | v0 | Proposed | Rationale |
-|---|---|---|---|
-| `max_depth` | 4 | 6 | Deeper trees capture more complex feature interactions in 270K-row data |
-| `n_estimators` | 200 | 400 | More boosting rounds with slower learning |
-| `learning_rate` | 0.1 | 0.05 | Slower learning + more trees = better generalization |
-| `min_child_weight` | 10 | 5 | Allow finer leaf splits in large dataset |
+## Business Constraint (unchanged)
+**Precision over recall.** Do NOT lower threshold, do NOT increase beta above 1.0, do NOT optimize for recall. The trading strategy needs high-confidence binding predictions, not coverage.
 
-All other params (subsample, colsample_bytree, reg_alpha, reg_lambda, threshold_beta) stay at v0 defaults.
-
-## What NOT to Change
-- Do NOT change threshold_beta (keep 0.7)
-- Do NOT change features (iteration 2+ can explore this)
-- Do NOT change training window (keep 10+2)
-- Do NOT change the threshold scaling factor
-
-## Expected Impact
-- Group A ranking metrics (AUC, AP, NDCG) should improve — deeper trees + more rounds = better discrimination
-- BRIER may shift slightly — monitor but don't worry unless it exceeds 0.170 ceiling
-- Precision should stay stable or improve — ranking improvements help precision at any threshold
-- VCAP@100 may improve if the model better separates high-value binding constraints
-
-## Risk Assessment
-- Overfitting: deeper trees (max_depth=6) could overfit. Mitigated by lower learning rate (0.05) and existing regularization (subsample=0.8, colsample=0.8, reg_alpha=0.1, reg_lambda=1.0)
-- BRIER degradation: unlikely from pure HP changes but has only 0.02 headroom — flag if close
-- Compute time: 400 trees × 12 months is ~2x longer than v0 benchmark. Should still fit in worker timeout.
+## What NOT to Do
+- No HP tuning (proven dead end — 3 experiments confirm)
+- No threshold_beta changes (keep 0.7)
+- No architecture changes (XGBoost + monotone constraints is correct)
+- No train/val split changes beyond window length
+- Don't spend more than 1 iteration on something that shows zero signal
 
 ## Success Criteria
-- AUC mean > 0.835 (any improvement over v0)
-- AP mean > 0.394 (any improvement)
-- All Group A gates pass all 3 layers
-- No Group A gate regresses on bottom_2_mean
+- **Promotion-worthy**: AUC > 0.837 AND at least 8/12 months winning AND AP > 0.396
+- **Encouraging but not promotable**: AUC > 0.835 with 7+/12 wins (continue refining)
+- **Dead end signal**: AUC ≤ 0.835 or fewer than 6/12 wins → pivot to different approach
+
+## Gate Notes
+- Don't change gate floors — we need more data points before calibrating
+- Layer 3 (non-regression) is effectively disabled since champion=null — this is fine for now
+- Promote the first version that meets promotion criteria above

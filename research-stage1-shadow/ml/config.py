@@ -34,6 +34,10 @@ class FeatureConfig:
             # --- Historical DA shadow price ---
             ("hist_da", 1),
             ("hist_da_trend", 1),
+            # --- Interaction features ---
+            ("exceed_severity_ratio", 1),
+            ("hist_physical_interaction", 1),
+            ("overload_exceedance_product", 1),
         ]
     )
 

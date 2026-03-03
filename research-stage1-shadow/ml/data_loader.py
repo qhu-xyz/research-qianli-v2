@@ -100,7 +100,9 @@ def _load_real(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     # that their market months are before train_end.
     auction_month = pd.Timestamp(config.auction_month)
     ptype = config.period_type or "f0"
-    horizon = int(ptype[1:]) if ptype.startswith("f") else 3
+    import re
+    m = re.match(r"f(\d+)", ptype)
+    horizon = int(m.group(1)) if m else 3
     lookback = config.train_months + config.val_months + horizon
     train_start = auction_month - pd.DateOffset(months=lookback)
     train_end = auction_month

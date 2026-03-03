@@ -33,10 +33,14 @@ def _eval_single_month(
     hyperparam_config: HyperparamConfig,
     feature_config: FeatureConfig,
     threshold_beta: float = 0.7,
-    train_months: int = 14,
-    val_months: int = 2,
+    train_months: int | None = None,
+    val_months: int | None = None,
 ) -> dict | None:
     """Train + evaluate on a single auction month. Returns metrics dict or None if skipped."""
+    if train_months is None:
+        train_months = PipelineConfig().train_months
+    if val_months is None:
+        val_months = PipelineConfig().val_months
     print(f"[benchmark] Evaluating {auction_month} (ptype={ptype}), mem: {mem_mb():.0f} MB")
 
     config = PipelineConfig(
@@ -94,8 +98,8 @@ def run_benchmark(
     hyperparam_config: HyperparamConfig | None = None,
     feature_config: FeatureConfig | None = None,
     threshold_beta: float = 0.7,
-    train_months: int = 14,
-    val_months: int = 2,
+    train_months: int | None = None,
+    val_months: int | None = None,
     overrides: dict | None = None,
 ) -> dict:
     """Run benchmark across multiple evaluation months.
@@ -126,6 +130,10 @@ def run_benchmark(
     result : dict
         {"per_month": {...}, "aggregate": {...}, "eval_config": {...}, ...}
     """
+    if train_months is None:
+        train_months = PipelineConfig().train_months
+    if val_months is None:
+        val_months = PipelineConfig().val_months
     if hyperparam_config is None:
         hyperparam_config = HyperparamConfig()
     if feature_config is None:

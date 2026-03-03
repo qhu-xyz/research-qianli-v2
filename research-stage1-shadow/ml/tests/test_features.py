@@ -7,15 +7,16 @@ from ml.features import compute_binary_labels, compute_scale_pos_weight, prepare
 
 
 def test_prepare_features_shape():
-    """prepare_features returns (n_samples, 14) array with v0 baseline features."""
+    """prepare_features returns correct shape array matching FeatureConfig."""
     rng = np.random.RandomState(42)
     fc = FeatureConfig()
+    n_features = len(fc.features)
     data = {feat: rng.randn(50).tolist() for feat in fc.features}
     df = pl.DataFrame(data)
 
     X, cols = prepare_features(df, fc)
-    assert X.shape == (50, 14)
-    assert len(cols) == 14
+    assert X.shape == (50, n_features)
+    assert len(cols) == n_features
 
 
 def test_prepare_features_fills_nulls():

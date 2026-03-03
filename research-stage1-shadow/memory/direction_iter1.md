@@ -1,211 +1,127 @@
-# Direction — Iteration 1 (feat-eng-20260302-194243)
+# Direction — Iteration 1 (feat-eng-20260303-060938, v0003)
 
-## Hypothesis
+## Hypothesis: H6 — Combined 14-Month Window + Interaction Features (Additivity Test)
 
-**H5: Training window expansion (10→14 months) breaks AUC ceiling by addressing late-2022 distribution shift**
+**Core question**: Are the two positive-signal levers (window expansion, interaction features) additive?
 
-The AUC ceiling at ~0.835 is confirmed across two independent levers:
-- HP tuning (v0003): AUC 0W/11L — complexity not the bottleneck
-- Interaction features (v0002): AUC 5W/6L/1T — information ceiling within feature set
+Three real-data experiments have isolated individual levers:
+- **HP tuning (v0003-HP)**: AUC -0.0025 (0W/11L) — REFUTED. Model not complexity-limited.
+- **Interaction features (v0002)**: AUC +0.0000 (5W/6L/1T) — NOT SUPPORTED. But NDCG 8W/4L, AP 7W/5L show marginal ranking signal.
+- **Window expansion (v0003)**: AUC +0.0013 (7W/4L/1T) — INCONCLUSIVE. Best lever so far. VCAP@100 9W/3L (p≈0.07).
 
-The weakest months (2022-09, 2022-12) consistently underperform, and early months benefit more from changes than late months. This pattern suggests the 10-month rolling window may not capture sufficient seasonal diversity. Expanding to 14 months provides 40% more training examples, including data from seasons absent in the shorter window.
-
-For eval month 2022-09 with `train_months=14`:
-- v0 sees: ~2021-09 to 2022-07 (10 months) — misses spring 2021
-- New sees: ~2021-05 to 2022-07 (14 months) — captures spring/summer 2021 patterns
+If effects are additive, we expect AUC ~0.836–0.838, NDCG ~+0.0035, VCAP@100 ~+0.0043. Even partial additivity would be the strongest result yet.
 
 ## Specific Changes
 
-### 1. Revert FeatureConfig to v0 baseline (14 features)
+### 1. Add 3 interaction features to FeatureConfig (MAIN CHANGE)
 
 **File**: `ml/config.py` → `FeatureConfig.step1_features`
 
-Remove the 3 interaction features added for v0002. This isolates the training window effect cleanly.
-
+Add these 3 tuples after the existing 14 base features:
 ```python
-# REMOVE these 3 entries from step1_features:
-("exceed_severity_ratio", 1),
-("hist_physical_interaction", 1),
-("overload_exceedance_product", 1),
+# --- Interaction features ---
+("exceed_severity_ratio", 1),      # prob_exceed_110 / (prob_exceed_90 + 1e-6)
+("hist_physical_interaction", 1),   # hist_da * prob_exceed_100
+("overload_exceedance_product", 1), # expected_overload * prob_exceed_105
 ```
 
-After removal, `step1_features` should have exactly 14 entries (the v0 baseline set).
+Total features: 14 → 17. All three are monotone +1 (higher = more likely to bind).
 
-### 2. Guard interaction feature computation in features.py
+The computation logic already exists in `ml/features.py:prepare_features()` (lines 38–47) — it dynamically computes interaction columns when they appear in `config.features`. No changes needed in `features.py`.
 
-**File**: `ml/features.py` → `prepare_features()`
+### 2. Keep train_months=14 (NO CHANGE)
 
-The interaction features are unconditionally computed on line 38-45. Guard them so they only compute if the config requests them:
+`ml/config.py` → `PipelineConfig.train_months` is already 14 from the previous v0003. Verify it is still 14 before running — do NOT change it.
 
-```python
-# In prepare_features(), BEFORE the df.select(cols):
-interaction_cols = {"exceed_severity_ratio", "hist_physical_interaction", "overload_exceedance_product"}
-if interaction_cols & set(cols):
-    df = df.with_columns([
-        (pl.col("prob_exceed_110") / (pl.col("prob_exceed_90") + 1e-6))
-            .alias("exceed_severity_ratio"),
-        (pl.col("hist_da") * pl.col("prob_exceed_100"))
-            .alias("hist_physical_interaction"),
-        (pl.col("expected_overload") * pl.col("prob_exceed_105"))
-            .alias("overload_exceedance_product"),
-    ])
-```
+### 3. Keep v0 HP defaults (NO CHANGE)
 
-Also add a schema guard: verify all requested feature columns exist in the DataFrame before `df.select(cols)`. This addresses the Codex MEDIUM from iter1:
+`ml/config.py` → `HyperparamConfig` should remain:
+- n_estimators=200, max_depth=4, learning_rate=0.1
+- subsample=0.8, colsample_bytree=0.8
+- reg_alpha=0.1, reg_lambda=1.0, min_child_weight=10
 
-```python
-missing = set(cols) - set(df.columns) - interaction_cols  # interactions may be computed above
-if missing:
-    raise ValueError(f"Missing feature columns in data: {missing}")
-```
+### 4. Fix f2p parsing crash (BUG FIX — HIGH)
 
-### 3. Fix benchmark.py train_months plumbing (BUG FIX)
+**File**: `ml/benchmark.py` (or wherever `int(ptype[1:])` is used for cascade stage parsing)
+
+**Problem**: `int(ptype[1:])` crashes for ptype="f2p" → `int("2p")` raises ValueError. This blocks cascade stage-3 evaluation.
+
+**Fix**: Replace `int(ptype[1:])` with a robust parser. Options:
+- Use a mapping dict: `{"f0": 0, "f1": 1, "f2p": 2}`
+- Or use regex: `int(re.match(r'f(\d+)', ptype).group(1))`
+- Test with all 3 cascade ptypes: f0, f1, f2p
+
+### 5. Fix dual-default fragility in benchmark.py (BUG FIX — MEDIUM)
 
 **File**: `ml/benchmark.py`
 
-Three changes required:
+**Problem**: `_eval_single_month()` and `run_benchmark()` have `train_months=14` hardcoded in function signatures alongside `PipelineConfig.train_months=14`. If one changes, the other must change in lockstep — fragile.
 
-**(a)** Add `train_months` parameter to `_eval_single_month()`:
+**Fix**: Use `None` sentinel with fallback:
 ```python
 def _eval_single_month(
-    auction_month: str,
-    class_type: str,
-    ptype: str,
-    hyperparam_config: HyperparamConfig,
-    feature_config: FeatureConfig,
-    threshold_beta: float = 0.7,
-    train_months: int = 10,       # <-- ADD THIS
-    val_months: int = 2,          # <-- ADD THIS
-) -> dict | None:
+    ...,
+    train_months: int | None = None,
+    val_months: int | None = None,
+    ...
+):
+    # Resolve from PipelineConfig if not provided
+    if train_months is None:
+        train_months = PipelineConfig().train_months
+    if val_months is None:
+        val_months = PipelineConfig().val_months
 ```
 
-And pass them to PipelineConfig:
-```python
-config = PipelineConfig(
-    auction_month=auction_month,
-    class_type=class_type,
-    period_type=ptype,
-    threshold_beta=threshold_beta,
-    train_months=train_months,    # <-- ADD THIS
-    val_months=val_months,        # <-- ADD THIS
-)
-```
+Apply the same pattern to `run_benchmark()`.
 
-**(b)** Add `train_months` parameter to `run_benchmark()`:
-```python
-def run_benchmark(
-    version_id: str,
-    eval_months: list[str],
-    class_type: str = "onpeak",
-    ptype: str = "f0",
-    registry_dir: str = "registry",
-    hyperparam_config: HyperparamConfig | None = None,
-    feature_config: FeatureConfig | None = None,
-    threshold_beta: float = 0.7,
-    train_months: int = 10,       # <-- ADD THIS
-    val_months: int = 2,          # <-- ADD THIS
-    overrides: dict | None = None,
-) -> dict:
-```
+### 6. Update tests for 17 features
 
-Extract `train_months` and `val_months` from overrides:
-```python
-if overrides:
-    from ml.pipeline import _apply_overrides
-    pc_dummy = PipelineConfig(threshold_beta=threshold_beta)
-    hyperparam_config, pc_dummy = _apply_overrides(hyperparam_config, pc_dummy, overrides)
-    threshold_beta = pc_dummy.threshold_beta
-    train_months = pc_dummy.train_months    # <-- ADD THIS
-    val_months = pc_dummy.val_months        # <-- ADD THIS
-```
+**File**: `ml/tests/` — update any test fixtures that hardcode 14-wide feature arrays to 17-wide (or make them dynamic from FeatureConfig).
 
-Pass them to each `_eval_single_month()` call:
-```python
-metrics = _eval_single_month(
-    month, class_type, ptype, hyperparam_config, feature_config,
-    threshold_beta, train_months, val_months  # <-- ADD THESE
-)
-```
+Codex flagged (LOW) that synthetic fixtures are 17-wide while production config was 14 — this was from a previous iteration. Now that we're going back to 17 features, ensure fixtures match.
 
-**(c)** Fix hardcoded eval_config (line 178):
-```python
-"eval_config": {
-    "eval_months": eval_months,
-    "class_type": class_type,
-    "ptype": ptype,
-    "train_months": train_months,   # <-- was hardcoded 10
-    "val_months": val_months,        # <-- was hardcoded 2
-    "threshold_beta": threshold_beta,
-},
-```
+## Execution Order
 
-### 4. Set train_months=14 for this version
-
-**File**: `ml/config.py` → `PipelineConfig`
-
-Change the default:
-```python
-train_months: int = 14  # was 10
-```
-
-**Rationale for changing the default rather than using overrides**: The overrides mechanism works, but changing the default makes the experiment config explicit in `config.py` and ensures it flows through all code paths (benchmark, pipeline, etc.) without needing every caller to pass it.
-
-### 5. Update stale docstrings
-
-**File**: `ml/features.py`
-- Line 20: Change "14 feature columns" → "feature columns" (count depends on config)
-- Line 30: Change "Feature matrix of shape (n_samples, 14)" → "Feature matrix of shape (n_samples, n_features)"
-
-**File**: `ml/data_loader.py`
-- Line 24: Change "14 feature columns" → "feature columns"
-
-### 6. Keep all v0 hyperparameters
-
-**IMPORTANT**: Do NOT change any hyperparameters. Keep v0 defaults:
-- `n_estimators=200`, `max_depth=4`, `learning_rate=0.1`
-- `subsample=0.8`, `colsample_bytree=0.8`
-- `reg_alpha=0.1`, `reg_lambda=1.0`, `min_child_weight=10`
-
-This isolates the training window effect.
-
-## Run Instructions
-
-After making the above changes:
-
-1. Run tests: `python -m pytest ml/tests/ -v`
-2. Run benchmark: `python ml/benchmark.py --version-id ${VERSION_ID}`
-3. Run validate: `python ml/validate.py --version-id ${VERSION_ID}`
-4. Run compare: `python ml/compare.py --version-id ${VERSION_ID} --baseline v0`
-5. Commit, then write handoff
+1. Make config change (add 3 interaction features)
+2. Fix f2p parsing crash
+3. Fix dual-default fragility
+4. Run tests: `python -m pytest ml/tests/ -v`
+5. Run benchmark pipeline (full 12-month eval)
+6. Run validate + compare against v0
+7. Commit, then write handoff
 
 ## Expected Impact
 
-| Metric | Expected Direction | Rationale |
-|--------|-------------------|-----------|
-| S1-AUC | +0.002 to +0.008 | More diverse training examples improve discrimination |
-| S1-AP | +0.005 to +0.015 | Better positive ranking from seasonal diversity |
-| S1-NDCG | +0.002 to +0.010 | Improved ranking quality from richer training |
-| S1-VCAP@100 | +0.001 to +0.005 | Top-100 benefit from better tail discrimination |
-| S1-BRIER | ±0.002 | Neutral — calibration mostly unaffected by window size |
-| Late-2022 months | Strongest improvement | 2022-09, 2022-12 gain most from additional historical context |
+| Metric | v0 Baseline | Expected (if additive) | Expected (if not additive) |
+|--------|-------------|----------------------|---------------------------|
+| S1-AUC | 0.8348 | 0.836–0.838 | ~0.836 |
+| S1-AP | 0.3936 | 0.396–0.400 | ~0.395 |
+| S1-VCAP@100 | 0.0149 | 0.019–0.023 | ~0.018 |
+| S1-NDCG | 0.7333 | 0.737–0.740 | ~0.736 |
+| AUC W/L | — | ≥8/12 (additive) | 6-7/12 (not additive) |
 
-**Success criteria**: AUC improvement in ≥7/12 months AND mean AUC > 0.835
+**Success criteria** (from human input):
+- **Promotion-worthy**: AUC > 0.837 AND ≥8/12 wins AND AP > 0.396
+- **Encouraging**: AUC > 0.835, 7+/12 wins → continue refining in iter 2
+- **Dead end**: AUC ≤ 0.835 or <6/12 wins → feature set has hard ceiling, pivot in iter 2
 
 ## Risk Assessment
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| Stale data dilution (old patterns hurt) | LOW | 14 months is moderate; not reaching back 2+ years |
-| Data availability for earliest months | LOW | 2020-09 needs data from 2019-05; MISO data available |
-| Compute time increase (~40%) | MEDIUM | 14-month lookback loads more data; monitor mem_mb() closely |
-| Overfitting to seasonal patterns | LOW | Larger training set generally regularizes, not overfits |
-| Neutral result (window isn't the answer) | MEDIUM | If AUC stays at ~0.835, need fundamentally new features or methods |
+1. **Non-additivity (MEDIUM)**: Window expansion and interactions may overlap in signal — both primarily help early months (2020–2021H1). If so, combined effect ≈ max(individual effects) rather than sum. Mitigation: the experiment still provides valuable information about which features carry independent signal.
 
-## What NOT to Change
+2. **Broader ranking degradation (LOW-MEDIUM)**: Both v0002 (interactions) and v0003 (window) showed VCAP@500 and CAP@100/500 regression. Combined may amplify this. Mitigation: acceptable per business objective (top-100 precision > broad ranking), but monitor closely.
 
-- Hyperparameters (keep v0 defaults)
-- `threshold_beta` (keep 0.7)
-- `threshold_scaling_factor` (keep 1.0)
-- `gates.json` or `evaluate.py` (HUMAN-WRITE-ONLY)
-- `registry/v0/` (immutable)
-- `val_months` (keep 2)
+3. **BRIER regression (LOW)**: v0003 showed BRIER +0.0011 (slightly worse calibration). Combined with interactions may push BRIER closer to floor (headroom only 0.019). Mitigation: BRIER is Group B (non-blocking), and AUC/ranking improvements are more business-relevant.
+
+4. **2022-09 remains stuck (HIGH likelihood, LOW impact)**: Three independent levers all failed to improve 2022-09 (lowest binding rate 6.63%, AP consistently worst). This iteration will not fix it. Mitigation: document the result; if iter 1 confirms the ceiling, iter 2 can try feature selection to explicitly address this month.
+
+5. **Bug fix scope creep (LOW)**: The f2p and dual-default fixes are surgical. Risk of unintended side effects is minimal since both are in evaluation/benchmarking code, not in the training pipeline itself.
+
+## What NOT To Do
+
+- Do NOT change hyperparameters (proven dead end — 3 experiments confirm)
+- Do NOT change threshold_beta (keep 0.7)
+- Do NOT change val_months (keep 2)
+- Do NOT modify gates.json or evaluate.py
+- Do NOT add more than the 3 specified interaction features this iteration
+- Do NOT touch registry/v0/ or any other registry/v*/ except registry/v0003/

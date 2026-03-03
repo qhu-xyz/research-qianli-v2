@@ -92,7 +92,7 @@ class PipelineConfig:
     class_type: str = "onpeak"
     period_type: str = "f0"
     version_id: str | None = None
-    train_months: int = 14
+    train_months: int = 18
     val_months: int = 2
     threshold_beta: float = 0.7
     threshold_scaling_factor: float = 1.0

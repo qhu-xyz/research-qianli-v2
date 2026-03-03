@@ -68,7 +68,7 @@ def test_hyperparam_to_dict():
 def test_pipeline_config_defaults():
     pc = PipelineConfig()
     assert pc.threshold_beta == 0.7
-    assert pc.train_months == 14
+    assert pc.train_months == 18
     assert pc.val_months == 2
     assert pc.class_type == "onpeak"
     assert pc.period_type == "f0"

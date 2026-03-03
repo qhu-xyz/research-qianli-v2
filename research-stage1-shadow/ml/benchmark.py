@@ -80,6 +80,10 @@ def _eval_single_month(
     val_sp = val_df["actual_shadow_price"].to_numpy()
     metrics = evaluate_classifier(y_val, val_proba, val_pred, val_sp, threshold)
 
+    # Feature importance (gain-based)
+    importance = dict(zip(feature_config.features, model.feature_importances_.tolist()))
+    metrics["_feature_importance"] = importance
+
     # Cleanup
     del train_df, val_df, X_train, X_val, y_train, y_val, model, val_proba, val_pred, val_sp
     gc.collect()
@@ -184,6 +188,13 @@ def run_benchmark(
         import ray
         ray.shutdown()
 
+    # Extract feature importance before aggregation (not a numeric metric)
+    importance_per_month = {}
+    for month in list(per_month.keys()):
+        imp = per_month[month].pop("_feature_importance", None)
+        if imp:
+            importance_per_month[month] = imp
+
     # Aggregate
     agg = aggregate_months(per_month)
 
@@ -212,6 +223,30 @@ def run_benchmark(
     with open(version_dir / "metrics.json", "w") as f:
         json.dump(result, f, indent=2)
     print(f"[benchmark] Wrote metrics to {version_dir / 'metrics.json'}")
+
+    if importance_per_month:
+        import statistics
+        all_features = list(next(iter(importance_per_month.values())).keys())
+        mean_imp = {}
+        std_imp = {}
+        for feat in all_features:
+            vals = [importance_per_month[m].get(feat, 0.0) for m in importance_per_month]
+            mean_imp[feat] = statistics.mean(vals)
+            std_imp[feat] = statistics.stdev(vals) if len(vals) > 1 else 0.0
+
+        fi_data = {
+            "importance_type": "gain",
+            "n_months": len(importance_per_month),
+            "per_month": importance_per_month,
+            "aggregate": {
+                "mean": mean_imp,
+                "std": std_imp,
+            },
+            "ranked": sorted(mean_imp.items(), key=lambda x: x[1], reverse=True),
+        }
+        with open(version_dir / "feature_importance.json", "w") as f:
+            json.dump(fi_data, f, indent=2)
+        print(f"[benchmark] Wrote feature importance to {version_dir / 'feature_importance.json'}")
 
     config_out = {
         "hyperparams": hyperparam_config.to_dict(),

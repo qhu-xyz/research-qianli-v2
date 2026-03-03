@@ -5,18 +5,18 @@
 | Field | Value |
 |-------|-------|
 | Batch | feat-eng-20260303-060938 |
-| Iteration | 3 of 3 (synthesis complete, planning next) |
-| State | ORCHESTRATOR_SYNTHESIZING → next: ORCHESTRATOR_PLANNING (iter 3) |
+| Iteration | 3 of 3 (planning complete, worker next) |
+| State | ORCHESTRATOR_PLANNING → next: WORKER |
 | Champion | None (v0 baseline) |
 | Last Hypothesis | H7: train_months=18 + feature importance — FAILED (diminishing returns) |
-| Next Hypothesis | H8: Feature pruning (17→13 features) + revert to 14-month window |
+| Current Hypothesis | H8: Feature pruning (17→13 features) + revert to 14-month window |
 
 ## This Batch Strategy
 
 From human input: test additivity of the two positive-signal levers, then refine or pivot.
 - **Iter 1**: H6 — 14-month window + 3 interaction features → **DONE** (AUC +0.0015, 9W/3L, VCAP@100 +0.0056, 10W/2L. Not promoted.)
 - **Iter 2**: H7 — train_months=18 with 17 features + feature importance → **DONE** (Diminishing returns confirmed. AUC -0.0002 vs v0004. Feature importance collected. Not promoted.)
-- **Iter 3**: H8 — Prune bottom 4 features (17→13), revert to 14-month window. Test if noise reduction improves AP tail.
+- **Iter 3**: H8 — Prune bottom 4 features (17→13), revert to 14-month window. Test if noise reduction improves AP tail. **IN PROGRESS — direction written, awaiting worker.**
 
 ## v0005 Key Results (iter 2)
 
@@ -55,7 +55,7 @@ All gates pass. Not promoted (strictly worse than v0004 on all Group A means). F
 | feat-eng-194243 iter1 | Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | No |
 | feat-eng-060938 iter1 | Window + Interactions (v0004) | +0.0015 | 9W/3L | No |
 | feat-eng-060938 iter2 | Window 18 + importance (v0005) | -0.0002 vs v0004 | 7W/5L vs v0 | No |
-| feat-eng-060938 iter3 | Feature pruning (H8) | ? | ? | ? |
+| feat-eng-060938 iter3 | Feature pruning 17→13 (v0006) | ? | ? | ? |
 
 ## History
 
@@ -67,4 +67,5 @@ All gates pass. Not promoted (strictly worse than v0004 on all Group A means). F
 | hp-tune-20260302-144146 iter1 | Interaction features (v0002) | H4 not supported — AUC +0.000, 5W/6L |
 | feat-eng-20260302-194243 iter1 | Training window 10→14 (v0003) | H5 inconclusive — AUC +0.0013, 7W/4L/1T |
 | feat-eng-20260303-060938 iter1 | Window + Interactions (v0004) | H6 partially confirmed — AUC +0.0015, 9W/3L |
-| **feat-eng-20260303-060938 iter2** | **Window 18 + importance (v0005)** | **H7 failed — diminishing returns, AUC -0.0002 vs v0004** |
+| feat-eng-20260303-060938 iter2 | Window 18 + importance (v0005) | H7 failed — diminishing returns, AUC -0.0002 vs v0004 |
+| **feat-eng-20260303-060938 iter3** | **Feature pruning 17→13 (v0006)** | **H8 — in progress** |

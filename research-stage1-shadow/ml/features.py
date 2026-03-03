@@ -20,29 +20,36 @@ def prepare_features(
     Parameters
     ----------
     df : pl.DataFrame
-        Input DataFrame containing at least the 14 feature columns.
+        Input DataFrame containing at least the feature columns.
     config : FeatureConfig
         Feature configuration with column names.
 
     Returns
     -------
     X : np.ndarray
-        Feature matrix of shape (n_samples, 14).
+        Feature matrix of shape (n_samples, n_features).
     cols : list[str]
         List of feature column names.
     """
     cols = config.features
     print(f"[features] mem before prepare: {mem_mb():.0f} MB")
 
-    # Compute interaction features from base columns
-    df = df.with_columns([
-        (pl.col("prob_exceed_110") / (pl.col("prob_exceed_90") + 1e-6))
-            .alias("exceed_severity_ratio"),
-        (pl.col("hist_da") * pl.col("prob_exceed_100"))
-            .alias("hist_physical_interaction"),
-        (pl.col("expected_overload") * pl.col("prob_exceed_105"))
-            .alias("overload_exceedance_product"),
-    ])
+    # Compute interaction features only if requested by config
+    interaction_cols = {"exceed_severity_ratio", "hist_physical_interaction", "overload_exceedance_product"}
+    if interaction_cols & set(cols):
+        df = df.with_columns([
+            (pl.col("prob_exceed_110") / (pl.col("prob_exceed_90") + 1e-6))
+                .alias("exceed_severity_ratio"),
+            (pl.col("hist_da") * pl.col("prob_exceed_100"))
+                .alias("hist_physical_interaction"),
+            (pl.col("expected_overload") * pl.col("prob_exceed_105"))
+                .alias("overload_exceedance_product"),
+        ])
+
+    # Verify all requested columns exist
+    missing = set(cols) - set(df.columns) - interaction_cols
+    if missing:
+        raise ValueError(f"Missing feature columns in data: {missing}")
 
     X = df.select(cols).fill_null(0).to_numpy()
     return X, cols

@@ -34,16 +34,12 @@ class FeatureConfig:
             # --- Historical DA shadow price ---
             ("hist_da", 1),
             ("hist_da_trend", 1),
-            # --- Interaction features (computed in prepare_features) ---
-            ("exceed_severity_ratio", 1),
-            ("hist_physical_interaction", 1),
-            ("overload_exceedance_product", 1),
         ]
     )
 
     @property
     def features(self) -> list[str]:
-        """Return list of feature names (14 items)."""
+        """Return list of feature names."""
         return [f[0] for f in self.step1_features]
 
     def get_monotone_constraints_str(self) -> str:
@@ -92,7 +88,7 @@ class PipelineConfig:
     class_type: str = "onpeak"
     period_type: str = "f0"
     version_id: str | None = None
-    train_months: int = 10
+    train_months: int = 14
     val_months: int = 2
     threshold_beta: float = 0.7
     threshold_scaling_factor: float = 1.0

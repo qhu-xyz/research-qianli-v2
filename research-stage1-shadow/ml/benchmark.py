@@ -33,6 +33,8 @@ def _eval_single_month(
     hyperparam_config: HyperparamConfig,
     feature_config: FeatureConfig,
     threshold_beta: float = 0.7,
+    train_months: int = 14,
+    val_months: int = 2,
 ) -> dict | None:
     """Train + evaluate on a single auction month. Returns metrics dict or None if skipped."""
     print(f"[benchmark] Evaluating {auction_month} (ptype={ptype}), mem: {mem_mb():.0f} MB")
@@ -42,6 +44,8 @@ def _eval_single_month(
         class_type=class_type,
         period_type=ptype,
         threshold_beta=threshold_beta,
+        train_months=train_months,
+        val_months=val_months,
     )
 
     # Load data (train + val)
@@ -90,6 +94,8 @@ def run_benchmark(
     hyperparam_config: HyperparamConfig | None = None,
     feature_config: FeatureConfig | None = None,
     threshold_beta: float = 0.7,
+    train_months: int = 14,
+    val_months: int = 2,
     overrides: dict | None = None,
 ) -> dict:
     """Run benchmark across multiple evaluation months.
@@ -127,9 +133,11 @@ def run_benchmark(
 
     if overrides:
         from ml.pipeline import _apply_overrides
-        pc_dummy = PipelineConfig(threshold_beta=threshold_beta)
+        pc_dummy = PipelineConfig(threshold_beta=threshold_beta, train_months=train_months, val_months=val_months)
         hyperparam_config, pc_dummy = _apply_overrides(hyperparam_config, pc_dummy, overrides)
         threshold_beta = pc_dummy.threshold_beta
+        train_months = pc_dummy.train_months
+        val_months = pc_dummy.val_months
 
     smoke = os.environ.get("SMOKE_TEST", "false").lower() == "true"
 
@@ -153,7 +161,8 @@ def run_benchmark(
     skipped = []
     for month in eval_months:
         metrics = _eval_single_month(
-            month, class_type, ptype, hyperparam_config, feature_config, threshold_beta
+            month, class_type, ptype, hyperparam_config, feature_config,
+            threshold_beta, train_months, val_months
         )
         if metrics is None:
             skipped.append(month)
@@ -175,8 +184,8 @@ def run_benchmark(
             "eval_months": eval_months,
             "class_type": class_type,
             "ptype": ptype,
-            "train_months": 10,
-            "val_months": 2,
+            "train_months": train_months,
+            "val_months": val_months,
             "threshold_beta": threshold_beta,
         },
         "per_month": per_month,

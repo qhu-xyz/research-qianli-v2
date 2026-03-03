@@ -1,23 +1,23 @@
 from ml.config import FeatureConfig, HyperparamConfig, PipelineConfig, GateConfig
 
 
-def test_feature_config_has_17_features():
+def test_feature_config_has_14_features():
     fc = FeatureConfig()
-    assert len(fc.features) == 17
+    assert len(fc.features) == 14
 
 
 def test_monotone_constraints_length():
     fc = FeatureConfig()
     mc = fc.get_monotone_constraints_str()
-    # String format: "(1,1,1,1,1,...)" -- count commas + 1 == 17
+    # String format: "(1,1,1,1,1,...)" -- count commas + 1 == 14
     values = mc.strip("()").split(",")
-    assert len(values) == 17
+    assert len(values) == 14
 
 
 def test_monotone_constraints_values():
     fc = FeatureConfig()
     mc = fc.get_monotone_constraints_str()
-    assert mc == "(1,1,1,1,1,-1,-1,-1,1,0,0,0,1,1,1,1,1)"
+    assert mc == "(1,1,1,1,1,-1,-1,-1,1,0,0,0,1,1)"
 
 
 def test_feature_names_match_expected():
@@ -37,9 +37,6 @@ def test_feature_names_match_expected():
         "density_cv",
         "hist_da",
         "hist_da_trend",
-        "exceed_severity_ratio",
-        "hist_physical_interaction",
-        "overload_exceedance_product",
     ]
     assert fc.features == expected
 
@@ -68,7 +65,7 @@ def test_hyperparam_to_dict():
 def test_pipeline_config_defaults():
     pc = PipelineConfig()
     assert pc.threshold_beta == 0.7
-    assert pc.train_months == 10
+    assert pc.train_months == 14
     assert pc.val_months == 2
     assert pc.class_type == "onpeak"
     assert pc.period_type == "f0"

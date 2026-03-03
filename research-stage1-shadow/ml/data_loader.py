@@ -21,7 +21,7 @@ def mem_mb():
 def load_data(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Load train and validation DataFrames.
 
-    Returns (train_df, val_df) as polars DataFrames with 14 feature columns
+    Returns (train_df, val_df) as polars DataFrames with feature columns
     plus actual_shadow_price, constraint_id, and auction_month.
     """
     smoke = os.environ.get("SMOKE_TEST", "false").lower() == "true"

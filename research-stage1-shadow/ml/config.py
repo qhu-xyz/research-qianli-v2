@@ -27,15 +27,10 @@ class FeatureConfig:
             ("prob_below_90", -1),
             # --- Severity signal ---
             ("expected_overload", 1),
-            # --- Distribution shape (unconstrained) ---
-            ("density_skewness", 0),
-            ("density_kurtosis", 0),
-            ("density_cv", 0),
             # --- Historical DA shadow price ---
             ("hist_da", 1),
             ("hist_da_trend", 1),
-            # --- Interaction features ---
-            ("exceed_severity_ratio", 1),
+            # --- Interaction features (retained: top 2 of 3) ---
             ("hist_physical_interaction", 1),
             ("overload_exceedance_product", 1),
         ]
@@ -92,7 +87,7 @@ class PipelineConfig:
     class_type: str = "onpeak"
     period_type: str = "f0"
     version_id: str | None = None
-    train_months: int = 18
+    train_months: int = 14
     val_months: int = 2
     threshold_beta: float = 0.7
     threshold_scaling_factor: float = 1.0

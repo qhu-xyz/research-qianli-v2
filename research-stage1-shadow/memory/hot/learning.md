@@ -96,12 +96,12 @@
 - 0.1503 → 0.1395 (-0.0108), reversing 6-experiment narrowing trend
 - Topology features improve both discrimination AND calibration — a rare combination
 
-### NDCG Is the New Constraint
-- Mean unchanged (0.7333 → 0.7333), 5W/7L
-- Bot2 regressed -0.0154 (margin to L3 tolerance: only 0.0046)
-- Losses concentrated in late-2022 months (2022-03 through 2022-12)
-- Shift factors help separate binders from non-binders but may add noise to relative ordering among binders
-- **NDCG must be the priority target for iter 2**
+### NDCG Was the Constraint — Now Addressed by v0008
+- v0007: Mean 0.7333, 5W/7L, bot2 margin only 0.0046
+- v0008: Mean 0.7346 (+0.0013), 8W/4L, bot2 margin expanded to **0.0301**
+- Near-boundary band features (prob_band_95_100, prob_band_100_105) discriminate binding intensity → NDCG-targeted approach worked
+- Spring transition months (2021-04, 2022-03) remain structurally weak but improved
+- **VCAP@100 is now the closest L3 risk** (margin +0.0167, 4W/8L)
 
 ### CAP@100/500 Degraded
 - CAP@100: 0.7825 → 0.7342 (-0.0483), headroom 0.002 from Group B floor
@@ -109,7 +109,34 @@
 - Higher threshold (0.851 vs 0.834) reduces predicted positive count, hurting CAP
 - Model profile shifted from threshold-dependent capture to ranking quality — an acceptable trade for business objective
 
-### Cumulative Evidence (7 experiments)
+## From v0008 — Distribution Shape + Near-Boundary Band + Seasonal Historical Features (NEW CHAMPION)
+
+### NDCG-Targeted Feature Design Works
+- 7 new features chosen specifically to improve ranking quality (NDCG bot2)
+- NDCG bot2: 0.6562 → 0.6663 (+0.0101) — lifted both worst months simultaneously
+- prob_band_95_100 (#5 importance, 3.82%) — near-binding mass is a powerful NDCG discriminator
+- Bot2 improvement NOT driven by mean — it's driven by lifting the tails
+
+### Additive Feature Engineering: Diminishing Returns
+- v0007: 6 features, 4.66% importance → AUC +0.0137 (12W/0L)
+- v0008: 7 features, 10.3% importance → AUC +0.0013 (8W/4L)
+- **Higher feature importance does NOT mean proportionally higher metric lift**
+- Each marginal feature category adds less new information
+- Future gains likely require: (a) interactions between existing features, (b) regularization tuning, (c) fundamentally new signal sources
+
+### VCAP@100 Dilution Risk from Feature Expansion
+- VCAP@100: 4W/8L vs champion, bot2 -0.0033
+- More features → importance spread → weaker concentration at the very top of rankings
+- colsample_bytree=0.8 with 26 features means only ~21 features per tree — critical features for top-100 ranking may be randomly excluded
+- **Consider colsample_bytree increase for feature-rich models**
+
+### Spring Transition Months Are Structurally Harder
+- 2021-04 (NDCG 0.651) and 2022-03 (NDCG 0.682) consistently worst across all versions
+- These are spring transition periods — heating/cooling load profile shifts
+- v0008 improved 2022-03 by +0.018 but 2021-04 only by +0.003
+- May need season-specific features or temporal conditioning
+
+### Cumulative Evidence (8 experiments)
 
 | Lever | AUC Δ vs v0 | AUC W/L | Promoted |
 |-------|-------------|---------|----------|
@@ -120,3 +147,4 @@
 | Window 14→18 (v0005) | +0.0013 | 7W/5L | No |
 | Feature pruning (v0006) | +0.0006 | 5W/7L | No |
 | **SF + metadata (v0007)** | **+0.0137** | **12W/0L** | **YES** |
+| **Distrib + band (v0008)** | **+0.0150** | **8W/4L** | **YES** |

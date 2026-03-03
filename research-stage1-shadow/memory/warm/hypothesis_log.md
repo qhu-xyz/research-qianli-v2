@@ -3,6 +3,24 @@
 > Previous hypotheses (H1-H8) archived in memory/archive/feat-eng-20260303-060938/
 > See memory/hot/learning.md for distilled learnings from 6 real-data experiments.
 
+## H10: Distribution Shape + Near-Boundary Band + Seasonal Historical Features — CONFIRMED
+
+**Hypothesis**: Adding 7 features from distribution shape, near-boundary bands, and seasonal historical signal will improve NDCG ranking quality while maintaining AUC/AP gains.
+
+**Result**: **CONFIRMED.** NDCG bot2 +0.0101 (margin 0.0046→0.0301). AUC +0.0013, AP +0.0027, BRIER -0.0012, Precision +0.007.
+
+**Key Numbers**:
+- AUC: 0.8498 (+0.0013, 8W/4L), AP: 0.4418 (+0.0027, 9W/3L)
+- NDCG: 0.7346 (+0.0013, 8W/4L); bot2: 0.6663 (+0.0101)
+- VCAP@100: 0.0240 (-0.0007, 4W/8L); bot2: 0.0061 (-0.0033)
+- Feature importance: 10.3% combined (prob_band_95_100 #5 at 3.82%, hist_da_max_season #7 at 2.60%)
+
+**What worked**: Near-boundary bands directly improved NDCG by discriminating binding intensity. Bot2 lifted in both worst months simultaneously. prob_band_95_100 became #5 feature overall. Precision improved without recall sacrifice.
+
+**What didn't work**: VCAP@100 regressed (4W/8L) — feature dilution at top-100. Improvement magnitudes modest vs v0007 — diminishing returns from additive feature engineering. 2021-04 remains structurally worst NDCG month (0.651).
+
+**Implication**: NDCG-targeted features work. Additive feature engineering reaching diminishing returns. Future gains require derived interactions or regularization tuning. VCAP@100 dilution needs investigation.
+
 ## H9: Shift Factor + Constraint Metadata Features — STRONGLY CONFIRMED
 
 **Hypothesis**: Adding 6 new features from entirely new signal categories (network topology via shift factors + constraint structural metadata) will break the AUC ceiling at ~0.836 because the model is feature-starved, not complexity-starved.

@@ -170,7 +170,33 @@
 - v0008 improved 2022-03 by +0.018 but 2021-04 only by +0.003
 - May need season-specific features or temporal conditioning
 
-### Cumulative Evidence (9 experiments)
+## From v0010 — More Trees + Slower Learning Rate (NULL — NOT PROMOTED)
+
+### Tree Count / Learning Rate Are NOT the Binding Constraint
+- 300 trees with lr=0.07 vs 200 trees with lr=0.1 → noise (all W/L near 50/50, max delta 0.0021)
+- Total gradient magnitude similar (21 vs 20) — model capacity is NOT the bottleneck
+- **The performance frontier is bounded by feature information content, not model complexity**
+- This definitively closes the hyperparameter search space for the current feature set
+
+### Performance Redistribution, Not Improvement
+- 4 months improved uniformly, 4 degraded uniformly, 4 mixed — textbook noise signature
+- 2022-12 (persistent weakest) regressed slightly across all 4 Group A metrics — more trees overfitted to patterns that don't generalize to this distribution-shift month
+- 2022-03 NDCG +0.0083 was the single largest positive delta — isolated improvement, not systematic
+
+### Optimization Frontier Confirmed (10 experiments)
+- **AUC**: ~0.849-0.850 (stable since v0007, 4 experiments flat)
+- **AP**: ~0.440-0.445 (peaked at v0009, not improvable via HP)
+- **NDCG**: ~0.735-0.736 (stable since v0007, insensitive to HP or feature changes)
+- **BRIER**: ~0.137-0.138 (best ever, marginal improvement possible but bottoming out)
+- **Precision**: ~0.50 (business objective maintained across all experiments)
+
+### What Would Break the Ceiling
+1. **Temporal features** — late-2022 weakness suggests distribution shift; time-aware features needed
+2. **Multi-stage pipeline** — use Stage 1 probabilities as Stage 2 input with portfolio-level info
+3. **Alternative loss functions** — ranking-specific loss (pairwise, lambda) for NDCG without AUC sacrifice
+4. **New data sources** — fundamentally new signal, not derived features from existing columns
+
+### Cumulative Evidence (10 experiments)
 
 | Lever | AUC Δ vs v0 | AUC W/L | Promoted |
 |-------|-------------|---------|----------|
@@ -183,3 +209,4 @@
 | **SF + metadata (v0007)** | **+0.0137** | **12W/0L** | **YES** |
 | **Distrib + band (v0008)** | **+0.0150** | **8W/4L** | **YES** |
 | **Interactions + colsample (v0009)** | **+0.0147** | **4W/8L** | **YES** |
+| More trees + slower LR (v0010) | +0.0148 | 6W/5L/1T | No (null vs v0009) |

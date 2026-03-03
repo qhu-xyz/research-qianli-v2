@@ -1,51 +1,54 @@
-# Critique Summary — Iteration 2 (feat-eng-3-20260303-104101, v0009)
+# Critique Summary — Iteration 3 (feat-eng-3-20260303-104101, v0010) — FINAL
 
 ## Reviewer Agreement (high confidence)
-1. **Promote v0009** — unanimous; all Group A gates pass all 3 layers; VCAP@100 recovery achieved (primary target)
-2. **AP at new pipeline high** — 0.4445 (9W/3L); both note this is approaching statistical significance
-3. **Feature importance validates signal** — 17.13% combined from 3 interactions; hist_seasonal_band (#2 at 11.75%) is exceptional
-4. **Code changes are clean** — both confirm correctness of interaction formulas, monotone constraints, smoke data, test updates
-5. **CAP@100/500 Group B failures persist** — both reaffirm this is a floor calibration issue (3 consecutive versions failing)
-6. **AUC flat within noise** — both correctly identify 4W/8L as noise (all monthly deltas ≤ ±0.003)
-7. **colsample_bytree 0.9 validated** — no overfitting signal; BRIER continued to improve
+1. **Do NOT promote v0010** — unanimous; confirmed null result; all metrics within noise of champion v0009
+2. **v0009 remains champion** — both explicitly recommend keeping v0009's configuration (29 features, n_estimators=200, lr=0.1, colsample_bytree=0.9)
+3. **Model capacity ceiling confirmed** — 10 experiments have converged; performance bounded by feature information, not tree capacity
+4. **All Group A gates pass all 3 layers** — technically promotable, but no evidence of improvement
+5. **Code changes are minimal and correct** — 2 HP values + 2 test assertions, no logic changes
+6. **CAP@100/500 Group B failures persist** — 4th consecutive version; structural model profile shift
+7. **Pipeline ready for HUMAN_SYNC** — feature engineering and HP tuning exhausted
 
 ## Claude-Specific Insights
-- Detailed seasonal analysis of VCAP@100 gains: concentrated in spring/summer months (2021-08 +0.0239, 2022-09 +0.0060, 2021-06 +0.0049) where hist_seasonal_band adds most signal
-- Early-period months (2020-09, 2020-11, 2021-01) show small VCAP@100 regressions — shorter history reduces interaction signal
-- NDCG improvements in structurally weak months (2021-08 +0.0125, 2021-10 +0.0113, 2021-06 +0.0064)
-- Recommends: n_estimators 300, learning_rate 0.07 for iter 3. Do NOT add more interactions (saturation). colsample_bytree 0.9 is optimal.
-- Gate calibration: tighten VCAP@100 floor to 0.0; relax CAP@100/500 by 0.03 (reaffirming iter 1)
-- Calculated new L3 floors if v0009 promoted: AUC ≥ 0.7989, AP ≥ 0.3512, VCAP@100 ≥ -0.0111, NDCG ≥ 0.6448
+- Detailed per-month redistribution analysis: 4 months improved on all metrics, 4 degraded on all, 4 mixed = noise signature
+- 2022-12 persistent weakest month — regressed across all 4 Group A metrics (deltas all < 0.004 but uniformly negative)
+- 2022-03 NDCG +0.0083 — largest single positive signal; finer splits helped this spring transition month
+- Feature importance redistribution: interactions 17.13%→15.8% is mechanical (more splitting opportunities), not information loss
+- Recommendations for next batch: temporal features, multi-stage pipeline, alternative ranking-specific loss
+- Gate calibration: tighten VCAP@100 to 0.0; relax CAP@100/500 by 0.03; consider noise_tolerance 0.015
 
 ## Codex-Specific Insights
-- Notes VCAP@100 mean gain partially concentrated in 2021-08 (+0.0239); without it, net gain smaller — but bot2 improvement is the more meaningful signal
-- Code findings:
-  - (MEDIUM) Temporal leakage fallback in data_loader.py — row-proportion split when auction_month missing
-  - (MEDIUM) Interaction computation all-or-nothing — computes all interactions even if only some are in config
-  - (LOW) New interaction feature tests validate presence/count but not formula correctness
-- Gate calibration: keep Group A floors unchanged; tighten VCAP@100 to 0.0; relax CAP@100/500 by 0.02-0.03; keep noise_tolerance 0.02
-- Notes noise_tolerance 0.02 is generous relative to observed bot2 deltas (~0.001-0.003)
+- Code findings (new in iter 3):
+  - (HIGH) `check_gates_multi_month` does not enforce full primary-month coverage — a version can skip hard months and pass
+  - (MEDIUM) Benchmark ignores `threshold_scaling_factor` — threshold-dependent metrics not reproducible between pipeline and benchmark
+  - (MEDIUM) Threshold tuned and evaluated on same validation split — optimistic bias for Group B
+  - (LOW) Feature prep uses `.fill_null(0)` but not NaN-aware — potential silent propagation
+- Gate calibration: keep Group A floors unchanged; tighten VCAP@100 to 0.0; relax CAP@100/500; consider noise_tolerance 0.015
 
 ## Synthesis Assessment
-- **Core agreement**: Identical on promotion, risk identification, and iter 3 direction
-- **Complementary strengths**: Claude provides deeper seasonal/trend analysis; Codex provides precise gate math and code-level findings
-- **No material disagreement**: Both recommend promotion; both recommend same iter 3 direction (more trees, lower LR)
-- **Mild divergence on gate calibration**: Claude recommends tightening Group A headroom language; Codex says keep unchanged. Difference is cosmetic — both pass comfortably.
+- **Core agreement**: Identical on non-promotion, risk identification, and HUMAN_SYNC readiness
+- **Complementary strengths**: Claude provides deeper seasonal/trend analysis and next-batch strategy; Codex provides precise code-level findings and reproducibility concerns
+- **No material disagreement**: Both recommend same action on every dimension
+- **New code finding from Codex is significant**: Month-coverage gap could allow a version to game Group A by skipping hard months — should be priority fix at HUMAN_SYNC
 
-## Open Code Issues (cumulative)
+## Open Code Issues (cumulative — for HUMAN_SYNC)
 | Issue | Severity | Source | Status |
 |-------|----------|--------|--------|
+| Missing month-coverage enforcement in gate checks | HIGH | Codex (iter3) | NEW — priority fix |
 | Threshold-selection leakage | HIGH | Codex (smoke-v6) | Deferred to HUMAN_SYNC |
 | Threshold `>` vs `>=` mismatch | MEDIUM | Codex (smoke-v7) | Deferred to HUMAN_SYNC |
-| check_gates_multi_month None-as-pass | MEDIUM | Codex (feat-eng-3 iter1) | Deferred to HUMAN_SYNC |
-| Temporal leakage fallback (row split) | MEDIUM | Codex (feat-eng-3 iter2) | NEW — recommend hard assertion |
-| Interaction computation all-or-nothing | MEDIUM | Codex (feat-eng-3 iter2) | NEW — tech debt |
+| check_gates_multi_month None-as-pass | MEDIUM | Codex (iter1) | Deferred to HUMAN_SYNC |
+| Benchmark ignores threshold_scaling_factor | MEDIUM | Codex (iter3) | NEW |
+| Threshold tuned/evaluated on same split | MEDIUM | Codex (iter3) | NEW — statistical bias |
+| Temporal leakage fallback (row split) | MEDIUM | Codex (iter2) | Recommend hard assertion |
+| Interaction computation all-or-nothing | MEDIUM | Codex (iter2) | Tech debt |
 | Missing source features warn not fail-fast | MEDIUM | Codex (feat-eng-2 iter1) | Low priority |
 | Silent ptype fallback | MEDIUM | Codex (feat-eng-060938 iter1) | Low priority |
 | Missing schema guard for interaction base columns | MEDIUM | Codex (hp-tune-144146) | Low priority |
-| Source-feature list duplication | LOW | Codex (feat-eng-3 iter1) | Tech debt |
-| Missing formula correctness tests for interactions | LOW | Codex (feat-eng-3 iter2) | NEW — tech debt |
-| Threshold scaling unbounded | LOW | Codex (feat-eng-3 iter1) | Low priority |
+| NaN vs null handling gap | LOW | Codex (iter3) | NEW |
+| Source-feature list duplication | LOW | Codex (iter1) | Tech debt |
+| Missing formula correctness tests for interactions | LOW | Codex (iter2) | Tech debt |
+| Threshold scaling unbounded | LOW | Codex (iter1) | Low priority |
 | sf_nonzero_frac smoke data can exceed 1.0 | LOW | Codex (feat-eng-2 iter1) | Low priority |
 | Feature importance no test coverage | LOW | Codex (feat-eng-060938 iter2) | Low priority |
 | Dead config `scale_pos_weight_auto` | LOW | Codex (smoke-v6) | Deferred |

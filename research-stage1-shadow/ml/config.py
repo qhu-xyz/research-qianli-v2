@@ -76,9 +76,9 @@ class FeatureConfig:
 class HyperparamConfig:
     """XGBoost hyperparameter configuration."""
 
-    n_estimators: int = 200
+    n_estimators: int = 300
     max_depth: int = 4
-    learning_rate: float = 0.1
+    learning_rate: float = 0.07
     subsample: float = 0.8
     colsample_bytree: float = 0.9
     reg_alpha: float = 0.1

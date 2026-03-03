@@ -53,11 +53,14 @@ These DON'T exist in the source loader but can be derived from available data:
 - `sf_x_exceed` = sf_max_abs × prob_exceed_100 — network importance × binding risk interaction
 - `hist_da_x_sf` = hist_da × sf_max_abs — historical + topology interaction
 
-## Priority B: Minor Parameter Tweaks
+## Priority B: HP Tuning — LAST RESORT ONLY
 
+HP tuning should ONLY happen AFTER the best feature set is found. Not before, not during.
 - **train_months = 14 is the MAXIMUM** (human decision, non-negotiable)
-- HP tuning is a dead end (5 experiments confirm)
+- HP tuning with 14 features showed dead end. With 19+ features it MIGHT help, but only after feature search is exhausted.
 - threshold_beta stays at 0.7
+
+**Evidence**: v0007 (+0.014 AUC from 6 new features) vs v0002 (-0.003 AUC from HP tuning). Feature engineering delivers 5x+ the gains.
 
 ## Hard Constraints
 

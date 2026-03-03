@@ -1,9 +1,7 @@
 # Champion
 
-No champion promoted yet. Baseline is v0 (real data, 12 months, f0 ptype).
+**Current champion: v0007** (promoted at iter1 of batch feat-eng-2-20260303-092848)
 
-## v0 Baseline Summary (real-data benchmark)
-- **Eval months**: 12 primary (2020-09 through 2022-12)
-- **Samples**: ~260K–287K rows per month (binding rate 6.6–10.1%)
-- **Key aggregates**: AUC=0.8348, AP=0.3936, NDCG=0.7333, BRIER=0.1503
-- **Format**: v2 metrics (per_month + aggregate)
+Key metrics (mean across eval months): AUC=0.8485, AP=0.4391, NDCG=0.7333, BRIER=0.1395
+
+See `registry/v0007/metrics.json` for full per-month breakdown.

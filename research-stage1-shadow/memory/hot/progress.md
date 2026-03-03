@@ -5,26 +5,33 @@
 | Field | Value |
 |-------|-------|
 | Batch | feat-eng-2-20260303-092848 |
-| Iteration | 1 of 3 |
-| State | ORCHESTRATOR_PLANNING → WORKER next |
-| Champion | None (v0 baseline) |
-| Best Version | v0004 (from prior batch, recommended for promotion at HUMAN_SYNC) |
-| Current Hypothesis | H9: Add shift factor + constraint metadata features (6 new features, 19 total) |
+| Iteration | 1 of 3 (synthesis complete, iter 2 next) |
+| State | ORCHESTRATOR_SYNTHESIZING → iter 2 planning next |
+| Champion | **v0007** (PROMOTED — first champion) |
+| Current Hypothesis | H9 strongly confirmed → H10 (NDCG recovery + feature expansion) |
+
+## v0007 Champion Summary
+
+| Metric | v0007 | v0 | Delta |
+|--------|-------|-----|-------|
+| S1-AUC | **0.8485** | 0.8348 | +0.0137 (12W/0L) |
+| S1-AP | **0.4391** | 0.3936 | +0.0455 (11W/1L) |
+| S1-VCAP@100 | 0.0247 | 0.0149 | +0.0098 (9W/3L) |
+| S1-NDCG | 0.7333 | 0.7333 | +0.0000 (5W/7L) |
+| S1-BRIER | **0.1395** | 0.1503 | -0.0108 |
+
+**Bot2 (v0007 as champion baseline for L3)**:
+- AUC: 0.8188, AP: 0.3685, VCAP@100: 0.0094, NDCG: 0.6562
+- NDCG bot2 margin to L3 fail: **0.0046** — tightest constraint
 
 ## This Batch Strategy
 
 **Human directive**: Aggressive feature engineering. The ~0.836 AUC ceiling is a feature ceiling. Source loader has 15+ unused features. Priority is adding many new features, not tweaking parameters. train_months=14 is HARD MAX.
 
 ### Planned Iterations
-- **Iter 1**: H9 — Add 6 shift factor + constraint metadata features (sf_max_abs, sf_mean_abs, sf_std, sf_nonzero_frac, is_interface, constraint_limit). Completely new signal class (network topology + structural).
-- **Iter 2**: Depends on iter 1 results. If promising → add distribution + band features. If marginal → kitchen sink. If failed → pivot approach.
-- **Iter 3**: Depends on iter 1+2 results.
-
-## Prior Batch Results (feat-eng-20260303-060938)
-
-- **Iter 1**: H6 — 14-month window + 3 interaction features → v0004. AUC +0.0015 (9W/3L), VCAP@100 +0.0056 (10W/2L, **p=0.039**). Best balanced version.
-- **Iter 2**: H7 — 18-month window + feature importance → v0005. Diminishing returns confirmed.
-- **Iter 3**: H8 — Prune to 13 features + revert to 14mo → v0006. NDCG +0.0227 and VCAP@100 +0.0121 (both p=0.039), but AP -0.0044 (3W/9L). Tradeoff discovery.
+- **Iter 1**: H9 — Add 6 shift factor + constraint metadata features. **DONE — PROMOTED v0007.**
+- **Iter 2**: H10 — NDCG recovery via distribution shape features + monotone constraint tuning on v0007 base. Target: maintain AUC/AP gains, recover NDCG.
+- **Iter 3**: Depends on iter 2 results.
 
 ## Cumulative Evidence (all real-data experiments)
 
@@ -36,6 +43,7 @@
 | feat-eng-060938 iter1 | Window + Interactions (v0004) | +0.0015 | 9W/3L | No |
 | feat-eng-060938 iter2 | Window 18 + importance (v0005) | +0.0013 | 7W/5L | No |
 | feat-eng-060938 iter3 | Feature pruning 17-13 (v0006) | +0.0006 | 5W/7L | No |
+| **feat-eng-2-092848 iter1** | **SF + metadata (v0007)** | **+0.0137** | **12W/0L** | **YES** |
 
 ## History
 
@@ -49,4 +57,4 @@
 | feat-eng-060938 iter1 | Window + Interactions (v0004) | H6 partially confirmed |
 | feat-eng-060938 iter2 | Window 18 + importance (v0005) | H7 failed |
 | feat-eng-060938 iter3 | Feature pruning 17-13 (v0006) | H8 tradeoff discovery |
-| **feat-eng-2-092848 iter1** | **SF + metadata features (v0006)** | **H9 — in progress** |
+| **feat-eng-2-092848 iter1** | **SF + metadata features (v0007)** | **H9 STRONGLY CONFIRMED — PROMOTED** |

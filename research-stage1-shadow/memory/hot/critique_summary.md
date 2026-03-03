@@ -1,46 +1,46 @@
-# Critique Summary — Iteration 3 (feat-eng-20260303-060938, v0006)
+# Critique Summary — Iteration 1 (feat-eng-2-20260303-092848, v0007)
 
 ## Reviewer Agreement (high confidence)
-1. **Do not promote v0006** — unanimously; AP regressed below v0 baseline (first time ever), AP bot2 worst at 0.3228
-2. **v0004 remains the best version** — both reviewers independently identify v0004 as the strongest balanced candidate for HUMAN_SYNC
-3. **NDCG/VCAP improvements are real and significant** — both note the 10W/2L consistency and statistical significance (p=0.039)
-4. **AP regression is broadly distributed** — 3W/9L, not outlier-driven. This is a genuine tradeoff, not noise.
-5. **Clean code changes** — both confirm feature removal, monotone constraint update, and test updates are all correct and minimal
-6. **Full monotone constraint effect** — both identify the structural observation that removing all unconstrained features (monotone=0) is the likely driver of the ranking quality improvement
-7. **Feature set ceiling confirmed** — 6 experiments spanning 3 independent levers have exhausted within-feature-set improvements
-8. **Threshold methodology debt unchanged** — threshold leakage (HIGH), `>` vs `>=` (MEDIUM) persist. Both agree to defer to HUMAN_SYNC.
+1. **Promote v0007** — unanimously; first version to satisfy all human-input success criteria (AUC>0.840, AP>0.400, 12W/12>8/12)
+2. **AUC/AP improvements are statistically robust** — 12W/0L (p≈0.0002) and 11W/1L (p≈0.006) respectively; not outlier-driven
+3. **NDCG is the primary risk** — both flag bot2 regression -0.0154 (margin 0.0046 to L3 tolerance); 5W/7L with late-2022 concentration
+4. **Code changes are clean** — both confirm correctness of feature additions, monotone constraints, smoke data, and test updates
+5. **Activate Layer 3** — both recommend setting champion (currently null → L3 auto-pass)
+6. **Precision-first strategy unchanged** — both agree; strong AUC/AP profile is aligned with business objective
+7. **Feature importance paradox acknowledged** — 4.66% combined gain yet +0.0137 AUC; features are auxiliary discriminators with high generalization value
 
 ## Claude-Specific Insights
-- Detailed per-month W/L table with all 12 months x 4 Group A metrics
-- Sign test significance: VCAP@100 and NDCG both p=0.039 (10W/2L), AP p=0.073 (3W/9L, borderline significant regression)
-- Seasonal pattern analysis: weakest months scattered (2022-09, 2022-12, 2021-04) — structural, not seasonal
-- 2022-09 deep dive: AP=0.2987 (worst ever), hist_da_trend contributes only 38.3% of gain vs 44.2% average — trend signal weaker during structural change
-- Feature importance redistribution: hist_da doubled (11.3% to 24.1%), creating more balanced level vs trend signal
-- NDCG +0.0227 is the largest Group A mean improvement in pipeline history (5.5x larger than v0004's +0.0038)
-- BRIER headroom narrowing to 0.0163 — 6th consecutive, contradicts model simplification expectation
-- Recommends v0004 for promotion at HUMAN_SYNC; v0006's NDCG/VCAP profile as a future research direction
-- Suggests investigating LambdaRank objective and whether top-100-only operational use changes the value assessment
+- Detailed per-month tables for all Group A metrics with sign test p-values
+- AP bot2 trend reversal analysis: 6-experiment monotonic decline reversed to +0.0363 vs v0
+- BRIER trend reversal: 6-experiment narrowing ended; topology features improve calibration
+- CAP@100/500 at 0.002 and 0.004 headroom from Group B floors — model profile shifted from threshold-dependent capture to ranking quality
+- NDCG decomposition: losses concentrated in 2022-03 (-0.031), 2022-06 (-0.017), 2022-09 (-0.017), 2022-12 (-0.018); gains in 2020-09 (+0.032), 2021-06 (+0.039), 2021-10 (+0.036)
+- Recommends: NDCG-targeted monotone constraint sensitivity analysis + distribution shape features + HP tuning on 19-feature base
+- Suggests relaxing CAP@100/500 floors by 0.02 if v0007 promoted
 
 ## Codex-Specific Insights
-- Three-layer gate detail with exact margins: Layer 3 closest to fail is AP (margin 0.0106, within tolerance but narrowing)
-- Champion is null — Layer 3 non-regression effectively disabled. Recommends setting champion immediately (operational change)
-- Noise tolerance 0.02 is loose relative to observed shifts (~0.01 for AUC/AP/NDCG). Recommends metric-specific tolerances: AUC ~0.01, AP ~0.015, NDCG ~0.01, VCAP@100 ~0.02
-- VCAP@100 floor (-0.035) non-binding; discuss tightening to 0.0 at HUMAN_SYNC
-- Emphasizes AP stability for weak months (2022-09 priority) as the key constraint on promotion
-- Recommends fixing threshold methodology debt before interpreting Group B trend lines
+- Code findings: (a) MEDIUM — missing source features warned not failed fast in data_loader.py, (b) LOW — sf_nonzero_frac smoke data can exceed 1.0, (c) LOW — missing source feature ValueError not unit-tested
+- Precise gate margin calculations for all 10 gates across 3 layers
+- Layer 3 effectively disabled when champion=null — operational gap
+- Noise tolerance 0.02 is loose for AUC but just adequate for NDCG
+- VCAP@100 floor (-0.035) remains non-binding; recommends tightening to 0.0
+- Recommends fixing threshold methodology debt before interpreting Group B trends
 
 ## Synthesis Assessment
-- **Core agreement**: Identical on promotion decision, best version identification, and ceiling diagnosis
-- **Complementary strengths**: Claude provides deeper statistical analysis and feature importance interpretation; Codex provides precise gate margin calculations and operational recommendations (champion activation)
-- **The v0006 finding**: Both agree this is the most experimentally informative iteration — the AP/NDCG tradeoff from monotone constraint structure is a novel, actionable insight
+- **Core agreement**: Identical on promotion decision, risk identification (NDCG), and strategic direction
+- **Complementary strengths**: Claude provides deeper statistical/trend analysis; Codex provides precise gate math and code-level findings
+- **No material disagreement**: Both recommend promotion; both flag NDCG as primary future risk
 
-## Open Code Issues (cumulative, unchanged)
+## Open Code Issues (cumulative)
 | Issue | Severity | Source | Status |
 |-------|----------|--------|--------|
 | Threshold-selection leakage | HIGH | Codex (smoke-v6) | Deferred to HUMAN_SYNC |
 | Threshold `>` vs `>=` mismatch | MEDIUM | Codex (smoke-v7) | Deferred to HUMAN_SYNC |
+| Missing source features warn not fail-fast | MEDIUM | Codex (feat-eng-2 iter1) | Low priority |
 | Silent ptype fallback | MEDIUM | Codex (feat-eng-060938 iter1) | Low priority |
 | Missing schema guard for interaction base columns | MEDIUM | Codex (hp-tune-144146) | Low priority |
 | Layer 3 disabled when champion=null | MEDIUM | Codex (hp-tune-134412) | Recommend fixing at HUMAN_SYNC |
+| sf_nonzero_frac smoke data can exceed 1.0 | LOW | Codex (feat-eng-2 iter1) | Low priority |
+| Missing source feature ValueError not tested | LOW | Codex (feat-eng-2 iter1) | Low priority |
 | Feature importance no test coverage | LOW | Codex (feat-eng-060938 iter2) | Low priority |
 | Dead config `scale_pos_weight_auto` | LOW | Codex (smoke-v6) | Deferred |

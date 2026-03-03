@@ -67,17 +67,14 @@ Add new computations to the `with_columns` block:
 
 #### 4. `ml/data_loader.py` — `_load_smoke()` synthetic data
 
-Add synthetic generators for the 3 new interaction features:
+Follow the same pattern as existing interactions (`hist_physical_interaction`, `overload_exceedance_product`): add them to smoke data directly for consistency, even though `features.py` will also compute them (the `features.py` computation will overwrite).
+
 ```python
-# Derived interaction features (for smoke tests only — computed in features.py for real data)
+# Derived interaction features (v0009 — computed from existing synthetic columns)
 data["band_severity"] = (np.array(data["prob_band_95_100"]) * np.array(data["expected_overload"])).tolist()
 data["sf_exceed_interaction"] = (np.array(data["sf_max_abs"]) * np.array(data["prob_exceed_100"])).tolist()
 data["hist_seasonal_band"] = (np.array(data["hist_da_max_season"]) * np.array(data["prob_band_100_105"])).tolist()
 ```
-
-**Actually, these should NOT be added to the smoke data** — they're computed by `features.py` from the component columns, which already exist in smoke data. The `interaction_cols` check in `features.py` will compute them automatically. Only add to `_load_smoke()` if the test expects them as pre-existing columns (check whether the smoke tests go through `features.py`).
-
-**Clarification**: The existing interactions (hist_physical_interaction, overload_exceedance_product) are generated in smoke data directly AND computed in features.py. Follow the same pattern for consistency — add them to smoke data directly even though features.py will also compute them (the features.py computation will overwrite).
 
 #### 5. `ml/tests/test_config.py` — update expected feature counts and lists
 

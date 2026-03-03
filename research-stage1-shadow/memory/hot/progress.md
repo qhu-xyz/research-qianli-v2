@@ -5,12 +5,13 @@
 | Field | Value |
 |-------|-------|
 | Batch | feat-eng-3-20260303-104101 |
-| Iteration | 1 of 3 (synthesis complete, iter 2 planning next) |
-| State | ORCHESTRATOR_SYNTHESIZING → iter 2 |
+| Iteration | 2 of 3 (planning complete, worker next) |
+| State | ORCHESTRATOR_PLANNING → WORKER |
 | Champion | **v0008** (26 features, AUC=0.8498, AP=0.4418, NDCG=0.7346) |
 | Previous Champion | v0007 (19 features, AUC=0.8485, AP=0.4391) |
 | Iter 1 Result | **PROMOTED** — H10 confirmed, NDCG bot2 +0.0101 |
-| Next Hypothesis | H11: Derived interactions + colsample_bytree=0.9 |
+| Iter 2 Hypothesis | H11: 3 derived interactions (band_severity, sf_exceed_interaction, hist_seasonal_band) + colsample_bytree 0.8→0.9 |
+| Iter 2 Target | VCAP@100 recovery (4W/8L → ≥6W/6L), maintain NDCG/AUC/AP |
 
 ## v0008 Champion Summary
 
@@ -34,7 +35,7 @@
 
 ### Iteration Results
 - **Iter 1**: H10 — Added 7 features (density_mean, density_variance, density_entropy, tail_concentration, prob_band_95_100, prob_band_100_105, hist_da_max_season). **PROMOTED as v0008.** NDCG bot2 +0.0101, precision +0.007.
-- **Iter 2**: H11 — Derived interactions targeting VCAP@100 + colsample_bytree=0.9. **NEXT.**
+- **Iter 2**: H11 — 3 derived interactions (band_severity, sf_exceed_interaction, hist_seasonal_band) + colsample_bytree=0.9. **IN PROGRESS — direction written.**
 - **Iter 3**: TBD based on iter 2 results. Final optimization + HUMAN_SYNC preparation.
 
 ## Cumulative Evidence (all real-data experiments)

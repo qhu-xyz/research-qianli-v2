@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | Batch | feat-eng-3-20260303-104101 |
-| Iteration | 2 of 3 (synthesis complete, iter 3 next) |
-| State | ORCHESTRATOR_SYNTHESIZING → ORCHESTRATOR_PLANNING (iter 3) |
+| Iteration | 3 of 3 (planning complete, worker next) |
+| State | ORCHESTRATOR_PLANNING → WORKER (iter 3) |
 | Champion | **v0009** (29 features, AUC=0.8495, AP=0.4445, NDCG=0.7359, VCAP@100=0.0266) |
 | Previous Champion | v0008 (26 features, AUC=0.8498, AP=0.4418, NDCG=0.7346) |
 | Iter 1 Result | **PROMOTED v0008** — H10 confirmed, NDCG bot2 +0.0101 |

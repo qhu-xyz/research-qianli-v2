@@ -42,11 +42,12 @@ Update any assertions that check n_estimators (200→300) and learning_rate (0.1
 1. **After config change**: Run smoke tests (`SMOKE_TEST=true python -m pytest ml/tests/ -v`)
 2. **After real data run**: Verify 29 features in model (unchanged from v0009)
 3. **Critical checks**:
-   - BRIER should not degrade (currently 0.1376). If BRIER worsens > 0.001, the extra trees may be overfitting.
+   - BRIER must NOT degrade significantly. If BRIER mean > 0.140 (vs current 0.1376), flag overfitting in handoff.
    - AUC should maintain or improve (currently 0.8495).
    - NDCG bot2 ≥ 0.6448 (L3 floor with v0009 as champion). Target: maintain or improve.
    - All other Group A L3 floors: AUC ≥ 0.7989, AP ≥ 0.3512, VCAP@100 ≥ -0.0111.
 4. **Training time**: Expect ~50% longer training (300 vs 200 trees). This is acceptable for the final iteration.
+5. **Per-month weaknesses to watch** (v0009): 2022-12 (AUC=0.818, worst), 2022-09 (AP=0.348, worst), 2021-04 (NDCG=0.653, structurally resistant), 2022-03 (NDCG=0.677, 2nd worst). Improvements here would be the strongest signal that more trees help generalization.
 
 ## Expected Impact
 

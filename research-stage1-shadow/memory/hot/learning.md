@@ -158,6 +158,7 @@
 | Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | Small signal, best single lever |
 | **Combined (v0004)** | **+0.0015** | **9W/3L** | **Partially additive; VCAP@100 super-additive** |
 | Window 14→18 (v0005) | -0.0002 | 7W/5L (vs v0) | **Exhausted — zero marginal benefit** |
+| **Feature pruning (v0006)** | **+0.0006** | **5W/7L** | **Tradeoff: NDCG +0.023, AP -0.004. Not promotable.** |
 
 ### Statistical Testing
 - Month-level win/loss counts more informative than mean deltas at n=12
@@ -166,7 +167,41 @@
 - Always check for outlier-driven means: exclude best month and recalculate
 - Sign test is more appropriate than z-test for W/L data — doesn't assume normality
 
-### Levers Exhausted vs Available
-- **Exhausted**: HP tuning, window expansion (beyond 14 months), interaction features (within current data columns)
-- **Available (iter 3)**: Feature pruning (remove near-zero contributors to reduce noise), feature ratios (new derived features)
-- **Available (future batches)**: New data sources, time-series features, regime detection, alternative models
+## From v0006 — Feature Pruning 17→13 (feat-eng-060938 iter3, real data)
+
+### Monotone Constraint Structure Matters (CRITICAL — Novel Finding)
+- Removing all 3 unconstrained features (monotone=0: density_skewness, density_kurtosis, density_cv) made the model fully monotone-constrained
+- Full monotone enforcement acts as structural regularization: sharpens ranking consistency (NDCG, VCAP) but degrades positive-class breadth ranking (AP)
+- This is not noise removal — it's a fundamental change to model behavior
+- NDCG +0.0227 and VCAP@100 +0.0121 are both statistically significant (p=0.039, 10W/2L)
+- AP -0.0044 is broadly distributed (3W/9L, not outlier-driven) — a genuine tradeoff
+
+### Feature Pruning Is Not Simply Noise Removal
+- Features contributing <1% gain still serve a purpose: the unconstrained direction (monotone=0) provides implicit regularization
+- Removing them didn't reduce noise — it changed the model's optimization landscape
+- hist_da doubled from 11.3% to 24.1%, compensating for pruned features
+- The model became more balanced between level (24%) and trend (44%) of historical shadow prices
+
+### AP Bot2 Monotonic Decline Is a Systemic Risk
+- 6-experiment trend: 0.3322 → 0.3305 → 0.3277 → 0.3282 → 0.3247 → 0.3228
+- Margin to Layer 3 failure (0.02 tolerance) is only 0.0106
+- Every model modification we've tested has worsened AP in the weakest months
+- This suggests the v0 feature set happens to be well-calibrated for worst-month AP, and any change — even beneficial on average — destabilizes the tail
+
+### BRIER Does Not Simply Respond to Model Simplification
+- Expected: fewer features → simpler model → better calibration (as seen in v0003-HP)
+- Actual: v0006 BRIER worsened (+0.0037 vs v0), 6th consecutive narrowing
+- The key difference: v0003-HP simplified via regularization (deeper trees, slower learning), v0006 simplified via information loss (feature removal)
+- Regularization helps calibration; feature removal doesn't
+
+### Two Distinct Model Profiles Exist Within the Same Feature Set
+- **v0004 profile** (17 features, 14mo): AUC-optimized, balanced across all Group A metrics
+- **v0006 profile** (13 features, 14mo): NDCG/VCAP-optimized, best ranking consistency but AP degraded
+- The operational question for HUMAN_SYNC: which profile better serves the business?
+  - If acting on top-100 predictions: v0006 captures more value (VCAP@100=0.0270 vs 0.0205)
+  - If using the full positive-class prediction: v0004 ranks positives better (AP=0.3951 vs 0.3892)
+
+### Levers Exhausted vs Available (FINAL — Batch Complete)
+- **Exhausted**: HP tuning, window expansion (10-14-18), interaction features, feature pruning
+- **Available (next batch)**: New data sources (fuel prices, weather, load forecasts, outage data, transmission topology), time-series regime features, ranking-focused objectives (LambdaRank/LambdaMART), monotone constraint optimization (selective enforcement), alternative models
+- **Best configuration found**: v0004 (17 features, 14-month window, v0 HPs) for balanced improvement; v0006 (13 features, 14-month window) if top-K ranking is the only objective

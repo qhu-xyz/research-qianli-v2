@@ -95,3 +95,36 @@ Calibrated from real-data v0 benchmark (commit d167090). Gate floors set as:
 - Layer 3 still disabled (champion=null). Against v0 reference: AUC bot2 +0.0051, AP bot2 -0.0075, NDCG bot2 -0.0017, VCAP@100 bot2 +0.0010 — all within 0.02 tolerance. Closest to boundary: AP at -0.0075 (margin 0.0125 to fail).
 - **Codex reiteration**: Metric-specific Layer 3 tolerances after champion is set. With 5 iterations: observed bot2 shifts range AUC ±0.006, AP ±0.008 (increasing), NDCG ±0.006, VCAP@100 ±0.001. AP is the most volatile. A tolerance of 0.01 for AUC/NDCG, 0.015 for AP, and keeping 0.02 for VCAP@100 would be reasonable. Defer to HUMAN_SYNC.
 - **Cumulative ranges across 5 real-data experiments**: AUC mean ∈ [0.8323, 0.8363], AP ∈ [0.3921, 0.3951], NDCG ∈ [0.7323, 0.7371], VCAP@100 ∈ [0.0149, 0.0205]. Range unchanged — v0005 falls within the envelope established by prior experiments.
+
+## Iteration 3 Observations (v0006, feat-eng-20260303-060938) — FINAL ITERATION
+
+- All floors remain appropriate — v0006 passed all 3 layers with headroom on Group A means
+- **No gate calibration changes recommended** — defer to HUMAN_SYNC with full 6-experiment evidence
+- v0006 gate headroom: AUC +0.0506, AP +0.0456, VCAP@100 +0.0621, NDCG +0.0727 — NDCG headroom increased substantially
+- **BRIER headroom at 0.0163 (6th consecutive narrowing)**: v0006 BRIER=0.1540 vs floor=0.1703. Trend: v0(0.0200) → v0003-HP(0.0241) → v0002(0.0198) → v0003-win(0.0189) → v0004(0.0187) → v0005(0.0178) → **v0006(0.0163)**. Model simplification (fewer features) did NOT improve BRIER — contradicts v0003-HP observation. The difference: v0003-HP used shallower trees (regularization), v0006 removed features (information loss). At this rate, BRIER could approach the floor within 2-3 more experiments. **Flag at HUMAN_SYNC.**
+- **AP bot2 WORST EVER**: v0006 AP bot2=0.3228 vs v0's 0.3322 (Δ=-0.0094). Trend: v0002(-0.0017) → v0003-win(-0.0045) → v0004(-0.0040) → v0005(-0.0075) → **v0006(-0.0094)**. Monotonically worsening across ALL 6 experiments. Margin to Layer 3 failure (0.02 tolerance) is now only **0.0106**. At the current trajectory, the next experiment could breach Layer 3.
+- **VCAP@500 bot2 recovered**: v0006 bot2=0.0465 (vs v0004's 0.0387, vs floor 0.0408). The pruning + 14-month window maintained the VCAP@500 tail stability.
+- **NDCG bot2 IMPROVED**: v0006 bot2=0.6824 vs v0004's 0.6656. First bot2 improvement for NDCG across iterations. Feature pruning helped tail-month NDCG.
+- Layer 3 still disabled (champion=null). Against v0 reference: AUC bot2 +0.0050, AP bot2 **-0.0094** (approaching 0.02 limit), NDCG bot2 +0.0108, VCAP@100 bot2 +0.0038.
+- **VCAP@100 floor (-0.035) remains non-binding**: v0006 VCAP@100 min=0.0024, far above. Both reviewers recommend tightening to 0.0 at HUMAN_SYNC.
+
+### HUMAN_SYNC Gate Recommendations (based on 6 real-data experiments)
+1. **Activate Layer 3**: Set champion to v0 (or v0004 if promoted). Current null → L3 disabled.
+2. **Metric-specific L3 tolerances**: Based on observed bot2 shift ranges:
+   - AUC: tolerance ~0.01 (observed shifts: +0.000 to +0.006)
+   - AP: tolerance ~0.015 (observed shifts: -0.009 to +0.000 — most volatile, always negative)
+   - NDCG: tolerance ~0.01 (observed shifts: -0.006 to +0.011)
+   - VCAP@100: keep 0.02 (observed shifts: -0.001 to +0.004)
+3. **VCAP@100 floor**: Tighten from -0.035 to 0.0 (make it informative)
+4. **BRIER headroom**: Monitor — 0.0163 is concerning if trend continues. Do NOT tighten floor yet.
+5. **Group A mean floors**: No changes needed — all 6 experiments pass with 0.04-0.07 headroom.
+
+### Cumulative ranges across 6 real-data experiments
+| Metric | Min Mean | Max Mean | Range | v0006 |
+|--------|----------|----------|-------|-------|
+| AUC | 0.8323 | 0.8363 | 0.004 | 0.8354 (within range) |
+| AP | 0.3892 | 0.3951 | 0.006 | **0.3892 (new low)** |
+| NDCG | 0.7323 | 0.7560 | 0.024 | **0.7560 (new high)** |
+| VCAP@100 | 0.0149 | 0.0270 | 0.012 | **0.0270 (new high)** |
+
+v0006 widened the range significantly for NDCG and VCAP@100 (both upward) and AP (downward). The operating envelope is no longer narrow — there are now distinct "model profiles" achievable within the same feature set.

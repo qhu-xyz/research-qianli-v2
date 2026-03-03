@@ -1,47 +1,75 @@
-# Human Input — Feature Engineering Batch (3 iterations)
+# Human Input — Feature Engineering Batch 2 (3 iterations)
 
-## What We've Learned (3 real-data experiments)
+## Overall Research Direction
 
-1. **HP tuning is a dead end.** v0 defaults are near-optimal. Deeper trees hurt AUC, help BRIER. Don't waste iterations on HP changes.
-2. **Interaction features alone don't break through.** AUC +0.0000 with 3 interactions. XGBoost depth-4 already discovers most interactions.
-3. **Training window expansion (10→14) is the first positive lever.** AUC +0.0013 (7W/4L), VCAP@100 +0.0034 (9W/3L). Retain 14-month window as the new default.
-4. **The AUC ceiling is ~0.835 with 14 base features.** Three independent levers confirm this. Breaking through requires fundamentally new discriminative signal.
-5. **2022-09 is the hardest month.** Binding rate 6.63% (lowest). Three levers all failed there. May need features we don't have yet.
+**Priority A: Aggressive feature engineering.** There are 15+ features available in the source data loader that we haven't tried. The current ~0.836 AUC ceiling is a feature ceiling, not a model ceiling. We need to add MANY new features, not tweak existing ones.
 
-## Strategy for This Batch
+**Priority B: Minor param tweaks.** train_months=14 is confirmed optimal and is the HARD MAXIMUM. Do not go above 14.
 
-### Iter 1: Combine the two positive levers (H6)
-- **Retain 14-month training window** (train_months=14)
-- **Add 3 interaction features** (products of exceedance × severity × historical signals)
-- **Keep v0 HP defaults** (proven near-optimal)
-- Tests whether window expansion + interaction features are additive
-- Expected: AUC 0.836-0.840 if additive, ~0.835 if not
+Read `memory/research_direction.md` for the full catalog of unused features and engineering opportunities.
 
-### Iter 2-3: Depends on iter 1, but strategic priorities are:
-- If H6 shows additivity → refine: try more/different interactions, or train_months=18
-- If H6 shows no additivity → the current feature set has a hard ceiling. Try:
-  - **Feature selection**: Drop low-signal features (shape features density_skewness/kurtosis/cv have unconstrained monotone — they may add noise). Test with 11 features instead of 14.
-  - **Ratio features**: prob_exceed_110 / prob_exceed_90 (tail concentration), expected_overload / prob_exceed_100 (conditional severity)
-  - **Temporal aggregation**: If the pipeline supports it, consider rolling averages of hist_da (but only if no data leakage)
+## What We've Learned (6 real-data experiments, 2 batches)
 
-### Bug fixes (do in iter 1 or 2):
-- **f2p parsing crash** (Codex HIGH): `int("2p")` fails for cascade stage. Fix in benchmark.py.
-- **Dual-default fragility** (Claude MEDIUM): train_months hardcoded in benchmark.py function signatures AND PipelineConfig. Single source of truth.
+1. **HP tuning is a dead end.** v0 defaults are near-optimal. (3 experiments)
+2. **Interaction features alone don't break through.** AUC +0.0000 with 3 interactions.
+3. **Training window 14 months is optimal.** AUC +0.0013 vs 10-month. 18-month was worse.
+4. **train_months=14 is the ABSOLUTE MAXIMUM.** Human constraint — do NOT try 15, 16, 18, or higher.
+5. **Window + interactions are partially additive.** v0004 (AUC 0.8363, VCAP@100 0.0205) is best version. VCAP@100 10W/2L (p=0.039) — first statistically significant improvement.
+6. **Feature pruning results pending** (v0006, current batch iter 3). Even if successful, the gains are marginal.
+7. **The model is feature-starved, not HP-starved.** The source data loader produces shift factor features, constraint metadata, distribution statistics, probability band features, and temporal features — NONE of which we currently use.
+
+## Strategy for This Batch: Add Many New Features
+
+### Iter 1: Add shift factor + constraint metadata features (H9)
+- **Add 4 shift factor features**: sf_max_abs, sf_mean_abs, sf_std, sf_nonzero_frac
+- **Add 2 constraint metadata features**: is_interface, constraint_limit
+- These are entirely new signal categories (network topology + structural) independent from the density curve
+- Requires updating `ml/features.py` to pass these through from source data (they're already computed by the source loader)
+- Requires updating `ml/config.py` FeatureConfig with monotone constraints: sf_max_abs→1, sf_mean_abs→1, sf_std→0, sf_nonzero_frac→0, is_interface→0, constraint_limit→0
+- Keep train_months=14, v0 HP defaults
+- Expected impact: LARGE if network topology is discriminative (and it should be — where a constraint sits in the network matters)
+
+### Iter 2: Add distribution shape + probability band features (H10)
+- **Add 3 distribution features**: density_mean, density_variance, density_entropy
+- **Add 3 probability band features**: tail_concentration, prob_band_95_100, prob_band_100_105
+- These are already computed by the source loader, just need to be wired through
+- Monotone: density_mean→1, density_variance→0, density_entropy→0, tail_concentration→1, prob_band_95_100→1, prob_band_100_105→1
+- Can be COMBINED with iter 1 features (cumulative) OR tested independently depending on iter 1 results
+
+### Iter 3: Add derived interaction features + hist_da_max_season (H11)
+- **Add hist_da_max_season** (peak seasonal signal)
+- **Create new interactions**: sf_max_abs × prob_exceed_100, hist_da × sf_max_abs
+- **Create ratio features**: prob_exceed_110 / prob_exceed_90, expected_overload / prob_exceed_100
+- These require code changes in features.py to compute new columns
+
+### Alternative: If iter 1 shows big gains from SF features
+- Iter 2: Combine ALL available features at once (kitchen sink approach ~25 features)
+- Iter 3: Feature selection via importance to trim back to most valuable ~15-18 features
+- This is the "add everything, then prune" strategy
+
+## Technical Notes for Worker
+
+The source data loader (`research-spice-shadow-price-pred-qianli/src/shadow_price_prediction/data_loader.py`) already computes these features in `load_data_for_outage()` → `calculate_direction_features()`. They flow through `load_training_data()` into the DataFrame. The shadow pipeline's `ml/data_loader.py` calls the source loader and converts to polars — the new columns should already be present in the DataFrame. The worker just needs to:
+1. Verify the columns exist in the loaded DataFrame (add a print of available columns)
+2. Add them to `FeatureConfig.step1_features` with correct monotone constraints
+3. Handle them in `features.py` (they don't need computation like interaction features — they should already be in the DataFrame)
+4. Update tests
 
 ## Business Constraint (unchanged)
-**Precision over recall.** Do NOT lower threshold, do NOT increase beta above 1.0, do NOT optimize for recall. The trading strategy needs high-confidence binding predictions, not coverage.
+**Precision over recall.** Do NOT lower threshold, do NOT increase beta above 1.0, do NOT optimize for recall.
 
 ## What NOT to Do
-- No HP tuning (proven dead end — 3 experiments confirm)
+- No HP tuning (proven dead end — 5 experiments confirm)
 - No threshold_beta changes (keep 0.7)
 - No architecture changes (XGBoost + monotone constraints is correct)
-- No train/val split changes beyond window length
+- **No train_months above 14** (HARD MAX — human constraint)
 - Don't spend more than 1 iteration on something that shows zero signal
 
 ## Success Criteria
-- **Promotion-worthy**: AUC > 0.837 AND at least 8/12 months winning AND AP > 0.396
-- **Encouraging but not promotable**: AUC > 0.835 with 7+/12 wins (continue refining)
-- **Dead end signal**: AUC ≤ 0.835 or fewer than 6/12 wins → pivot to different approach
+- **Promotion-worthy**: AUC > 0.840 AND at least 8/12 months winning AND AP > 0.400
+- **Encouraging**: AUC > 0.837 with 7+/12 wins (continue refining)
+- **Marginal**: AUC 0.835-0.837 → the new features helped but not enough yet
+- **Dead end signal**: AUC ≤ 0.835 or fewer than 6/12 wins → pivot approach
 
 ## Gate Notes
 - Don't change gate floors — we need more data points before calibrating

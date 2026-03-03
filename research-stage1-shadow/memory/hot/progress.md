@@ -5,67 +5,61 @@
 | Field | Value |
 |-------|-------|
 | Batch | feat-eng-20260303-060938 |
-| Iteration | 3 of 3 (planning complete, worker next) |
-| State | ORCHESTRATOR_PLANNING → next: WORKER |
+| Iteration | 3 of 3 (**COMPLETE** — final synthesis) |
+| State | ORCHESTRATOR_SYNTHESIZING → next: HUMAN_SYNC |
 | Champion | None (v0 baseline) |
-| Last Hypothesis | H7: train_months=18 + feature importance — FAILED (diminishing returns) |
-| Current Hypothesis | H8: Feature pruning (17→13 features) + revert to 14-month window |
+| Best Version | v0004 (recommended for HUMAN_SYNC promotion consideration) |
+| Last Hypothesis | H8: Feature pruning 17→13 + revert window — TRADEOFF DISCOVERY |
 
-## This Batch Strategy
+## This Batch Results
 
-From human input: test additivity of the two positive-signal levers, then refine or pivot.
-- **Iter 1**: H6 — 14-month window + 3 interaction features → **DONE** (AUC +0.0015, 9W/3L, VCAP@100 +0.0056, 10W/2L. Not promoted.)
-- **Iter 2**: H7 — train_months=18 with 17 features + feature importance → **DONE** (Diminishing returns confirmed. AUC -0.0002 vs v0004. Feature importance collected. Not promoted.)
-- **Iter 3**: H8 — Prune bottom 4 features (17→13), revert to 14-month window. Test if noise reduction improves AP tail. **IN PROGRESS — direction written, awaiting worker.**
+- **Iter 1**: H6 — 14-month window + 3 interaction features → v0004. AUC +0.0015 (9W/3L), VCAP@100 +0.0056 (10W/2L, **p=0.039**). Not promoted but best balanced version.
+- **Iter 2**: H7 — 18-month window + feature importance → v0005. Diminishing returns confirmed. Feature importance data collected. Not promoted.
+- **Iter 3**: H8 — Prune to 13 features + revert to 14mo → v0006. NDCG +0.0227 and VCAP@100 +0.0121 (**both p=0.039**), but AP -0.0044 (3W/9L). Tradeoff discovery — not promoted.
 
-## v0005 Key Results (iter 2)
+## v0006 Key Results (iter 3)
 
-| Metric | v0 | v0004 (iter 1) | v0005 (iter 2) | Δ vs v0 | Δ vs v0004 |
-|--------|-----|----------------|----------------|---------|------------|
-| S1-AUC | 0.8348 | 0.8363 | 0.8361 | +0.0013 | -0.0002 |
-| S1-AP | 0.3936 | 0.3951 | 0.3929 | -0.0007 | -0.0023 |
-| S1-VCAP@100 | 0.0149 | 0.0205 | 0.0193 | +0.0044 | -0.0012 |
-| S1-NDCG | 0.7333 | 0.7371 | 0.7365 | +0.0032 | -0.0007 |
+| Metric | v0 | v0004 (best balanced) | v0006 (iter 3) | vs v0 | vs v0004 |
+|--------|-----|----------------------|----------------|-------|----------|
+| S1-AUC | 0.8348 | 0.8363 | 0.8354 | +0.0006 | -0.0009 |
+| S1-AP | 0.3936 | 0.3951 | 0.3892 | **-0.0044** | **-0.0059** |
+| S1-VCAP@100 | 0.0149 | 0.0205 | **0.0270** | **+0.0121** | +0.0065 |
+| S1-NDCG | 0.7333 | 0.7371 | **0.7560** | **+0.0227** | +0.0189 |
 
-All gates pass. Not promoted (strictly worse than v0004 on all Group A means). Feature importance data successfully collected.
+## Batch Recommendation for HUMAN_SYNC
 
-## Feature Importance Summary (from v0005)
+**Promote v0004** as a modest improvement over v0:
+- AUC 0.8363 (+0.0015, 9W/3L — best W/L)
+- AP 0.3951 (+0.0015 — best AP)
+- VCAP@100 0.0205 (+0.0056, 10W/2L, p=0.039 — statistically significant)
+- NDCG 0.7371 (+0.0038)
 
-| Tier | Features | % Gain |
-|------|----------|--------|
-| Dominant | hist_da_trend | 53.9% |
-| Strong | hist_physical_interaction, hist_da | 25.5% |
-| Moderate | prob_below_90, prob_exceed_90, prob_exceed_95 | 10.3% |
-| Weak | 7 features (prob_below_95 through expected_overload) | 8.9% |
-| **Prune** | **density_kurtosis, density_cv, exceed_severity_ratio, density_skewness** | **1.4%** |
+**Document v0006** as a research finding:
+- Novel monotone constraint structure effect on ranking quality
+- Potential value if business acts only on top-100 predictions
 
-## Iter 3 Strategy (H8)
-
-- **Primary**: Remove 4 near-zero features (17→13): density_skewness, exceed_severity_ratio, density_cv, density_kurtosis
-- **Secondary**: Revert train_months from 18 to 14 (v0004 config was strictly better)
-- **Expected**: Small positive or neutral on mean metrics. Primary hope is improving AP bot2 and BRIER calibration.
-- **Endgame awareness**: This is the final iteration. If pruning produces modest improvement, consider promoting the best version (likely v0004). If pruning is neutral/negative, declare the ceiling reached and summarize findings for HUMAN_SYNC.
+**Feature set ceiling reached**: 6 experiments, 3 independent levers, AUC range [0.832, 0.836]. Next improvement requires new data sources.
 
 ## Cumulative Evidence (all real-data experiments)
 
-| Batch | Lever | AUC Δ | AUC W/L | Promoted |
-|-------|-------|-------|---------|----------|
+| Batch | Lever | AUC vs v0 | AUC W/L | Promoted |
+|-------|-------|-----------|---------|----------|
 | hp-tune-134412 | HP tuning (v0003-HP) | -0.0025 | 0W/11L | No |
 | hp-tune-144146 | Interactions (v0002) | +0.0000 | 5W/6L/1T | No |
-| feat-eng-194243 iter1 | Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | No |
+| feat-eng-194243 iter1 | Window 10-14 (v0003) | +0.0013 | 7W/4L/1T | No |
 | feat-eng-060938 iter1 | Window + Interactions (v0004) | +0.0015 | 9W/3L | No |
-| feat-eng-060938 iter2 | Window 18 + importance (v0005) | -0.0002 vs v0004 | 7W/5L vs v0 | No |
-| feat-eng-060938 iter3 | Feature pruning 17→13 (v0006) | ? | ? | ? |
+| feat-eng-060938 iter2 | Window 18 + importance (v0005) | +0.0013 | 7W/5L | No |
+| feat-eng-060938 iter3 | Feature pruning 17-13 (v0006) | +0.0006 | 5W/7L | No |
 
 ## History
 
 | Batch | Type | Result |
 |-------|------|--------|
 | smoke-v6 | Infrastructure validation | PASS (determinism confirmed) |
-| smoke-v7 | Bug fixes + beta experiment | Fixes merged, H2 failed (beta direction inverted) |
-| hp-tune-20260302-134412 iter1 | HP tuning (v0003-HP) | H3 refuted — AUC -0.0025, 0W/11L |
-| hp-tune-20260302-144146 iter1 | Interaction features (v0002) | H4 not supported — AUC +0.000, 5W/6L |
-| feat-eng-20260302-194243 iter1 | Training window 10→14 (v0003) | H5 inconclusive — AUC +0.0013, 7W/4L/1T |
-| feat-eng-20260303-060938 iter1 | Window + Interactions (v0004) | H6 partially confirmed — AUC +0.0015, 9W/3L |
-| feat-eng-20260303-060938 iter2 | Window 18 + importance (v0005) | H7 failed — diminishing returns, AUC -0.0002 vs v0004 |
-| **feat-eng-20260303-060938 iter3** | **Feature pruning 17→13 (v0006)** | **H8 — in progress** |
+| smoke-v7 | Bug fixes + beta experiment | Fixes merged, H2 failed |
+| hp-tune-134412 iter1 | HP tuning (v0003-HP) | H3 refuted |
+| hp-tune-144146 iter1 | Interaction features (v0002) | H4 not supported |
+| feat-eng-194243 iter1 | Training window 10-14 (v0003) | H5 inconclusive |
+| feat-eng-060938 iter1 | Window + Interactions (v0004) | H6 partially confirmed |
+| feat-eng-060938 iter2 | Window 18 + importance (v0005) | H7 failed |
+| **feat-eng-060938 iter3** | **Feature pruning 17-13 (v0006)** | **H8 tradeoff discovery** |

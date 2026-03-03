@@ -1,45 +1,46 @@
-# Critique Summary — Iteration 2 (feat-eng-20260303-060938, v0005)
+# Critique Summary — Iteration 3 (feat-eng-20260303-060938, v0006)
 
 ## Reviewer Agreement (high confidence)
-1. **Do not promote v0005** — unanimously; strictly worse than v0004 on all Group A means
-2. **Diminishing returns confirmed** — 14→18 month window adds zero marginal benefit; all vs-v0004 deltas are noise
-3. **Feature importance is the real deliverable** — first empirical data on feature contributions: hist_da_trend dominates (54% gain), distribution shape features are noise (<1.3%)
-4. **Window expansion exhausted as a lever** — both reviewers explicitly state this; the productive range was 10→14 months
-5. **Clean code changes** — feature importance extraction well-implemented, `_feature_importance` key convention and pre-aggregation pop are correct
-6. **AP bot2 trend is concerning** — worsening across iterations: -0.0017 → -0.0045 → -0.0040 → -0.0075 (vs v0). Still within tolerance but monotonically degrading.
-7. **2022-09 AP at all-time low** — 0.2986, worst across 5 experiments. Structural feature-target mismatch.
-8. **VCAP@500 bot2 recovered** — 0.0449 (from v0004's dangerous 0.0387). 18-month window stabilized the tail.
-9. **BRIER headroom at 0.0178** — 5th consecutive narrowing
+1. **Do not promote v0006** — unanimously; AP regressed below v0 baseline (first time ever), AP bot2 worst at 0.3228
+2. **v0004 remains the best version** — both reviewers independently identify v0004 as the strongest balanced candidate for HUMAN_SYNC
+3. **NDCG/VCAP improvements are real and significant** — both note the 10W/2L consistency and statistical significance (p=0.039)
+4. **AP regression is broadly distributed** — 3W/9L, not outlier-driven. This is a genuine tradeoff, not noise.
+5. **Clean code changes** — both confirm feature removal, monotone constraint update, and test updates are all correct and minimal
+6. **Full monotone constraint effect** — both identify the structural observation that removing all unconstrained features (monotone=0) is the likely driver of the ranking quality improvement
+7. **Feature set ceiling confirmed** — 6 experiments spanning 3 independent levers have exhausted within-feature-set improvements
+8. **Threshold methodology debt unchanged** — threshold leakage (HIGH), `>` vs `>=` (MEDIUM) persist. Both agree to defer to HUMAN_SYNC.
 
 ## Claude-Specific Insights
-- Per-month win/loss analysis: all AUC deltas vs v0004 are <0.003, pure noise
-- Feature importance tier analysis: Dominant (54%), Strong (25%), Moderate (10%), Weak (9%), Near-zero (1.4%)
-- hist_physical_interaction validated at #2 (14%), exceed_severity_ratio and density shape features identified as pruning candidates
-- Recommends iter 3: revert to 14-month window, prune bottom 4 features (density_skewness, exceed_severity_ratio, density_cv, density_kurtosis)
-- Suggests aggressive alternative: also drop overload_exceedance_product and prob_exceed_100/110 (17→11 features), but recommends conservative prune first
-- Gate calibration: VCAP@100 floor to 0.0 at HUMAN_SYNC
-- VCAP@1000 mean degradation noted: -0.0110 vs v0
+- Detailed per-month W/L table with all 12 months x 4 Group A metrics
+- Sign test significance: VCAP@100 and NDCG both p=0.039 (10W/2L), AP p=0.073 (3W/9L, borderline significant regression)
+- Seasonal pattern analysis: weakest months scattered (2022-09, 2022-12, 2021-04) — structural, not seasonal
+- 2022-09 deep dive: AP=0.2987 (worst ever), hist_da_trend contributes only 38.3% of gain vs 44.2% average — trend signal weaker during structural change
+- Feature importance redistribution: hist_da doubled (11.3% to 24.1%), creating more balanced level vs trend signal
+- NDCG +0.0227 is the largest Group A mean improvement in pipeline history (5.5x larger than v0004's +0.0038)
+- BRIER headroom narrowing to 0.0163 — 6th consecutive, contradicts model simplification expectation
+- Recommends v0004 for promotion at HUMAN_SYNC; v0006's NDCG/VCAP profile as a future research direction
+- Suggests investigating LambdaRank objective and whether top-100-only operational use changes the value assessment
 
 ## Codex-Specific Insights
-- Three-layer gate detail with exact margins: Layer 3 closest to fail is AP (margin +0.0125)
-- Layer 3 effectively disabled when champion=null — accepted with v0 as reference
-- New LOW: feature importance output has no test coverage for file existence/schema
-- Recommends metric-specific Layer 3 tolerances (AUC/AP/NDCG ~0.01) after champion is set
-- Emphasis on AP stability for weak months (2022-09 priority)
-- BRIER as closest mean gate to boundary (0.0178 headroom)
+- Three-layer gate detail with exact margins: Layer 3 closest to fail is AP (margin 0.0106, within tolerance but narrowing)
+- Champion is null — Layer 3 non-regression effectively disabled. Recommends setting champion immediately (operational change)
+- Noise tolerance 0.02 is loose relative to observed shifts (~0.01 for AUC/AP/NDCG). Recommends metric-specific tolerances: AUC ~0.01, AP ~0.015, NDCG ~0.01, VCAP@100 ~0.02
+- VCAP@100 floor (-0.035) non-binding; discuss tightening to 0.0 at HUMAN_SYNC
+- Emphasizes AP stability for weak months (2022-09 priority) as the key constraint on promotion
+- Recommends fixing threshold methodology debt before interpreting Group B trend lines
 
 ## Synthesis Assessment
-- **Core agreement**: Identical promotion decision; window expansion exhausted
-- **Complementary strengths**: Claude provides statistical rigor and feature pruning specifics; Codex provides gate margin analysis and code correctness
-- **Iter 3 direction**: Both point toward feature pruning. Prune bottom 4 features, revert to 14-month window.
+- **Core agreement**: Identical on promotion decision, best version identification, and ceiling diagnosis
+- **Complementary strengths**: Claude provides deeper statistical analysis and feature importance interpretation; Codex provides precise gate margin calculations and operational recommendations (champion activation)
+- **The v0006 finding**: Both agree this is the most experimentally informative iteration — the AP/NDCG tradeoff from monotone constraint structure is a novel, actionable insight
 
-## Open Code Issues (cumulative)
+## Open Code Issues (cumulative, unchanged)
 | Issue | Severity | Source | Status |
 |-------|----------|--------|--------|
 | Threshold-selection leakage | HIGH | Codex (smoke-v6) | Deferred to HUMAN_SYNC |
 | Threshold `>` vs `>=` mismatch | MEDIUM | Codex (smoke-v7) | Deferred to HUMAN_SYNC |
 | Silent ptype fallback | MEDIUM | Codex (feat-eng-060938 iter1) | Low priority |
 | Missing schema guard for interaction base columns | MEDIUM | Codex (hp-tune-144146) | Low priority |
-| Layer 3 disabled when champion=null | MEDIUM | Codex (hp-tune-134412) | Accepted |
-| Feature importance no test coverage | LOW | Codex (feat-eng-060938 iter2) | New |
+| Layer 3 disabled when champion=null | MEDIUM | Codex (hp-tune-134412) | Recommend fixing at HUMAN_SYNC |
+| Feature importance no test coverage | LOW | Codex (feat-eng-060938 iter2) | Low priority |
 | Dead config `scale_pos_weight_auto` | LOW | Codex (smoke-v6) | Deferred |

@@ -70,3 +70,15 @@ Calibrated from real-data v0 benchmark (commit d167090). Gate floors set as:
 - Layer 3 still disabled (champion=null). Against v0 reference: AUC bot2 +0.0057, AP bot2 -0.0045, NDCG bot2 -0.0059, VCAP@100 bot2 +0.0002 — all within 0.02 tolerance.
 - Codex suggestion for metric-specific Layer 3 tolerances (AUC/AP/NDCG ~0.005-0.01, VCAP@100 looser) remains valid. Need 2+ more iterations to calibrate.
 - **Cumulative**: After 3 real-data experiments, deltas are consistently small (±0.003 AUC, ±0.003 AP, ±0.005 NDCG, ±0.005 VCAP@100). This gives a natural range for future tolerance calibration.
+
+## Iteration 1 Observations (v0004, feat-eng-20260303-060938)
+
+- All floors remain appropriate — v0004 passed all 3 layers with ~0.05 headroom on Group A means
+- No gate calibration changes recommended (4 real-data iterations now)
+- v0004 gate headroom: AUC +0.0515, AP +0.0515, VCAP@100 +0.0556, NDCG +0.0538 — stable, consistent with all prior versions
+- **BRIER headroom continues narrowing**: v0004 BRIER=0.1516 vs floor=0.1703, headroom=0.0187. Trend: v0(0.0200) → v0003-HP(0.0241) → v0002(0.0198) → v0003-win(0.0189) → v0004(0.0187). Monotonically declining except for v0003-HP. Not yet critical but the pattern is clear: adding features or expanding window slightly degrades calibration.
+- **VCAP@500 bot2 approaching floor**: v0004 bot2=0.0387 vs floor=0.0408. Margin only 0.0021. 3rd consecutive VCAP@500 regression: v0002(-0.0043), v0003(-0.0063), v0004(-0.0065). If next iteration has similar bot2, it may breach the Group B floor. This appears to be an inherent tradeoff: improving top-100 ranking systematically degrades the 100-500 range.
+- **CAP@100/500 recovered slightly**: v0004 CAP@100=0.785 (vs v0003-win 0.771, back toward v0's 0.783). CAP@500=0.775 (vs v0003-win 0.763). The interaction features helped recover some broad-ranking ability lost in window expansion.
+- Layer 3 still disabled (champion=null). Against v0 reference: AUC bot2 +0.0059, AP bot2 -0.0040, NDCG bot2 -0.0060, VCAP@100 bot2 -0.0003 — all well within 0.02 tolerance. Closest to boundary: NDCG at -0.0060 (margin 0.0140 to fail).
+- **Codex recommendation**: Tighten Layer 3 to metric-specific tolerances: AUC/AP/NDCG ~0.005-0.01, keep VCAP@100 looser. With 4 iterations of data, the observed bot2 shifts range ±0.006 for AUC, ±0.005 for AP, ±0.006 for NDCG, ±0.001 for VCAP@100. A tolerance of 0.01 for AUC/AP/NDCG would still pass all versions seen so far. Worth discussing at HUMAN_SYNC.
+- **Cumulative ranges across 4 real-data experiments**: AUC mean ∈ [0.8323, 0.8363], AP ∈ [0.3921, 0.3951], NDCG ∈ [0.7323, 0.7371], VCAP@100 ∈ [0.0149, 0.0205]. The operating range is narrow — ~0.004 AUC, ~0.003 AP, ~0.005 NDCG, ~0.006 VCAP@100.

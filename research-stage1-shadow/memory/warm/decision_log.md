@@ -113,3 +113,41 @@ The natural next step is combining the two positive-signal levers. If effects ar
 
 ### D25: Continue deferring threshold methodology fixes
 **Rationale**: Same as D14/D19 — threshold-dependent metrics only. Group A gates are all threshold-independent ranking metrics. Fix at HUMAN_SYNC.
+
+---
+
+## Iteration 1 Synthesis (feat-eng-20260303-060938) — 2026-03-03
+
+### D26: No promotion for v0004
+**Rationale**: v0004 (combined 14-month window + 3 interaction features) is the strongest result yet — AUC 9W/3L (+0.0015), VCAP@100 10W/2L (+0.0056, sign test p=0.039, first statistically significant improvement). However, it falls in the "encouraging" band, not "promotion-worthy":
+- AUC 0.8363 < 0.837 promotion threshold
+- AP 6W/6L — one of four Group A metrics shows zero improvement
+- Bottom-2 regressed on AP (-0.0040), NDCG (-0.0060), VCAP@100 (-0.0003) vs v0
+- Effect is partially additive but sub-additive on AP (the business-critical ranking metric after AUC)
+Both reviewers independently recommend against promotion. The improvement is real but too small and inconsistent across metrics to justify changing the production baseline.
+
+### D27: No gate calibration changes
+**Rationale**: 4 real-data iterations (v0003-HP, v0002, v0003-window, v0004-combined). All versions produce deltas within ±0.007 of v0 on Group A means. Gates are not blocking valid candidates. Specific observations:
+- VCAP@500 bot2=0.0387 is approaching floor 0.0408 — 3rd consecutive regression. Not yet actionable (Group B, non-blocking) but if the pattern continues, the floor may need revisiting.
+- BRIER headroom at 0.0187, monotonically declining. Same: Group B, non-blocking, monitor.
+- Layer 3 tolerance (0.02) remains appropriate — largest Group A bot2 regression is NDCG -0.0060, well within tolerance.
+- Codex recommends tightening Layer 3 tolerance to 0.005-0.01 for AUC/AP/NDCG, keeping VCAP@100 looser. Valid suggestion, but prefer to accumulate 2+ more iterations before acting. All bot2 shifts have been within ±0.006, so 0.01 seems reasonable as a future target.
+
+### D28: Retain 14-month window and 17 features as baseline config for iter2
+**Rationale**: v0004 represents the best configuration found so far:
+- AUC 9W/3L (best W/L of any experiment)
+- VCAP@100 statistically significant improvement
+- No gate regressions
+Reverting any component would lose this signal. The current 17-feature + 14-month window config is the new "working baseline" for further experiments.
+
+### D29: Test train_months=18 in iter2 (H7)
+**Rationale**: Window expansion has been the most productive lever so far:
+- 10→14 months: AUC +0.0013 (7W/4L)
+- 14 months + interactions: AUC +0.0015 (9W/3L), VCAP@100 +0.0056 (10W/2L)
+If the marginal benefit of window expansion hasn't diminished, train_months=18 could push AUC closer to 0.838+. This also increases training diversity for late-2022 months without requiring new feature sources. Risk: diminishing returns (10→14 was only +0.0013 AUC), and possible eval month feasibility if early months lack sufficient lookback.
+
+### D30: Worker must export feature importance from v0004 models in iter2
+**Rationale**: After 4 experiments, we need empirical data on which features drive predictions. Claude recommends feature importance analysis, Codex recommends keeping the feature set for one more iteration. Exporting gain-based importance across all 12 months satisfies both: it informs iter 3 decisions (prune vs expand) without changing the current model. This is a diagnostic action, not a model change.
+
+### D31: Continue deferring threshold methodology fixes
+**Rationale**: Same as D14/D19/D25. Both reviewers continue flagging threshold leakage (HIGH) and `>` vs `>=` (MEDIUM). Both acknowledge these affect threshold-dependent metrics only, and all Group A gates are threshold-independent. Fix remains best addressed at HUMAN_SYNC. The Codex suggestion to make ptype fallback raise ValueError (instead of silent horizon=3) is valid but low-priority — it only matters for malformed ptypes, which don't occur in the current pipeline.

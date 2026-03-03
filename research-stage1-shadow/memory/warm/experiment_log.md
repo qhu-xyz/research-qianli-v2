@@ -158,3 +158,58 @@
 - Broader ranking (CAP, VCAP@500) traded for top-100 improvement — consistent with business objective
 - Bottom-2 mixed: AUC tail improved, AP/NDCG tails slightly regressed (within 0.02 tolerance)
 **Code Issues**: Dual-default fragility in benchmark.py — train_months=14 hardcoded in function signatures AND PipelineConfig (Claude MEDIUM). f2p parsing crash: `int("2p")` fails for cascade stage-3 (Codex HIGH, new). Test fixture 17-wide vs 14 features (Codex LOW). Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), dead config (LOW), Layer 3 disabled (MEDIUM).
+
+---
+
+## Iteration 1 — v0004 (H6: Combined 14-month window + interaction features — fourth real-data experiment)
+
+**Batch**: feat-eng-20260303-060938
+**Date**: 2026-03-03
+**Hypothesis**: H6 — Are the two positive-signal levers (14-month window from v0003, 3 interaction features from v0002) additive? Expected AUC ~0.836–0.838 if additive.
+**Changes**: (1) Added 3 interaction features back (exceed_severity_ratio, hist_physical_interaction, overload_exceedance_product — features 14→17), (2) Kept train_months=14 from v0003, (3) Fixed f2p parsing crash (regex-based horizon extraction), (4) Fixed dual-default fragility (None sentinel with PipelineConfig fallback), (5) Updated tests for 17 features.
+**Result**: **PARTIALLY ADDITIVE — Encouraging but not promotion-worthy**
+
+| Gate | v0 Mean | v0004 Mean | Delta | W/L/T | v0 Bot2 | v0004 Bot2 | Δ Bot2 | Pass |
+|------|---------|------------|-------|-------|---------|------------|--------|------|
+| S1-AUC | 0.8348 | 0.8363 | **+0.0015** | **9W/3L** | 0.8105 | 0.8164 | +0.0059 | YES |
+| S1-AP | 0.3936 | 0.3951 | **+0.0015** | 6W/6L | 0.3322 | 0.3282 | -0.0040 | YES |
+| S1-VCAP@100 | 0.0149 | 0.0205 | **+0.0056** | **10W/2L** | 0.0014 | 0.0011 | -0.0003 | YES |
+| S1-NDCG | 0.7333 | 0.7371 | **+0.0038** | 7W/5L | 0.6716 | 0.6656 | -0.0060 | YES |
+| S1-BRIER | 0.1503 | 0.1516 | +0.0013 | 3W/8L/1T | — | — | — | YES |
+
+**Overall Pass**: YES (all 3 layers pass for all Group A gates)
+**Promoted**: No — falls in "encouraging" band (AUC=0.8363 < 0.837 threshold, AP 6W/6L)
+**Per-month consistency**: AUC 9W/3L (best W/L of any experiment), VCAP@100 10W/2L (first stat-sig improvement, sign test p=0.039), AP 6W/6L (flat), NDCG 7W/5L
+
+**Additivity assessment**:
+| Metric | Window (v0003) | Interactions (v0002) | Combined (v0004) | Sum | Assessment |
+|--------|----------------|----------------------|-------------------|-----|------------|
+| AUC Δ | +0.0013 | +0.0000 | +0.0015 | +0.0013 | Mostly window |
+| AP Δ | +0.0012 | +0.0010 | +0.0015 | +0.0022 | Sub-additive |
+| VCAP@100 Δ | +0.0034 | +0.0009 | +0.0056 | +0.0043 | **Super-additive** |
+| NDCG Δ | +0.0019 | +0.0016 | +0.0038 | +0.0035 | ~Additive |
+
+**Statistical significance**:
+- VCAP@100 10W/2L: sign test p=0.039 — **first statistically significant improvement in pipeline history**
+- AUC 9W/3L: sign test p=0.073 — approaching significance
+- NDCG 7W/5L: p=0.39 — not significant
+- AP 6W/6L: p=1.0 — no signal
+
+**Per-month highlights**:
+- Best month: 2022-12 AUC +0.0098 (consistent with v0003-window, interaction features added nothing here)
+- Worst month: 2022-09 AP=0.3072 (4th consecutive failure across all levers, binding rate 6.63%)
+- No tail_floor breaches
+
+**Group B notable**:
+- VCAP@500: -0.0065 (3rd consecutive regression, bot2=0.0387 approaching floor 0.0408)
+- BRIER: 0.1516 (headroom 0.0187, 4th consecutive narrowing)
+- CAP@100: +0.0025, CAP@500: +0.0010 (slight recovery from v0003's regression)
+
+**Key Learnings**:
+- Combining levers is partially additive — VCAP@100 benefits most from the combination (super-additive)
+- AP is the one Group A metric that doesn't respond to any lever tested so far (6W/6L when combined)
+- The 17-feature set + 14-month window defines a ceiling of ~AUC 0.836, NDCG 0.737
+- Top-100 precision vs broader ranking is a consistent tradeoff across all experiments
+- 2022-09 has resisted 4 independent interventions — likely structural
+
+**Code Issues**: Both bug fixes correct (f2p regex, dual-default sentinel). No new issues introduced. Codex flagged silent fallback in ptype parser (MEDIUM). Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), missing schema guard for interaction base columns (MEDIUM).

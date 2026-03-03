@@ -83,16 +83,51 @@
 - Pattern seen in both v0002 and v0003: top-100 improves at expense of broader ranking
 - Consistent with business objective (top-of-stack precision matters most)
 
-### Cumulative Evidence After 3 Real-Data Experiments
+## From v0004 — Combined Window + Interactions (feat-eng-060938, real data)
+
+### Additivity of Levers
+- **VCAP@100 is super-additive**: combined (+0.0056) > sum of parts (+0.0043). Interaction features are particularly effective at re-ranking the top of the score distribution when training data is more diverse.
+- **NDCG is roughly additive**: combined (+0.0038) ≈ sum (+0.0035).
+- **AUC is mostly window-driven**: combined (+0.0015) ≈ window alone (+0.0013). Interactions add negligible AUC signal.
+- **AP is sub-additive**: combined (+0.0015) < sum (+0.0022). Interactions reduce AP consistency — they may add noise to the positive-class ranking that offsets their re-ranking benefit.
+
+### Statistical Significance Milestone
+- **VCAP@100 10W/2L**: two-sided sign test p=0.039. This is the first statistically significant metric improvement in 4 real-data experiments. The model genuinely captures more shadow price value at the top 100 predictions.
+- AUC 9W/3L: sign test p=0.073 — approaching but not significant.
+- AP 6W/6L: no signal at all.
+
+### Feature Set Ceiling Confirmed
+- After 4 experiments spanning HP tuning, interaction features, window expansion, and combination:
+  - AUC range: [0.8323, 0.8363] — total span of 0.004
+  - AP range: [0.3921, 0.3951] — total span of 0.003
+  - NDCG range: [0.7323, 0.7371] — total span of 0.005
+- The 14 base features + 3 interactions define a hard AUC ceiling at ~0.836
+- Breaking through requires fundamentally different information, not different model configurations
+
+### VCAP@500 Systematic Regression
+- 3 consecutive experiments show VCAP@500 decline: v0002(-0.0043), v0003(-0.0063), v0004(-0.0065)
+- v0004 bot2=0.0387 is within 0.0021 of floor (0.0408)
+- This appears inherent to improving top-100 precision: the model concentrates probability mass more tightly at the top, at the expense of the 100-500 range
+- Group B (non-blocking) so not fatal, but the trend needs monitoring
+
+### 2022-09 Is Structural
+- 4 independent interventions failed to improve 2022-09 AP (stays at ~0.307-0.315)
+- Lowest binding rate (6.63%) makes class separation inherently harder
+- AUC actually improved slightly (+0.0011) but AP didn't follow — the model ranks constraints slightly better overall but cannot identify the sparse positives in this month
+- Likely requires either new feature sources or time-series features capturing temporal regime shifts
+
+## Cumulative Evidence Summary (4 real-data experiments)
+
 | Lever | AUC Δ | AUC W/L | Key Learning |
 |-------|-------|---------|-------------|
 | HP tuning (v0003-HP) | -0.0025 | 0W/11L | Model not complexity-limited |
 | Interactions (v0002) | +0.0000 | 5W/6L/1T | Information ceiling within features |
-| Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | Small signal, best lever so far |
-| **Next: Combined** | **TBD** | **TBD** | **Tests additivity of interactions + window** |
+| Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | Small signal, best single lever |
+| **Combined (v0004)** | **+0.0015** | **9W/3L** | **Partially additive; VCAP@100 super-additive** |
 
 ### Statistical Testing
 - Month-level win/loss counts more informative than mean deltas at n=12
 - Effect of +0.001 AUC requires ~200+ months to reach significance at these std levels
 - Practical decision making must rely on consistency (W/L ratio) and direction, not p-values
 - Always check for outlier-driven means: exclude best month and recalculate
+- Sign test is more appropriate than z-test for W/L data — doesn't assume normality

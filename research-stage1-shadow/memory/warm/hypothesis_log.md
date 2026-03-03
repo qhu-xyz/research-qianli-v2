@@ -3,6 +3,32 @@
 > Previous hypotheses (H1-H8) archived in memory/archive/feat-eng-20260303-060938/
 > See memory/hot/learning.md for distilled learnings from 6 real-data experiments.
 
+## H11: Derived Interaction Features + colsample_bytree Tuning — CONFIRMED
+
+**Hypothesis**: Adding 3 derived interaction features (band_severity, sf_exceed_interaction, hist_seasonal_band) + increasing colsample_bytree from 0.8 to 0.9 will recover VCAP@100 from v0008's 4W/8L regression, targeting W/L ≥ 6W/6L and bot2 improvement.
+
+**Result**: **CONFIRMED.** VCAP@100 W/L recovered to 6W/5L/1T. Bot2 improved +0.0028 (0.0061→0.0089). AP continued to new pipeline high (0.4445, 9W/3L).
+
+**Key Numbers**:
+- AUC: 0.8495 (-0.0003, 4W/8L — flat/noise), bot2: 0.8189 (-0.0010)
+- AP: 0.4445 (+0.0027, 9W/3L), bot2: 0.3712 (-0.0014)
+- VCAP@100: 0.0266 (+0.0026, 6W/5L/1T), bot2: **0.0089 (+0.0028)**
+- NDCG: 0.7359 (+0.0013, 7W/5L), bot2: 0.6648 (-0.0015)
+- Feature importance: hist_seasonal_band 11.75%(#2), sf_exceed_interaction 4.00%(#7), band_severity 1.38%(#11). Combined: **17.13%**.
+
+**What worked**:
+1. hist_seasonal_band is the single most impactful derived feature ever — seasonal historical extremes × mild overload band captures a signal trees can't efficiently approximate from raw components
+2. VCAP@100 recovery achieved: bot2 improved in the worst months, not just mean improvement
+3. colsample_bytree 0.9 ensures critical features aren't randomly excluded from trees
+4. AP at 9W/3L approaching significance (p≈0.073 binomial) — broad-based, not outlier-driven
+
+**What didn't work**:
+1. band_severity (1.38%) — lowest of the 3 interactions. prob_band_95_100 × expected_overload may be partially redundant with existing tree splits on those features separately
+2. AUC slight decline (4W/8L) — interactions refine ranking quality, not discrimination
+3. 2021-04 NDCG still 0.6529 — structurally resistant to any feature engineering so far
+
+**Implication**: Multiplicative interactions between confirmed high-signal features capture genuinely new information (17.13% total). Feature engineering for this model is approaching saturation — future gains should come from hyperparameter optimization (more trees, slower learning) rather than more features.
+
 ## H10: Distribution Shape + Near-Boundary Band + Seasonal Historical Features — CONFIRMED
 
 **Hypothesis**: Adding 7 features from distribution shape, near-boundary bands, and seasonal historical signal will improve NDCG ranking quality while maintaining AUC/AP gains.

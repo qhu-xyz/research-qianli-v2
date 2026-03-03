@@ -66,17 +66,55 @@ Calibrated from real-data v0 benchmark (commit d167090). Gate floors set as:
    - VCAP@100 bot2 ≥ 0.0061 - 0.02 = -0.0139
    - NDCG bot2 ≥ 0.6663 - 0.02 = **0.6463** (still tightest, but now with 0.030 vs champion)
 
-### HUMAN_SYNC Gate Recommendations (cumulative, 8 real-data experiments)
-1. **Champion is v0008** — Layer 3 active
-2. **VCAP@100 floor**: Tighten from -0.035 to 0.0
-3. **CAP@100/500 floors**: Relax by 0.03 (to 0.7025 and 0.6940) — model profile has definitively changed; current floors are two versions misaligned
-4. **Keep noise_tolerance at 0.02** — adequate for all metrics
-5. **No changes to Group A mean floors** — all pass with 0.05+ headroom
+## Iteration 2 Observations (v0009, feat-eng-3-20260303-104101) — PROMOTED
 
-### Cumulative ranges across 8 real-data experiments
-| Metric | Min Mean | Max Mean | Range | v0008 |
+**v0009 gate headroom (Group A)**:
+
+| Gate | v0009 Mean | Floor | Headroom | v0009 Bot2 | v0008 Bot2 | Δ Bot2 | L3 Margin |
+|------|-----------|-------|----------|-----------|-----------|--------|-----------|
+| S1-AUC | 0.8495 | 0.7848 | +0.065 | 0.8189 | 0.8199 | -0.0010 | +0.019 |
+| S1-AP | 0.4445 | 0.3436 | +0.101 | 0.3712 | 0.3726 | -0.0014 | +0.019 |
+| S1-VCAP@100 | 0.0266 | -0.0351 | +0.062 | **0.0089** | 0.0061 | **+0.0028** | **+0.023** |
+| S1-NDCG | 0.7359 | 0.6833 | +0.053 | 0.6648 | 0.6663 | -0.0015 | +0.019 |
+
+**v0009 gate headroom (Group B)**:
+
+| Gate | v0009 Mean | Floor | Headroom | Notes |
+|------|-----------|-------|----------|-------|
+| S1-BRIER | 0.1376 | 0.1703 | +0.033 | Best calibration ever |
+| S1-CAP@100 | 0.7158 | 0.7325 | **-0.017** | FAILED — 3rd consecutive version |
+| S1-CAP@500 | 0.7188 | 0.7240 | **-0.005** | FAILED — 3rd consecutive version |
+| S1-VCAP@500 | 0.0955 | 0.0408 | +0.055 | Unchanged |
+| S1-VCAP@1000 | 0.1483 | 0.1091 | +0.039 | Unchanged |
+
+### Key Observations
+
+1. **VCAP@100 recovered**: Bot2 improved +0.0028 vs champion — the only Group A metric where bot2 moved in the right direction. L3 margin expanded from +0.017 to +0.023.
+
+2. **L3 margins uniformly comfortable**: All ≥ +0.019. No single metric is near the boundary.
+
+3. **CAP@100/500 failures are structural**: Now failing for v0007, v0008, AND v0009. The model profile has shifted permanently to ranking quality. **Floor relaxation is essential at HUMAN_SYNC.**
+
+4. **BRIER continues to improve**: 0.1376 (best ever) with +0.033 headroom. No overfitting despite 29 features.
+
+5. **Layer 3 now based on v0009**: Future versions checked against:
+   - AUC bot2 ≥ 0.8189 - 0.02 = **0.7989**
+   - AP bot2 ≥ 0.3712 - 0.02 = **0.3512**
+   - VCAP@100 bot2 ≥ 0.0089 - 0.02 = **-0.0111**
+   - NDCG bot2 ≥ 0.6648 - 0.02 = **0.6448** (tightest)
+
+### HUMAN_SYNC Gate Recommendations (cumulative, 9 real-data experiments)
+1. **Champion is v0009** — Layer 3 active
+2. **VCAP@100 floor**: Tighten from -0.035 to 0.0 (recommended 3 consecutive iterations)
+3. **CAP@100/500 floors**: Relax by 0.03 (to 0.7025 and 0.6940) — failing 3 consecutive champion versions; model profile is ranking-first
+4. **Keep noise_tolerance at 0.02** — adequate; tightest L3 margins +0.019 (comfortable)
+5. **No changes to Group A mean floors** — all pass with 0.05+ headroom
+6. **Consider tightening noise_tolerance to 0.015 in future** — observed bot2 deltas are mostly 0.001-0.003; 0.02 is generous
+
+### Cumulative ranges across 9 real-data experiments
+| Metric | Min Mean | Max Mean | Range | v0009 |
 |--------|----------|----------|-------|-------|
-| AUC | 0.8323 | **0.8498** | 0.018 | **New high** |
-| AP | 0.3892 | **0.4418** | 0.053 | **New high** |
-| NDCG | 0.7323 | 0.7560 | 0.024 | 0.7346 (mid-range) |
-| VCAP@100 | 0.0149 | 0.0270 | 0.012 | 0.0240 (near-high) |
+| AUC | 0.8323 | 0.8498 | 0.018 | 0.8495 (near-high) |
+| AP | 0.3892 | **0.4445** | 0.055 | **New high** |
+| NDCG | 0.7323 | 0.7560 | 0.024 | 0.7359 (mid-range) |
+| VCAP@100 | 0.0149 | **0.0270** | 0.012 | **New high** (0.0266) |

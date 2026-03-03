@@ -3,6 +3,43 @@
 > Previous decisions (D1-D41) archived in memory/archive/feat-eng-20260303-060938/
 > See memory/hot/learning.md for distilled learnings.
 
+## D47: Promote v0009 as champion (feat-eng-3-104101, iter2)
+
+**Context**: v0009 (29 features: 3 derived interactions + colsample_bytree=0.9) achieved the primary target of VCAP@100 recovery (bot2 +0.0028, W/L 4W/8L→6W/5L/1T). AP at new pipeline high (0.4445, 9W/3L). All Group A gates pass all 3 layers. Both reviewers independently recommend promotion.
+
+**Decision**: PROMOTE v0009. Set as champion for Layer 3 non-regression checks going forward.
+
+**Rationale**:
+1. All Group A gates pass all 3 layers with comfortable margins (+0.019 minimum L3 margin)
+2. Primary target (VCAP@100 recovery) achieved — bot2 improved from 0.0061 to 0.0089
+3. AP at new pipeline high (0.4445), best ever 9W/3L ratio
+4. 17.13% combined feature importance from 3 new interactions — confirms real signal
+5. BRIER continued to improve (0.1376), no overfitting signal
+6. Precision 0.503 mean — business objective preserved
+
+**Risk accepted**: AUC and AP bot2 slightly below champion (-0.0010, -0.0014) but well within noise tolerance. All L3 margins ≥ +0.019.
+
+## D48: Iter 3 direction — n_estimators + learning_rate optimization (feat-eng-3-104101)
+
+**Context**: v0009 confirmed interaction features improve ranking quality. 29 features with 17.13% from interactions is well-balanced. Both reviewers advise against adding more features (saturation risk). NDCG bot2 (0.6648) is comfortable. 2021-04 (NDCG 0.6529) remains structurally worst but beyond feature engineering reach.
+
+**Decision**: Iter 3 will increase n_estimators from 200 to 300 and decrease learning_rate from 0.1 to 0.07. This is the "more trees, slower learning" optimization pass — the standard final-iteration approach for a feature-rich model. No new features.
+
+**Rationale**:
+1. Model has 29 features — potentially under-treed at 200 estimators with this feature richness
+2. Lower learning rate + more trees is a well-established approach for improving generalization
+3. Both reviewers suggest this exact change as the logical next step
+4. No evidence of overfitting (BRIER improving) suggests capacity headroom exists
+5. Conservative change — if it doesn't help, it shouldn't hurt significantly
+
+## D49: Gate calibration recommendations (cumulative, 9 experiments) — for HUMAN_SYNC
+
+**Decision**: Reaffirm and update recommendations:
+1. **VCAP@100 floor**: Tighten from -0.035 to 0.0 (3 consecutive batches recommend this)
+2. **CAP@100/500 floors**: Relax by 0.03 (to 0.7025 / 0.6940) — failing for 3 consecutive champion versions; model profile is ranking-first
+3. **Keep noise_tolerance at 0.02** — adequate for all metrics; tightest L3 margins are +0.019 (comfortable)
+4. **New L3 floors (v0009 as champion)**: AUC ≥ 0.7989, AP ≥ 0.3512, VCAP@100 ≥ -0.0111, NDCG ≥ 0.6448
+
 ## D45: Promote v0008 as champion (feat-eng-3-104101, iter1)
 
 **Context**: v0008 (26 features with distribution shape + near-boundary band + seasonal historical features) produced all Group A gates passing all 3 layers. NDCG bot2 improved +0.0101 (margin expanded from 0.0046 to 0.0301). AUC +0.0013 (8W/4L), AP +0.0027 (9W/3L). Both reviewers independently recommend promotion.

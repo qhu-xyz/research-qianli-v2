@@ -5,29 +5,30 @@
 | Field | Value |
 |-------|-------|
 | Batch | feat-eng-3-20260303-104101 |
-| Iteration | 2 of 3 (planning complete, worker next) |
-| State | ORCHESTRATOR_PLANNING → WORKER |
-| Champion | **v0008** (26 features, AUC=0.8498, AP=0.4418, NDCG=0.7346) |
-| Previous Champion | v0007 (19 features, AUC=0.8485, AP=0.4391) |
-| Iter 1 Result | **PROMOTED** — H10 confirmed, NDCG bot2 +0.0101 |
-| Iter 2 Hypothesis | H11: 3 derived interactions (band_severity, sf_exceed_interaction, hist_seasonal_band) + colsample_bytree 0.8→0.9 |
-| Iter 2 Target | VCAP@100 recovery (4W/8L → ≥6W/6L), maintain NDCG/AUC/AP |
+| Iteration | 2 of 3 (synthesis complete, iter 3 next) |
+| State | ORCHESTRATOR_SYNTHESIZING → ORCHESTRATOR_PLANNING (iter 3) |
+| Champion | **v0009** (29 features, AUC=0.8495, AP=0.4445, NDCG=0.7359, VCAP@100=0.0266) |
+| Previous Champion | v0008 (26 features, AUC=0.8498, AP=0.4418, NDCG=0.7346) |
+| Iter 1 Result | **PROMOTED v0008** — H10 confirmed, NDCG bot2 +0.0101 |
+| Iter 2 Result | **PROMOTED v0009** — H11 confirmed, VCAP@100 bot2 +0.0028, AP new pipeline high |
+| Iter 3 Hypothesis | H12: n_estimators 200→300, learning_rate 0.1→0.07 (more trees, slower learning) |
+| Iter 3 Target | Improve generalization across all metrics, maintain BRIER (no overfitting) |
 
-## v0008 Champion Summary
+## v0009 Champion Summary
 
-| Metric | v0008 | v0007 | Delta | W/L |
+| Metric | v0009 | v0008 | Delta | W/L |
 |--------|-------|-------|-------|-----|
-| S1-AUC | **0.8498** | 0.8485 | +0.0013 | 8W/4L |
-| S1-AP | **0.4418** | 0.4391 | +0.0027 | 9W/3L |
-| S1-VCAP@100 | 0.0240 | 0.0247 | -0.0007 | 4W/8L |
-| S1-NDCG | **0.7346** | 0.7333 | +0.0013 | 8W/4L |
-| S1-BRIER | **0.1383** | 0.1395 | -0.0012 | — |
-| Precision | **0.5091** | 0.5020 | +0.0071 | — |
+| S1-AUC | 0.8495 | 0.8498 | -0.0003 | 4W/8L |
+| S1-AP | **0.4445** | 0.4418 | +0.0027 | **9W/3L** |
+| S1-VCAP@100 | **0.0266** | 0.0240 | +0.0026 | **6W/5L/1T** |
+| S1-NDCG | **0.7359** | 0.7346 | +0.0013 | 7W/5L |
+| S1-BRIER | **0.1376** | 0.1383 | -0.0007 | — |
+| Precision | 0.503 | 0.509 | -0.006 | — |
 
-**Bot2 (v0008 as champion baseline for L3)**:
-- AUC: 0.8199, AP: 0.3726, VCAP@100: 0.0061, NDCG: 0.6663
-- VCAP@100 bot2 margin to L3 fail: **+0.0167** — tightest constraint
-- NDCG bot2 margin: **+0.0301** — now comfortable (was 0.0046 in v0007)
+**Bot2 (v0009 as champion baseline for L3)**:
+- AUC: 0.8189, AP: 0.3712, VCAP@100: 0.0089, NDCG: 0.6648
+- NDCG bot2 margin to L3 fail: **+0.019** — tightest constraint
+- All L3 margins ≥ +0.019 — uniformly comfortable
 
 ## This Batch Strategy
 
@@ -35,8 +36,8 @@
 
 ### Iteration Results
 - **Iter 1**: H10 — Added 7 features (density_mean, density_variance, density_entropy, tail_concentration, prob_band_95_100, prob_band_100_105, hist_da_max_season). **PROMOTED as v0008.** NDCG bot2 +0.0101, precision +0.007.
-- **Iter 2**: H11 — 3 derived interactions (band_severity, sf_exceed_interaction, hist_seasonal_band) + colsample_bytree=0.9. **IN PROGRESS — direction written.**
-- **Iter 3**: TBD based on iter 2 results. Final optimization + HUMAN_SYNC preparation.
+- **Iter 2**: H11 — 3 derived interactions (band_severity, sf_exceed_interaction, hist_seasonal_band) + colsample_bytree=0.9. **PROMOTED as v0009.** VCAP@100 bot2 +0.0028, AP at new pipeline high 0.4445.
+- **Iter 3**: H12 — n_estimators 200→300, learning_rate 0.1→0.07 (final optimization pass). No new features.
 
 ## Cumulative Evidence (all real-data experiments)
 
@@ -50,6 +51,7 @@
 | feat-eng-060938 iter3 | Feature pruning 17-13 (v0006) | +0.0006 | 5W/7L | No |
 | **feat-eng-2-092848 iter1** | **SF + metadata (v0007)** | **+0.0137** | **12W/0L** | **YES** |
 | **feat-eng-3-104101 iter1** | **Distrib + band + seasonal (v0008)** | **+0.0150** | **8W/4L** | **YES** |
+| **feat-eng-3-104101 iter2** | **Interactions + colsample (v0009)** | **+0.0147** | **4W/8L** | **YES** |
 
 ## History
 
@@ -66,3 +68,4 @@
 | **feat-eng-2-092848 iter1** | **SF + metadata features (v0007)** | **H9 STRONGLY CONFIRMED — PROMOTED** |
 | feat-eng-2-092848 iter2 | Orchestrator timeout | Did not execute |
 | **feat-eng-3-104101 iter1** | **Distrib + band + seasonal (v0008)** | **H10 CONFIRMED — PROMOTED** |
+| **feat-eng-3-104101 iter2** | **Interactions + colsample (v0009)** | **H11 CONFIRMED — PROMOTED** |

@@ -109,6 +109,40 @@
 - Higher threshold (0.851 vs 0.834) reduces predicted positive count, hurting CAP
 - Model profile shifted from threshold-dependent capture to ranking quality — an acceptable trade for business objective
 
+## From v0009 — Derived Interaction Features + colsample_bytree Tuning (NEW CHAMPION)
+
+### Multiplicative Interactions Capture Genuinely New Signal
+- 3 derived interactions (band_severity, sf_exceed_interaction, hist_seasonal_band) contribute 17.13% combined gain
+- This is the highest single-iteration feature block importance in pipeline history
+- hist_seasonal_band at 11.75% (#2 feature) — seasonal history × overload band captures what trees can't efficiently approximate from raw components
+- **Multiplicative interactions between confirmed high-signal features are a high-leverage engineering move**
+
+### VCAP@100 Recovery Achieved Through Targeted Interactions
+- VCAP@100 bot2: 0.0061 → 0.0089 (+0.0028), W/L: 4W/8L → 6W/5L/1T
+- Gains concentrated in spring/summer months (2021-08 +0.0239, 2022-09 +0.0060) where seasonal interactions add most signal
+- band_severity (1.38%, lowest of 3) — confirms prob_band_95_100 × expected_overload is partially redundant with tree splits
+- **For VCAP@100 improvement, interactions combining different signal classes (topology × physics, history × physics) outperform same-class interactions**
+
+### colsample_bytree 0.9 Is the Right Setting for 29 Features
+- No overfitting signal (BRIER improved 0.1383 → 0.1376)
+- Ensures ~26/29 features per tree — critical features aren't randomly excluded
+- 0.8 with 26 features (v0008) meant only ~21 features/tree — too aggressive for feature-rich models
+- **Rule of thumb: colsample_bytree should ensure ≥ 85% of features per tree when total features > 20**
+
+### Feature Engineering Is Now Saturated
+- v0007: 6 features, 4.66% importance → AUC +0.0137 (12W/0L) — massive
+- v0008: 7 features, 10.3% importance → AUC +0.0013 (8W/4L) — moderate
+- v0009: 3 features, 17.13% importance → AUC -0.0003 (4W/8L) — flat
+- **Higher feature importance does NOT mean proportionally higher AUC lift**
+- Each additional feature block captures progressively less unique discrimination signal
+- Future gains must come from hyperparameter optimization, not more features
+
+### 2021-04 Is Structurally Resistant
+- NDCG 0.6529 — worst month for 3 consecutive versions
+- Improved only marginally (+0.0021 vs v0008) despite 17.13% new feature importance
+- Spring transition month with distinctive binding patterns that no feature engineering has resolved
+- **Accept this as a structural floor — do not chase it at the expense of other months**
+
 ## From v0008 — Distribution Shape + Near-Boundary Band + Seasonal Historical Features (NEW CHAMPION)
 
 ### NDCG-Targeted Feature Design Works
@@ -136,7 +170,7 @@
 - v0008 improved 2022-03 by +0.018 but 2021-04 only by +0.003
 - May need season-specific features or temporal conditioning
 
-### Cumulative Evidence (8 experiments)
+### Cumulative Evidence (9 experiments)
 
 | Lever | AUC Δ vs v0 | AUC W/L | Promoted |
 |-------|-------------|---------|----------|
@@ -148,3 +182,4 @@
 | Feature pruning (v0006) | +0.0006 | 5W/7L | No |
 | **SF + metadata (v0007)** | **+0.0137** | **12W/0L** | **YES** |
 | **Distrib + band (v0008)** | **+0.0150** | **8W/4L** | **YES** |
+| **Interactions + colsample (v0009)** | **+0.0147** | **4W/8L** | **YES** |

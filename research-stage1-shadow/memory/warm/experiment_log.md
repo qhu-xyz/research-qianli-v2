@@ -124,3 +124,37 @@
 - Early months (2020–2021H1) benefit more than late months (2022) — distribution shift is the real bottleneck
 - Bottom-2 regressed on 3/4 Group A metrics: gains concentrated in middle of distribution, not tails
 **Code Issues**: No new bugs introduced. New MEDIUM: missing schema guard for interaction feature base columns (Codex). Stale docstrings (14→17 mismatch, both reviewers). Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), dead config (LOW), Layer 3 disabled (MEDIUM).
+
+---
+
+## Iteration 1 — v0003 (H5: Training window expansion 10→14 months — third real-data experiment)
+
+**Batch**: feat-eng-20260302-194243
+**Date**: 2026-03-02
+**Hypothesis**: H5 — Expanding training window from 10 to 14 months addresses late-2022 distribution shift by providing 40% more training examples with greater seasonal diversity.
+**Changes**: (1) Reverted to v0's 14 base features (removed 3 interaction features from v0002), (2) Changed `train_months` 10→14 in PipelineConfig, (3) Fixed benchmark.py train_months/val_months plumbing (bug fix — params weren't threaded through), (4) Added schema guard for feature columns in features.py, (5) Updated docstrings and tests.
+**Result**: **SMALL POSITIVE BUT NOT SIGNIFICANT** — Directionally best result of 3 real-data iterations, but effect sizes below statistical significance.
+
+| Gate | v0 Mean | v0003 Mean | Delta | W/L/T | v0 Bot2 | v0003 Bot2 | Δ Bot2 | Pass |
+|------|---------|------------|-------|-------|---------|------------|--------|------|
+| S1-AUC | 0.8348 | 0.8361 | **+0.0013** | 7W/4L/1T | 0.8105 | 0.8162 | +0.0057 | YES |
+| S1-AP | 0.3936 | 0.3948 | **+0.0012** | 8W/4L | 0.3322 | 0.3277 | -0.0045 | YES |
+| S1-VCAP@100 | 0.0149 | 0.0183 | **+0.0034** | 9W/3L | 0.0014 | 0.0016 | +0.0002 | YES |
+| S1-NDCG | 0.7333 | 0.7352 | **+0.0019** | 7W/4L/1T | 0.6716 | 0.6657 | -0.0059 | YES |
+| S1-BRIER | 0.1503 | 0.1514 | +0.0011 | — | — | — | — | YES |
+
+**Overall Pass**: YES (all 3 layers pass for all Group A gates)
+**Promoted**: No — improvements directionally positive but not statistically significant
+**Per-month consistency**: AUC 7W/4L/1T, AP 8W/4L, NDCG 7W/4L/1T, VCAP@100 9W/3L
+**Success criteria**: Technically met (≥7/12 AUC wins, mean AUC >0.835) but effect too small to justify promotion
+**Best month**: 2022-12 (AUC +0.0098, AP +0.0142) — the weakest month improved most, supporting seasonal diversity hypothesis
+**Target month 2022-09**: AUC flat (+0.0000), AP regressed (-0.0091) — distribution shift there requires different approach
+**Statistical significance**: AUC δ=0.087σ (p≈0.27), AP δ=0.029σ (p≈0.19), NDCG δ=0.046σ (p≈0.27), VCAP@100 δ=0.27σ (p≈0.07). None significant at p<0.05.
+**Group B notable**: VCAP@500 -0.0063, CAP@100 -0.0117, CAP@500 -0.0107 (broader ranking degraded while top-100 improved).
+**Key Learnings**:
+- 14-month window is the first lever to produce a positive AUC signal (7W, up from 5W interactions and 0W HP tuning)
+- Effect is small but distributed (not driven by a single outlier month)
+- 2022-12 benefited most (+0.0098 AUC) but 2022-09 unchanged — distribution shift at 2022-09 is not addressable by window expansion alone
+- Broader ranking (CAP, VCAP@500) traded for top-100 improvement — consistent with business objective
+- Bottom-2 mixed: AUC tail improved, AP/NDCG tails slightly regressed (within 0.02 tolerance)
+**Code Issues**: Dual-default fragility in benchmark.py — train_months=14 hardcoded in function signatures AND PipelineConfig (Claude MEDIUM). f2p parsing crash: `int("2p")` fails for cascade stage-3 (Codex HIGH, new). Test fixture 17-wide vs 14 features (Codex LOW). Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), dead config (LOW), Layer 3 disabled (MEDIUM).

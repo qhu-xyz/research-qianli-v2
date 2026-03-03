@@ -17,7 +17,7 @@
 - `apply_threshold` uses strict `>` while `precision_recall_curve` thresholds are inclusive `>=` — known mismatch, minor impact at real data scale (270K rows) vs significant at n=20
 
 ### Reviewer Dynamics
-- Codex found deeper structural bugs; Claude had better practical gate analysis
+- Codex finds deeper structural bugs; Claude has better statistical/practical gate analysis
 - Reading reviews independently is valuable — they catch different things
 
 ## From v0 Real-Data Baseline (12 months, f0, onpeak)
@@ -30,7 +30,7 @@
 - Threshold=0.834 — conservative, precision-favoring (beta=0.7)
 
 ### Weakest Months
-- 2022-09: AP=0.315, AUC=0.833 — worst AP
+- 2022-09: AP=0.315, AUC=0.833 — worst AP, lowest binding rate (6.63%)
 - 2022-12: AUC=0.809, AP=0.362 — worst AUC
 - 2022-06: REC=0.313 — worst recall
 - Late 2022 consistently weaker — possible distribution shift
@@ -40,57 +40,59 @@
 - S1-BRIER (Group B) tightest: only 0.02 headroom (floor=0.170 vs mean=0.150)
 - S1-VCAP@100 has negative floor (-0.035) — effectively non-binding
 
-## From v0003 — HP Tuning Experiment (iter1, real data)
+## From v0003-HP — HP Tuning Experiment (hp-tune batch, real data)
 
 ### Model Complexity vs Feature Informativeness
-- **v0 HP defaults are near-optimal** — standard XGBoost tuning (depth 4→6, lr 0.1→0.05, trees 200→400, min_child_weight 10→5) produced zero improvement on Group A ranking metrics
-- **Model is feature-limited, not complexity-limited** — deeper trees cannot extract more discriminative signal from these 14 features
-- AUC degraded in 11/12 months (p≈0.003) — a real, systematic effect, not noise
+- **v0 HP defaults are near-optimal** — standard XGBoost tuning produced zero Group A improvement
+- **Model is feature-limited, not complexity-limited** — deeper trees cannot extract more signal from these 14 features
+- AUC degraded in 11/12 months (p≈0.003) — a real, systematic effect
 - BRIER improved in 12/12 months (p≈0.0002) — deeper/slower trees improve calibration but hurt discrimination
-- This means: the probability estimates become better-calibrated but the ranking order gets marginally worse
 
 ### Calibration vs Discrimination Tradeoff
 - Deeper trees + lower learning rate → better calibrated probabilities (lower Brier) but slightly worse separation (lower AUC)
 - For our business objective (precision at high threshold), ranking quality (AUC/AP) matters more than calibration (BRIER)
-- This tradeoff means HP tuning alone cannot simultaneously improve both — need new signal (features)
 
-### Late-2022 Distribution Shift
-- Weakest months (2022-09, 2022-12) remain equally weak in v0003 — tree complexity doesn't help
-- The shift may require temporal features (season, trend) or expanded training window to address
-
-### Statistical Testing Insight
-- Month-level win/loss counts (0W/11L for AUC) are more informative than mean deltas (Δ=-0.0025)
-- A delta within noise tolerance can still be statistically significant when directionally consistent across months
-- Future iterations should track win/loss counts alongside mean deltas
-
-## From v0002 — Interaction Features (iter1, hp-tune-20260302-144146)
+## From v0002 — Interaction Features (hp-tune batch, real data)
 
 ### Feature Interactions Don't Break the AUC Ceiling
-- 3 physically-motivated interaction features (exceed_severity_ratio, hist_physical_interaction, overload_exceedance_product) produced AUC +0.0000 (5W/6L/1T)
-- XGBoost depth-4 already discovers most useful 2-feature interactions — pre-computing saves 1 split but adds no new information
-- AP +0.0010 (7W/5L) and NDCG +0.0016 (8W/4L) are marginal and noise-level
-- The AUC ceiling at ~0.835 is now **confirmed across two independent levers** (HP tuning AND interactions)
-
-### Interaction Features Help Top-K But Hurt Broader Ranking
-- VCAP@100 +0.0009 (slight improvement at top-100)
-- VCAP@500 -0.0043 and VCAP@1000 -0.0031 (regression at broader K)
-- Interactions act as "confidence boosters" for extreme cases but add noise to borderline predictions
-- Bottom-2 regressed on 3/4 Group A metrics — gains concentrated in distribution middle, not tails
+- 3 interaction features produced AUC +0.0000 (5W/6L/1T)
+- NDCG 8W/4L and AP 7W/5L: marginal positive ranking signal
+- XGBoost depth-4 already discovers most useful interactions
+- Interaction features help top-K but hurt broader ranking (VCAP@500 -0.0043)
+- Bottom-2 regressed on 3/4 Group A metrics
 
 ### Temporal Pattern in Feature Effectiveness
-- Early months (2020-09 through 2021-04) consistently benefit from interactions
-- Late months (2022-03, 2022-09, 2022-12) neutral or negative
-- This confirms the **late-2022 distribution shift** as the dominant remaining problem
-- Feature engineering within the current feature set cannot address temporal non-stationarity
+- Early months (2020–2021H1) benefit from changes more than late months (2022)
+- Confirms late-2022 distribution shift as the dominant remaining problem
 
-### Cumulative Evidence — What Works and What Doesn't
-| Lever | Result | Conclusion |
-|-------|--------|------------|
-| HP tuning (v0003) | AUC -0.0025, 0W/11L | Wrong lever — model not complexity-limited |
-| Interaction features (v0002) | AUC +0.0000, 5W/6L/1T | Wrong lever — information ceiling reached |
-| **Next**: Longer training window | Untested | Addresses distribution shift directly |
+## From v0003 — Training Window Expansion (feat-eng batch, real data)
 
-### Outlier Sensitivity
-- Always check for single-month outliers driving mean improvements
-- 2021-01 NDCG outlier (+0.042) accounts for most of v0002 NDCG mean gain; without it, delta is ~-0.002
-- Report "mean excluding best month" alongside raw mean for honest assessment
+### Window Expansion Provides Small, Real Signal
+- 14-month window is the **first lever to produce positive AUC wins** (7W/4L/1T, up from 5W interactions and 0W HP tuning)
+- Effect is small (+0.0013 AUC, not statistically significant at p≈0.27) but distributed (not single-outlier driven)
+- VCAP@100 improved most (9W/3L, +0.0034, p≈0.07) — closest to significance
+
+### 2022-12 vs 2022-09 Divergence
+- 2022-12 (weakest AUC month) improved substantially: AUC +0.0098, AP +0.0142
+- 2022-09 (weakest AP month) unchanged on AUC, regressed on AP (-0.0091)
+- These two months have different failure modes: 2022-12 benefits from seasonal diversity, 2022-09 has a feature-target mismatch (lowest binding rate at 6.63%)
+- 3 independent levers all failed to improve 2022-09 — may need fundamentally new features
+
+### Broader vs Top-K Ranking Tradeoff
+- VCAP@100 improved while VCAP@500 (-0.0063) and CAP@100/500 degraded
+- Pattern seen in both v0002 and v0003: top-100 improves at expense of broader ranking
+- Consistent with business objective (top-of-stack precision matters most)
+
+### Cumulative Evidence After 3 Real-Data Experiments
+| Lever | AUC Δ | AUC W/L | Key Learning |
+|-------|-------|---------|-------------|
+| HP tuning (v0003-HP) | -0.0025 | 0W/11L | Model not complexity-limited |
+| Interactions (v0002) | +0.0000 | 5W/6L/1T | Information ceiling within features |
+| Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | Small signal, best lever so far |
+| **Next: Combined** | **TBD** | **TBD** | **Tests additivity of interactions + window** |
+
+### Statistical Testing
+- Month-level win/loss counts more informative than mean deltas at n=12
+- Effect of +0.001 AUC requires ~200+ months to reach significance at these std levels
+- Practical decision making must rely on consistency (W/L ratio) and direction, not p-values
+- Always check for outlier-driven means: exclude best month and recalculate

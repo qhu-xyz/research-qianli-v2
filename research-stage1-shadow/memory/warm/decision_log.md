@@ -81,3 +81,35 @@ The persistent late-2022 weakness and pattern that early months benefit more tha
 
 ### D19: Continue deferring threshold methodology fixes
 **Rationale**: Same as D14 — threshold-dependent metrics only. Group A gates are threshold-independent. Fix at HUMAN_SYNC.
+
+---
+
+## Iteration 1 Synthesis (feat-eng-20260302-194243) — 2026-03-02
+
+### D20: No promotion for v0003
+**Rationale**: v0003 (14-month training window) shows small, directionally positive improvements on all Group A metrics: AUC +0.0013 (7W/4L/1T), AP +0.0012 (8W/4L), NDCG +0.0019 (7W/4L/1T), VCAP@100 +0.0034 (9W/3L). All 3 gate layers pass. However:
+- No delta is statistically significant (all <1σ, best is VCAP@100 at p≈0.07)
+- Gains partly outlier-driven (removing 2022-12 collapses AUC/AP gains)
+- Target month 2022-09 didn't improve (AP regressed -0.0091)
+- Bottom-2 mixed (AP -0.0045, NDCG -0.0059 vs v0)
+- CAP metrics regressed (CAP@100 -0.0117, CAP@500 -0.0107)
+Both reviewers independently recommend against promotion. This is the strongest of 3 real-data iterations but not sufficient to change the production baseline.
+
+### D21: No gate calibration changes
+**Rationale**: 3 real-data iterations (v0003-HP, v0002, v0003-window), all producing deltas within ±0.003 of v0 on Group A means. Gates are not blocking valid candidates — there simply haven't been meaningful improvements. Codex suggestion for metric-specific Layer 3 tolerances remains valid but still premature. Layer 3 remains disabled (champion=null). BRIER headroom narrowing (0.0189 vs 0.0200 initially) is worth monitoring but not actionable.
+
+### D22: Combine 14-month window + interaction features for iter2 (H6)
+**Rationale**: Three iterations have isolated individual levers:
+- v0003-HP (HP tuning): AUC 0W/11L — not the bottleneck
+- v0002 (interaction features): AUC 5W/6L/1T, NDCG 8W/4L — marginal positive ranking signal
+- v0003-window (14-month window): AUC 7W/4L/1T, VCAP@100 9W/3L — best AUC signal so far
+The natural next step is combining the two positive-signal levers. If effects are additive: AUC ~+0.0013, NDCG ~+0.0035, VCAP@100 ~+0.0043. Even partial additivity would produce the strongest result yet. This also addresses D18's intent (keep interaction features) while building on the window expansion. Reverting interactions in v0003 was methodologically correct to isolate the window effect; now we can combine.
+
+### D23: Fix f2p parsing bug in iter2
+**Rationale**: Codex (HIGH) identified that `int(ptype[1:])` crashes for "f2p" in data_loader.py. This blocks cascade stage-3 evaluation. Fix with an explicit mapping or regex. Not blocking for f0/f1 evaluation but should be resolved for future cascade work.
+
+### D24: Fix dual-default fragility in benchmark.py in iter2
+**Rationale**: Claude (MEDIUM) identified that `train_months=14` is hardcoded in both `_eval_single_month()` and `run_benchmark()` signatures AND in `PipelineConfig`. Future experiments that change PipelineConfig must manually update benchmark signatures in lockstep. Fix by using `None` sentinel with fallback to `PipelineConfig().train_months`.
+
+### D25: Continue deferring threshold methodology fixes
+**Rationale**: Same as D14/D19 — threshold-dependent metrics only. Group A gates are all threshold-independent ranking metrics. Fix at HUMAN_SYNC.

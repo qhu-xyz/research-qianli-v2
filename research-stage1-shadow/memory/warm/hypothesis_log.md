@@ -43,3 +43,25 @@
 **Key Insight**: XGBoost depth-4 already discovers most useful interactions. Pre-computing them saves tree depth but adds no new information. AUC ceiling at ~0.835 confirmed across both HP tuning and feature interactions.
 
 **Lesson**: Feature engineering within the current feature set cannot break the AUC ceiling. Next lever: expand training window (10→14 months) to address late-2022 distribution shift.
+
+---
+
+## H5 (real data, iter1): Training window expansion breaks AUC ceiling — INCONCLUSIVE (weak positive)
+**Batch**: feat-eng-20260302-194243, **Version**: v0003
+**Changes**: Reverted to v0's 14 base features + `train_months` 10→14 + benchmark.py plumbing fix
+**Expected**: AUC +0.002–0.008, wins ≥7/12, mean AUC >0.835, especially late-2022 months improved
+**Actual**:
+- AUC: +0.0013 (7W/4L/1T, p≈0.27) — positive but below significance
+- AP: +0.0012 (8W/4L, p≈0.19) — positive but below significance
+- NDCG: +0.0019 (7W/4L/1T, p≈0.27) — positive but below significance
+- VCAP@100: +0.0034 (9W/3L, p≈0.07) — strongest signal, approaching significance
+- BRIER: +0.0011 (slight regression, not meaningful)
+- Bottom-2: AUC +0.0057 (improved), AP -0.0045 (regressed), NDCG -0.0059 (regressed)
+
+**Success criteria technically met** (≥7/12 AUC wins AND mean AUC >0.835) but effect sizes below statistical significance.
+
+**Target months**: 2022-12 AUC +0.0098 (biggest gain, supporting hypothesis). 2022-09 AUC flat, AP -0.0091 (didn't help, contradicting hypothesis for this month).
+
+**Key Insight**: The 14-month window is the first lever to produce a positive AUC signal across iterations. Effect is small but distributed (not single-outlier driven for AUC). The window expansion helps 2022-12 substantially but cannot address 2022-09, suggesting different failure modes at those two months. The 2022-09 weakness (lowest binding rate at 6.63%, AP consistently worst across all versions) likely reflects a fundamental feature-target mismatch rather than insufficient training diversity.
+
+**Lesson**: Window expansion provides a small, real improvement and should be retained as the new default. But it alone cannot break decisively past AUC ~0.836. Combining with interaction features (H6) is the next test of additivity. If combined effect is still <+0.003 AUC, the 14-feature set has a hard ceiling and fundamentally new features are needed.

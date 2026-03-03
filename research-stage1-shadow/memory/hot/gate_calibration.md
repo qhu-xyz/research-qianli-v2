@@ -58,3 +58,15 @@ Calibrated from real-data v0 benchmark (commit d167090). Gate floors set as:
 - VCAP@100 floor (-0.035) remains non-binding. v0002 VCAP@100 min=0.0000, still far above tail_floor (-0.0995). High variance metric (std=0.013, min=0.000, max=0.046).
 - BRIER headroom back to +0.020 (v0002 BRIER=0.1505 vs floor=0.170) — interaction features had negligible calibration effect
 - **Cumulative**: After 2 real-data experiments, no version has improved beyond v0 on Group A metrics. Gates are not too tight (not blocking good candidates) — there simply haven't been improvements to promote yet.
+
+## Iteration 1 Observations (v0003, feat-eng-20260302-194243)
+
+- All floors remain appropriate — v0003 passed all 3 layers with ~0.05 headroom on mean
+- No gate calibration changes recommended (3 real-data iterations now)
+- v0003 gate headroom: AUC +0.0513, AP +0.0512, VCAP@100 +0.0534, NDCG +0.0519 — all stable and consistent with v0
+- **BRIER headroom narrowing**: v0003 BRIER=0.1514 vs floor=0.1703, headroom=0.0189 (was 0.0200 for v0). Not critical but if trend continues, BRIER could become binding.
+- **CAP@100 headroom narrowing**: v0003 mean=0.7708 vs floor=0.7325, headroom=0.0383 (was 0.0500 for v0). CAP has very high variance (std=0.25), so floor is loose relative to variability but tightening.
+- **CAP@500 headroom narrowing**: v0003 mean=0.7633 vs floor=0.7240, headroom=0.0393 (was 0.0500 for v0). Similar trajectory as CAP@100.
+- Layer 3 still disabled (champion=null). Against v0 reference: AUC bot2 +0.0057, AP bot2 -0.0045, NDCG bot2 -0.0059, VCAP@100 bot2 +0.0002 — all within 0.02 tolerance.
+- Codex suggestion for metric-specific Layer 3 tolerances (AUC/AP/NDCG ~0.005-0.01, VCAP@100 looser) remains valid. Need 2+ more iterations to calibrate.
+- **Cumulative**: After 3 real-data experiments, deltas are consistently small (±0.003 AUC, ±0.003 AP, ±0.005 NDCG, ±0.005 VCAP@100). This gives a natural range for future tolerance calibration.

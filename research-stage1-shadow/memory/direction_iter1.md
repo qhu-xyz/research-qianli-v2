@@ -1,165 +1,159 @@
-# Direction — Iteration 1 (feat-eng-2-20260303-092848, v0006)
+# Direction — Iter 1 (feat-eng-3-20260303-104101)
 
-## Hypothesis H9: Shift Factor + Constraint Metadata Features
+## Hypothesis H10: Distribution Shape + Near-Boundary Band + Seasonal Historical Features
 
-**Hypothesis**: Adding 6 new features from entirely new signal categories (network topology via shift factors + constraint structural metadata) will break the AUC ceiling at ~0.836 because the current model is feature-starved, not complexity-starved. These features capture WHERE in the network a constraint sits (shift factors) and WHAT TYPE of constraint it is (interface vs line, MW limit) — information completely absent from the current density-curve-based feature set.
-
-**Evidence supporting this hypothesis**:
-1. 6 real-data experiments confirmed the model is feature-limited: HP tuning (-0.0025 AUC), window expansion (+0.0013 ceiling), interaction features (+0.0000), feature pruning (tradeoff only). The AUC operating range across all experiments is [0.832, 0.836] — a 0.004 span.
-2. Feature importance shows 79% of model signal comes from historical trend/level features. Physical flow features provide only 18%. Adding a completely independent signal class (network topology) could break the ceiling.
-3. The source data loader already computes all 6 features — they just need to be wired through.
+**Core idea**: v0007's shift factors broke the AUC ceiling by adding network topology signal, but NDCG remained flat (5W/7L, bot2 regressed -0.0154). The new features help separate binders from non-binders (AUC) but don't help rank AMONG binders. Distribution shape and near-boundary features should improve ranking quality (NDCG) because they capture HOW strongly a constraint is likely to bind, not just WHETHER it will bind.
 
 ## Specific Changes
 
-### 1. Verify new columns exist in loaded DataFrame
+### Add 7 new source-loader features (19 → 26 features)
 
-In `ml/data_loader.py`, add a diagnostic print after data loading (after `train_data = pl.from_pandas(train_data_pd)`, around line 122):
+All 7 features are confirmed present in the source data loader (`research-spice-shadow-price-pred-qianli/src/shadow_price_prediction/data_loader.py`). They flow through `load_training_data()` into the DataFrame. No computation needed in features.py — just wire them through.
+
+| Feature | Monotone | Physical meaning |
+|---------|----------|-----------------|
+| `density_mean` | 1 | Expected flow as fraction of limit. Higher = closer to binding. Captures distribution location — two constraints with same prob_exceed_100 but different density_mean have very different binding profiles. |
+| `density_variance` | 0 | Flow uncertainty. High variance = wide distribution = harder to predict. May help calibration and worst-month robustness. |
+| `density_entropy` | 0 | Information content of flow distribution. High entropy = uniform/uninformative density. Low entropy = peaked/certain. |
+| `tail_concentration` | 1 | prob_exceed_100 / (prob_exceed_80 + 1e-9). How peaked the tail is near the binding threshold. Discriminates "gradually increasing" from "sharply peaked at limit" profiles. |
+| `prob_band_95_100` | 1 | P(95% < flow < 100%). Mass in the near-binding band. Constraints with mass concentrated here are "on the edge" — strong NDCG discriminators. |
+| `prob_band_100_105` | 1 | P(100% < flow < 105%). Mass in mild overload. Captures severity gradient among binders. |
+| `hist_da_max_season` | 1 | Peak seasonal DA shadow price. Captures extreme historical events that the mean (hist_da) misses. Enriches historical signal — the #1 importance category. |
+
+### File changes required
+
+#### 1. `ml/config.py` — FeatureConfig.step1_features
+
+Add after the constraint metadata section:
 
 ```python
-# Diagnostic: verify new feature columns are available
-new_cols = ["sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"]
-available = [c for c in new_cols if c in train_data.columns]
-missing = [c for c in new_cols if c not in train_data.columns]
-print(f"[data_loader] new feature columns available: {available}")
-if missing:
-    print(f"[data_loader] WARNING: missing columns: {missing}")
+# --- Distribution shape features ---
+("density_mean", 1),
+("density_variance", 0),
+("density_entropy", 0),
+# --- Near-boundary band features ---
+("tail_concentration", 1),
+("prob_band_95_100", 1),
+("prob_band_100_105", 1),
+# --- Historical enrichment ---
+("hist_da_max_season", 1),
 ```
 
-**If any columns are missing**: The source loader may require specific config flags or the columns may be named differently. Check the source loader's `load_training_data()` output columns and adapt. Do NOT proceed with missing columns — report in handoff.
+#### 2. `ml/features.py` — source_features set
 
-### 2. Update `ml/config.py` — FeatureConfig
-
-Replace the `step1_features` list to add 6 new features (20 total: 13 retained from v0006 + 1 restored + 6 new):
+Expand the `source_features` set to include the new columns:
 
 ```python
-step1_features: list[tuple[str, int]] = field(
-    default_factory=lambda: [
-        # --- Density exceedance probabilities (core 5) ---
-        ("prob_exceed_110", 1),
-        ("prob_exceed_105", 1),
-        ("prob_exceed_100", 1),
-        ("prob_exceed_95", 1),
-        ("prob_exceed_90", 1),
-        # --- Density below-threshold probabilities ---
-        ("prob_below_100", -1),
-        ("prob_below_95", -1),
-        ("prob_below_90", -1),
-        # --- Severity signal ---
-        ("expected_overload", 1),
-        # --- Historical DA shadow price ---
-        ("hist_da", 1),
-        ("hist_da_trend", 1),
-        # --- Interaction features (retained: top 2 of 3) ---
-        ("hist_physical_interaction", 1),
-        ("overload_exceedance_product", 1),
-        # --- NEW: Shift factor features (network topology) ---
-        ("sf_max_abs", 1),      # peak node sensitivity
-        ("sf_mean_abs", 1),     # average sensitivity
-        ("sf_std", 0),          # sensitivity spread (unconstrained)
-        ("sf_nonzero_frac", 0), # constraint reach (unconstrained)
-        # --- NEW: Constraint metadata ---
-        ("is_interface", 0),    # flowgate vs line (unconstrained)
-        ("constraint_limit", 0), # MW limit log-transformed (unconstrained)
-    ]
-)
+source_features = {
+    "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac",
+    "is_interface", "constraint_limit",
+    "density_mean", "density_variance", "density_entropy",
+    "tail_concentration", "prob_band_95_100", "prob_band_100_105",
+    "hist_da_max_season",
+}
 ```
 
-**Key design decisions**:
-- Start from the v0004 feature set (13 features from v0006 + the 2 interaction features already present = current 13). This is the CURRENT config (v0006 config has 13 features). We keep all 13 and ADD 6.
-- `sf_max_abs` and `sf_mean_abs` get monotone=1 (higher sensitivity → more likely to bind)
-- `sf_std`, `sf_nonzero_frac`, `is_interface`, `constraint_limit` get monotone=0 (direction uncertain)
-- Total: 19 features (13 current + 6 new)
+#### 3. `ml/data_loader.py` — diagnostic check in `_load_real()`
 
-### 3. Update `ml/features.py` — prepare_features()
+Expand the `new_cols` list to include all source-loader features:
 
-The new features (sf_max_abs, sf_mean_abs, sf_std, sf_nonzero_frac, is_interface, constraint_limit) should already exist in the DataFrame from the source loader. They do NOT require computation like interaction features. Update the `missing` check to also exclude them from the "must compute" set:
-
-In `prepare_features()`, update the missing-column check. Currently:
 ```python
-interaction_cols = {"exceed_severity_ratio", "hist_physical_interaction", "overload_exceedance_product"}
-...
-missing = set(cols) - set(df.columns) - interaction_cols
+new_cols = [
+    "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac",
+    "is_interface", "constraint_limit",
+    "density_mean", "density_variance", "density_entropy",
+    "tail_concentration", "prob_band_95_100", "prob_band_100_105",
+    "hist_da_max_season",
+]
 ```
 
-The new features are NOT interaction features — they come from the source loader. The existing logic should work if they're in the DataFrame. **However**, verify this by:
-1. First checking if the columns exist in df.columns
-2. If any new column is missing, raise a clear error (not silently fill with 0)
+#### 4. `ml/data_loader.py` — `_load_smoke()` synthetic data
 
-Add after the interaction computation block:
+Add synthetic generators for the 7 new features:
+
 ```python
-# Verify source-loader features exist (not computed here — must come from data_loader)
-source_features = {"sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"}
-source_needed = source_features & set(cols)
-source_missing = source_needed - set(df.columns)
-if source_missing:
-    raise ValueError(
-        f"Source-loader features missing from DataFrame: {source_missing}. "
-        f"These must come from MisoDataLoader. Available columns: {sorted(df.columns)}"
-    )
+# Distribution shape features
+data["density_mean"] = (rng.uniform(0.5, 1.2, n) * np.where(binding, 1.05, 0.85)).tolist()
+data["density_variance"] = np.abs(rng.randn(n) * 0.1).tolist()
+data["density_entropy"] = rng.uniform(1.0, 5.0, n).tolist()
+
+# Near-boundary band features
+data["tail_concentration"] = np.where(binding, rng.uniform(0.3, 0.9, n), rng.uniform(0.01, 0.3, n)).tolist()
+data["prob_band_95_100"] = np.abs(rng.randn(n) * 0.05).tolist()
+data["prob_band_100_105"] = np.abs(rng.randn(n) * 0.03).tolist()
+
+# Historical enrichment
+data["hist_da_max_season"] = np.where(binding, rng.lognormal(2, 1, n), rng.exponential(0.5, n)).tolist()
 ```
 
-### 4. Update `ml/data_loader.py` — _load_smoke()
-
-The smoke test generator needs to produce the new columns. Add synthetic values:
+Also add these to `sf_meta_features` (rename to `source_loader_features`):
 ```python
-# Add new feature columns for smoke test
-for feat in ["sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"]:
-    if feat == "is_interface":
-        data[feat] = (rng.random(n) < 0.3).astype(float).tolist()  # 30% interface
-    elif feat == "constraint_limit":
-        data[feat] = np.log1p(rng.uniform(100, 2000, n)).tolist()  # log-transformed MW
-    else:
-        data[feat] = np.abs(rng.randn(n)).tolist()  # positive SF features
+source_loader_features = {
+    "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac",
+    "is_interface", "constraint_limit",
+    "density_mean", "density_variance", "density_entropy",
+    "tail_concentration", "prob_band_95_100", "prob_band_100_105",
+    "hist_da_max_season",
+}
 ```
 
-### 5. Update tests
+#### 5. Tests — update expected feature counts and lists
 
-In `ml/tests/`, update any test that checks feature count, feature names, or monotone constraint strings to account for the new 19-feature configuration.
+Update test assertions for feature count (19 → 26) and any hardcoded feature lists.
 
-### 6. Do NOT change
+### What NOT to change
 
-- `train_months`: keep at 14 (HARD MAX)
-- `threshold_beta`: keep at 0.7
-- HPs: keep v0 defaults
-- `evaluate.py`: do NOT modify
-- `gates.json`: do NOT modify
+- Hyperparameters: keep v0 defaults (n_estimators=200, max_depth=4, etc.)
+- train_months: keep 14 (HARD MAX)
+- threshold_beta: keep 0.7
+- Existing 19 features: do NOT remove any
+- gates.json and evaluate.py: NEVER modify
+
+### Worker verification checklist
+
+1. **Before coding**: Print all available columns from the source loader DataFrame to confirm the 7 new columns exist
+2. **After config change**: Run smoke tests (`SMOKE_TEST=true python -m pytest ml/tests/ -v`)
+3. **After real data run**: Verify 26 features in model, check feature importance report
+4. **Critical check**: NDCG bot2 ≥ 0.6362 (L3 floor). If below, the version CANNOT be promoted.
 
 ## Expected Impact
 
-| Metric | Expected Direction | Reasoning |
-|--------|-------------------|-----------|
-| S1-AUC | **+0.003 to +0.010** | Network topology is a fundamentally new signal class. If shift factors discriminate at all, this could push AUC past 0.840. |
-| S1-AP | **+0.005 to +0.015** | More features for positive-class ranking. AP has been stagnant at ~0.394. |
-| S1-VCAP@100 | **+0.005 to +0.020** | Topology features may help rank the most valuable constraints. |
-| S1-NDCG | **+0.005 to +0.015** | Better ranking quality overall. |
-| S1-BRIER | **neutral to +0.003** | More features could slightly degrade calibration (ongoing trend). |
+| Metric | v0007 (champion) | Expected direction | Reasoning |
+|--------|------------------|-------------------|-----------|
+| S1-AUC | 0.8485 | Maintain or improve (+0.005?) | Adding information; distribution features are orthogonal to shift factors |
+| S1-AP | 0.4391 | Maintain or improve | density_mean and hist_da_max_season directly help positive class ranking |
+| S1-NDCG | 0.7333 | **Improve (+0.01 to +0.02)** | Band features discriminate binding intensity — directly targets ranking quality |
+| S1-VCAP@100 | 0.0247 | Improve | Better ranking → better value capture at top |
+| S1-BRIER | 0.1395 | Maintain | More features may help calibration slightly |
 
-**Success criteria** (from human input):
-- **Promotion-worthy**: AUC > 0.840 AND 8+/12 wins AND AP > 0.400
-- **Encouraging**: AUC > 0.837 with 7+/12 wins → continue refining
-- **Marginal**: AUC 0.835-0.837 → features helped but not enough
-- **Dead end**: AUC ≤ 0.835 or <6/12 wins → features don't discriminate, pivot
+**Target for promotion**: Maintain AUC ≥ 0.845, AP ≥ 0.430, and improve NDCG to ≥ 0.740 with bot2 ≥ 0.660.
 
 ## Risk Assessment
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| SF columns missing from source loader output | LOW | Verified: source loader computes all 6. Diagnostic print will catch issues. |
-| SF features are noise (no discriminative power) | MEDIUM | Even if SF features are weak, they shouldn't HURT (monotone constraints prevent overfitting). 6 experiments show feature additions don't degrade AUC. |
-| AP bot2 continues declining (now at -0.0094 vs v0) | MEDIUM | More features could either help (more signal) or hurt (more complexity for weak months). Monitor closely. Margin to Layer 3 fail is 0.0106. |
-| BRIER headroom narrows further (now 0.0163) | MEDIUM | Group B (non-blocking). More features historically worsen BRIER slightly (+0.002-0.004). |
-| Memory/compute increase from 6 more features | LOW | 19 features is still modest for XGBoost. No OOM risk. |
-| Smoke test fails on new columns | LOW | Explicitly adding synthetic data for new columns in _load_smoke(). |
+1. **Feature existence**: LOW — all 7 confirmed in source loader code. Worker should still verify at runtime.
+2. **Overfitting**: LOW-MEDIUM — 26 features with 200 trees and colsample_bytree=0.8 (only ~21 features sampled per tree). The regularization should be adequate.
+3. **NDCG regression**: MEDIUM — if distribution shape features add noise to relative ordering among binders, NDCG could worsen. Bot2 floor is 0.6362 — margin is thin.
+4. **Memory**: LOW — 7 additional float columns on ~270K rows = ~15 MB. Well within budget.
 
-## Feature Importance Watch
+## Layer 3 Non-Regression Floors (v0007 as champion)
 
-After training, check feature importance for the 6 new features:
-- If sf_max_abs or sf_mean_abs are in the top 5 → strong signal, this is a breakthrough
-- If all 6 are below 2% → they're noise, but the base model is unaffected
-- If is_interface or constraint_limit show >5% → structural metadata matters, explore further in iter 2
+These are the absolute floors the new version must meet:
 
-## Connection to Future Iterations
+| Metric | Champion bot2 | L3 floor (bot2 - 0.02) |
+|--------|--------------|------------------------|
+| S1-AUC | 0.8188 | **0.7988** |
+| S1-AP | 0.3685 | **0.3485** |
+| S1-VCAP@100 | 0.0094 | **-0.0106** |
+| S1-NDCG | 0.6562 | **0.6362** (tightest) |
 
-- **If H9 succeeds (AUC > 0.837)**: Iter 2 adds distribution shape + probability band features (density_mean, density_variance, density_entropy, tail_concentration, prob_band_95_100, prob_band_100_105). Cumulative with iter 1.
-- **If H9 is marginal (0.835-0.837)**: Iter 2 tries a "kitchen sink" approach — add ALL remaining features at once (~25 features), then prune in iter 3.
-- **If H9 fails (≤ 0.835)**: Iter 2 pivots to ranking-focused objectives (LambdaRank) or selective monotone constraint relaxation, since new data sources didn't help.
+## Why these features and not others
+
+- **NOT density_skewness/kurtosis/cv**: These were in v0's original 14 features and were identified as noise candidates (1.3% combined importance). Removed during v0006 feature pruning. density_mean/variance/entropy are strictly more informative — they capture location and spread, not just higher-order shape moments.
+- **NOT forecast_horizon**: Always 0 for f0 (prompt month). Would be a constant column. Useful only if/when we model f1/f2.
+- **NOT derived interactions** (sf_x_exceed, hist_da_x_sf): Save for iter 2 — let the raw features establish signal first before adding interactions.
+
+## Batch Strategy (3 iterations)
+
+- **Iter 1** (this): Add 7 distribution/band/seasonal features. Establish signal.
+- **Iter 2**: Depends on results. If NDCG improves → add derived interactions (sf_x_exceed, overload_severity). If NDCG flat → try monotone constraint tuning on new features or targeted feature selection.
+- **Iter 3**: Final optimization. If cumulative gains are strong → prepare for HUMAN_SYNC with gate calibration recommendations.

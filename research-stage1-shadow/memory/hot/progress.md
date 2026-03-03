@@ -4,11 +4,11 @@
 
 | Field | Value |
 |-------|-------|
-| Batch | feat-eng-2-20260303-092848 |
-| Iteration | 1 of 3 (synthesis complete, iter 2 next) |
-| State | ORCHESTRATOR_SYNTHESIZING → iter 2 planning next |
-| Champion | **v0007** (PROMOTED — first champion) |
-| Current Hypothesis | H9 strongly confirmed → H10 (NDCG recovery + feature expansion) |
+| Batch | feat-eng-3-20260303-104101 |
+| Iteration | 1 of 3 (planning complete, worker next) |
+| State | ORCHESTRATOR_PLANNING → WORKER |
+| Champion | **v0007** (19 features, AUC=0.8485, AP=0.4391) |
+| Current Hypothesis | H10: Distribution shape + near-boundary band + seasonal historical features (19→26 features) |
 
 ## v0007 Champion Summary
 
@@ -26,12 +26,12 @@
 
 ## This Batch Strategy
 
-**Human directive**: Aggressive feature engineering. The ~0.836 AUC ceiling is a feature ceiling. Source loader has 15+ unused features. Priority is adding many new features, not tweaking parameters. train_months=14 is HARD MAX.
+**Human directive**: Aggressive feature engineering. The ~0.836 AUC ceiling was broken by v0007 (+0.014). Continue adding new signal categories from the source loader. 7 features available from distribution shape, near-boundary bands, and seasonal historical signal.
 
 ### Planned Iterations
-- **Iter 1**: H9 — Add 6 shift factor + constraint metadata features. **DONE — PROMOTED v0007.**
-- **Iter 2**: H10 — NDCG recovery via distribution shape features + monotone constraint tuning on v0007 base. Target: maintain AUC/AP gains, recover NDCG.
-- **Iter 3**: Depends on iter 2 results.
+- **Iter 1**: H10 — Add 7 features (density_mean, density_variance, density_entropy, tail_concentration, prob_band_95_100, prob_band_100_105, hist_da_max_season). Target: maintain AUC/AP, improve NDCG. **PLANNING COMPLETE.**
+- **Iter 2**: Depends on iter 1 results. If NDCG improves → add derived interactions. If flat → monotone tuning or feature selection.
+- **Iter 3**: Final optimization + HUMAN_SYNC preparation.
 
 ## Cumulative Evidence (all real-data experiments)
 
@@ -58,3 +58,4 @@
 | feat-eng-060938 iter2 | Window 18 + importance (v0005) | H7 failed |
 | feat-eng-060938 iter3 | Feature pruning 17-13 (v0006) | H8 tradeoff discovery |
 | **feat-eng-2-092848 iter1** | **SF + metadata features (v0007)** | **H9 STRONGLY CONFIRMED — PROMOTED** |
+| feat-eng-2-092848 iter2 | Orchestrator timeout | Did not execute |

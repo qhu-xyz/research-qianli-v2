@@ -1,104 +1,139 @@
-# Direction — Iteration 2 (feat-eng-20260303-060938, v0005)
+# Direction — Iteration 2 (feat-eng-20260303-060938)
 
-## Hypothesis: H7 — Extended Training Window (18 months) + Feature Importance Analysis
+## Hypothesis H7: Extended Training Window (18 months) + Feature Importance Diagnostic
 
-**Core question**: Does further window expansion (14→18 months) continue the positive trend, and which features actually drive the model's predictions?
+**Core question**: Does further window expansion (14→18 months) continue the positive AUC trend, and which of the 17 features actually drive predictions?
 
-Iteration 1 (v0004) established that 14-month window + 17 features produces the best results so far: AUC 9W/3L, VCAP@100 10W/2L (p=0.039). Window expansion has been the most productive single lever. If the marginal benefit of +4 months hasn't diminished, train_months=18 could push AUC toward 0.838+.
+**Rationale**: Window expansion has been the only productive lever across 4 real-data experiments. The 10→14 expansion gave AUC +0.0013 (7W/4L). If the marginal benefit of additional training diversity hasn't saturated, train_months=18 could push AUC toward 0.837+. This iteration also collects the first empirical feature importance data — after 4 experiments, we still don't know which features drive the model. This data is essential for iter 3 strategy (prune noise vs add new features).
 
-Simultaneously, we need feature importance data to inform iter 3. After 4 experiments, we've confirmed the feature set has a ceiling (~AUC 0.836). Understanding which features contribute most (and which might be noise) is essential for deciding whether to prune or expand in iter 3.
+## Specific Changes (Priority Order)
 
-## Specific Changes
+### Change 1 (PRIMARY): Expand training window from 14 to 18 months
 
-### 1. Change train_months from 14 to 18 (MAIN CHANGE)
+**File**: `ml/config.py`, line 95
+**What**: Change `train_months: int = 14` → `train_months: int = 18` in `PipelineConfig`
 
-**File**: `ml/config.py` → `PipelineConfig.train_months`
+This gives the model 80% more training data than v0's original 10-month window and 29% more than v0004's 14-month window. The increased seasonal diversity should help late-2022 months especially.
 
-Change `train_months = 14` to `train_months = 18`.
+**Feasibility**: Earliest eval month is 2020-09. With train_months=18 + val_months=2 = 20 months lookback, the model needs data from ~2019-01. MISO data should go back further than this. If data is unavailable for early months, reduce to train_months=16 as fallback and document.
 
-This gives the model 80% more training data than v0's original 10-month window and 29% more than v0004's 14-month window. The increased diversity should help late-2022 months especially.
+### Change 2 (SECONDARY): Export feature importance from each trained model
 
-**Feasibility check**: The earliest eval month is 2020-09. With train_months=18 + val_months=2, the model needs data starting from 2019-01. Verify that the data loader can provide data from this period. If the earliest available data starts later than 2019-01, reduce train_months to the maximum feasible value and document what was used.
+**File**: `ml/benchmark.py`
 
-### 2. Keep all 17 features (NO CHANGE)
+Capture XGBoost's gain-based feature importance during the per-month evaluation loop, then save to a separate JSON file. Implementation:
 
-`ml/config.py` → `FeatureConfig.step1_features` should remain with all 17 features (14 base + 3 interactions). Per D28: v0004 is the best config found so far; changing features simultaneously with window would confound the experiment.
+**Step A** — In `_eval_single_month()`, capture importance before cleanup. Between the `evaluate_classifier` call (line 81) and the cleanup `del` block (line 84), add:
 
-### 3. Keep v0 HP defaults (NO CHANGE)
-
-`ml/config.py` → `HyperparamConfig` should remain at v0 defaults:
-- n_estimators=200, max_depth=4, learning_rate=0.1
-- subsample=0.8, colsample_bytree=0.8
-- reg_alpha=0.1, reg_lambda=1.0, min_child_weight=10
-
-### 4. Export feature importance across all eval months (NEW — DIAGNOSTIC)
-
-**After** the benchmark pipeline completes, add a step to extract and save per-month feature importance:
-
-**Output file**: `registry/${VERSION_ID}/feature_importance.json`
-
-For each of the 12 eval months, extract XGBoost's gain-based feature importance from the trained model. Save as a JSON structure:
-```json
-{
-  "importance_type": "gain",
-  "per_month": {
-    "2020-09": {"prob_exceed_110": 0.XX, "prob_exceed_105": 0.XX, ...},
-    ...
-  },
-  "aggregate": {
-    "mean": {"prob_exceed_110": 0.XX, ...},
-    "std": {"prob_exceed_110": 0.XX, ...}
-  }
-}
+```python
+# Feature importance (gain-based)
+importance = dict(zip(feature_config.features, model.feature_importances_.tolist()))
+metrics["_feature_importance"] = importance
 ```
 
-Implementation approach:
-- After `run_benchmark()` completes, the model objects should be accessible (or re-loadable from the gzipped .ubj files in the registry).
-- Use `model.get_score(importance_type='gain')` for XGBoost models.
-- If models are discarded after evaluation, modify `_eval_single_month()` to return the model along with metrics, or extract importance during the eval loop.
-- This is a **diagnostic output only** — it does not affect model training or evaluation. If implementation proves complex (e.g., requires significant refactoring to retain model objects), the worker may skip this step and note it in the handoff. The priority is the train_months=18 experiment.
+Note the underscore prefix `_feature_importance` to signal it's metadata, not a gate metric.
 
-### 5. No bug fixes needed this iteration
+**Step B** — In `run_benchmark()`, extract importance from per_month dicts BEFORE calling `aggregate_months()`. After the eval loop (after `per_month[month] = metrics` on line 178) and before `agg = aggregate_months(per_month)` on line 188, add:
 
-The f2p parsing and dual-default fragility were fixed in v0004. No new HIGH or MEDIUM code issues require immediate attention.
+```python
+# Extract feature importance before aggregation (not a numeric metric)
+importance_per_month = {}
+for month in list(per_month.keys()):
+    imp = per_month[month].pop("_feature_importance", None)
+    if imp:
+        importance_per_month[month] = imp
+```
 
-## Execution Order
+**Step C** — After writing metrics.json (around line 213), save feature importance to a separate file:
 
-1. Change `train_months` from 14 to 18 in config.py
-2. Run tests: `python -m pytest ml/tests/ -v`
-3. Run benchmark pipeline (full 12-month eval)
-4. Extract and save feature importance (if feasible without major refactoring)
-5. Run validate + compare against v0
-6. Commit, then write handoff
+```python
+if importance_per_month:
+    import statistics
+    all_features = list(next(iter(importance_per_month.values())).keys())
+    mean_imp = {}
+    std_imp = {}
+    for feat in all_features:
+        vals = [importance_per_month[m].get(feat, 0.0) for m in importance_per_month]
+        mean_imp[feat] = statistics.mean(vals)
+        std_imp[feat] = statistics.stdev(vals) if len(vals) > 1 else 0.0
+
+    fi_data = {
+        "importance_type": "gain",
+        "n_months": len(importance_per_month),
+        "per_month": importance_per_month,
+        "aggregate": {
+            "mean": mean_imp,
+            "std": std_imp,
+        },
+        "ranked": sorted(mean_imp.items(), key=lambda x: x[1], reverse=True),
+    }
+    with open(version_dir / "feature_importance.json", "w") as f:
+        json.dump(fi_data, f, indent=2)
+    print(f"[benchmark] Wrote feature importance to {version_dir / 'feature_importance.json'}")
+```
+
+**Critical**: The `_feature_importance` key MUST be popped from per_month dicts before `aggregate_months()` is called. The aggregation function expects only numeric values and will crash or produce garbage if it encounters a dict.
+
+**Priority note**: If implementing feature importance proves complex (e.g., breaks tests, requires significant refactoring), the worker MAY skip it and note in the handoff. The window expansion experiment is the primary deliverable. Feature importance is a valuable diagnostic but not blocking.
+
+### Change 3: No feature changes
+
+Keep all 17 features (14 base + 3 interactions) in `FeatureConfig`. Do NOT modify.
+
+### Change 4: No hyperparameter changes
+
+Keep all HPs at v0 defaults in `HyperparamConfig`. Do NOT modify.
+
+### Change 5: Update tests
+
+- Update any tests that assert `train_months == 14` to expect `18`
+- If adding feature importance to benchmark, ensure existing test assertions on metrics.json structure still pass (importance should be in a separate file, not in metrics.json)
 
 ## Expected Impact
 
-| Metric | v0 Baseline | v0004 (iter 1) | Expected v0005 (if trend continues) | Expected (if diminishing returns) |
-|--------|-------------|----------------|--------------------------------------|-----------------------------------|
+| Metric | v0 Baseline | v0004 (iter 1) | Expected v0005 (trend continues) | Expected (diminishing returns) |
+|--------|-------------|----------------|----------------------------------|-------------------------------|
 | S1-AUC | 0.8348 | 0.8363 | 0.837–0.839 | 0.836–0.837 |
-| S1-AP | 0.3936 | 0.3951 | 0.396–0.400 | ~0.395 |
-| S1-VCAP@100 | 0.0149 | 0.0205 | 0.022–0.028 | ~0.021 |
+| S1-AP | 0.3936 | 0.3951 | 0.396–0.400 | ~0.395 (flat) |
+| S1-VCAP@100 | 0.0149 | 0.0205 | 0.022–0.028 | ~0.020 |
 | S1-NDCG | 0.7333 | 0.7371 | 0.738–0.742 | ~0.737 |
-| AUC W/L vs v0 | — | 9W/3L | ≥9/12 | 7-8/12 |
+| AUC W/L vs v0 | — | 9W/3L | ≥9/12 | 7–8/12 |
 
-**Success criteria**:
-- **Promotion-worthy**: AUC > 0.837 AND ≥8/12 wins AND AP > 0.396 AND no Group A gate failures
-- **Encouraging (refine in iter 3)**: AUC > 0.836, VCAP@100 continues to improve, feature importance data collected
-- **Diminishing returns (pivot in iter 3)**: AUC ≤ 0.836 or fewer wins than v0004 → window expansion has peaked, pivot to feature importance-guided pruning
+**Honest assessment**: Diminishing returns is the more likely outcome. The 10→14 expansion was only +0.0013 AUC, and older training data (2018-2019) may be less informative than the recent months already in the window. The primary value of this iteration is the feature importance diagnostic data.
 
 ## Risk Assessment
 
-1. **Diminishing returns from window expansion (MEDIUM)**: The 10→14 jump gave +0.0013 AUC. The 14→18 jump may give less if the additional 4 months of historical data are less informative. Mitigation: even if AUC gain is zero, the feature importance data makes this iteration worthwhile for informing iter 3.
+1. **Diminishing returns (MEDIUM probability)**: 14→18 may give AUC +0.0005 or less. Mitigation: even zero AUC gain is acceptable if we get feature importance data to guide iter 3.
 
-2. **Data availability for early months (MEDIUM)**: With train_months=18, the 2020-09 eval month needs training data from 2019-01. If data doesn't go back that far, early eval months may fail or use truncated training windows. Mitigation: the worker should check data availability first. If insufficient, reduce to train_months=16 as fallback and document.
+2. **VCAP@500 may breach Group B floor (LOW-MEDIUM)**: v0004 bot2=0.0387 vs floor=0.0408 (margin 0.0021). Three consecutive experiments show VCAP@500 regression. Mitigation: Group B, non-blocking. Document if breached.
 
-3. **VCAP@500 breaching Group B floor (LOW-MEDIUM)**: v0004 bot2=0.0387 is only 0.0021 above the floor. Further window expansion may push this below 0.0408. Mitigation: Group B is non-blocking. Document the breach if it occurs and flag for HUMAN_SYNC.
+3. **Data availability for early eval months (LOW)**: 2020-09 needs ~2019-01 training data. Should be available. If not, reduce to train_months=16 as fallback.
 
-4. **BRIER regression (LOW)**: BRIER has narrowed to 0.0187 headroom. Adding 4 more training months may further degrade calibration. Mitigation: Group B, non-blocking. Monitor.
+4. **BRIER headroom narrowing (LOW concern)**: Currently 0.0187. More data slightly degrades calibration. Group B, non-blocking.
 
-5. **2022-09 still stuck (HIGH likelihood, LOW impact)**: This month has resisted 4 interventions. More training data is unlikely to help given the fundamental low-binding-rate issue. Mitigation: expected failure, document. Iter 3 may need different approach.
+5. **2022-09 still stuck (HIGH likelihood, LOW impact)**: This month's AP=0.307 has resisted 4 interventions. Expected failure, document.
 
-6. **Feature importance extraction complexity (LOW)**: If the benchmark pipeline doesn't retain trained models, extracting importance requires refactoring. Mitigation: this is marked as optional — worker should prioritize the window expansion experiment.
+## Success Criteria
+
+| Outcome | Criteria | Iter 3 Action |
+|---------|----------|---------------|
+| **Promotion-worthy** | AUC > 0.837, ≥8/12 wins, AP > 0.396 | Promote, end batch |
+| **Encouraging** | AUC ≥ 0.836, 7+/12 wins, feature importance collected | Use importance to guide iter 3 (prune or add features) |
+| **Diminishing returns** | AUC ≤ v0004 (0.8363), or W/L ≤ 6/6 | Window expansion exhausted. Iter 3: feature importance-guided pruning or ratio features |
+| **Regression** | AUC < v0 (0.8348) | Revert to 14-month window. Iter 3: feature pruning |
+
+## Worker Checklist
+
+1. Read VERSION_ID from `${PROJECT_DIR}/state.json` (NOT the worktree copy)
+2. Change `train_months` from 14 to 18 in `ml/config.py` line 95
+3. Add feature importance extraction to `ml/benchmark.py` (per Step A/B/C above)
+4. Update tests if needed: `python -m pytest ml/tests/ -v`
+5. Run benchmark: `python ml/benchmark.py --version-id ${VERSION_ID} --ptype f0 --class-type onpeak`
+6. Verify `registry/${VERSION_ID}/metrics.json` has 12 months (none skipped)
+7. Verify `registry/${VERSION_ID}/feature_importance.json` was created (if implemented)
+8. Run `python ml/validate.py --version-id ${VERSION_ID}` to confirm gate compliance
+9. Run `python ml/compare.py --version-id ${VERSION_ID} --baseline v0` to generate comparison
+10. Commit all changes, then write handoff JSON
 
 ## What NOT To Do
 
@@ -107,5 +142,5 @@ The f2p parsing and dual-default fragility were fixed in v0004. No new HIGH or M
 - Do NOT change val_months (keep 2)
 - Do NOT modify gates.json or evaluate.py
 - Do NOT add or remove features (keep all 17)
-- Do NOT touch registry/v0/ or any other registry/v*/ except registry/v0005/
-- Do NOT invest more than ~30 minutes on feature importance extraction — it's diagnostic, not critical
+- Do NOT touch registry/v0/ or any other registry/v*/ except the assigned VERSION_ID
+- Do NOT invest >30 minutes on feature importance extraction if it proves complex — it's diagnostic, not critical

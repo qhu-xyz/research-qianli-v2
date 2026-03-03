@@ -5,18 +5,18 @@
 | Field | Value |
 |-------|-------|
 | Batch | feat-eng-20260303-060938 |
-| Iteration | 1 of 3 (synthesis complete, iter 2 next) |
-| State | ORCHESTRATOR_SYNTHESIZING → next: WORKER (iter 2) |
+| Iteration | 2 of 3 (planning complete, worker next) |
+| State | ORCHESTRATOR_PLANNING → next: WORKER (iter 2) |
 | Champion | None (v0 baseline) |
-| Last Hypothesis | H6: Combined window + interactions — PARTIALLY CONFIRMED (encouraging, not promoted) |
-| Next Hypothesis | H7: train_months=18 + feature importance export |
+| Last Hypothesis | H6: Combined window + interactions — PARTIALLY CONFIRMED (AUC 9W/3L, VCAP@100 p=0.039) |
+| Current Hypothesis | H7: train_months=18 + feature importance diagnostic |
 
 ## This Batch Strategy
 
 From human input: test additivity of the two positive-signal levers, then refine or pivot.
 - **Iter 1**: H6 — 14-month window + 3 interaction features → **DONE** (AUC +0.0015, 9W/3L, VCAP@100 +0.0056, 10W/2L. Not promoted.)
-- **Iter 2**: H7 — train_months=18 with 17 features + feature importance export (tests continued window expansion + generates data for iter 3 decisions)
-- **Iter 3**: Depends on iter 2 — if 18-month window helps → consider promotion; if diminishing returns → feature importance-guided pruning or new features
+- **Iter 2**: H7 — train_months=18 with 17 features + feature importance export → **IN PROGRESS** (direction written)
+- **Iter 3**: Depends on iter 2 — if 18-month window helps → consider promotion; if diminishing returns → feature importance-guided pruning or ratio features
 
 ## v0004 Key Results (iter 1)
 
@@ -29,6 +29,13 @@ From human input: test additivity of the two positive-signal levers, then refine
 
 All gates pass. Not promoted (AUC < 0.837, AP flat). VCAP@100 is first statistically significant improvement in pipeline history.
 
+## Iter 2 Strategy (H7)
+
+- **Primary**: Expand train_months from 14 to 18 — test if window expansion continues positive trend
+- **Secondary**: Export per-month feature importance (gain-based) — diagnostic data for iter 3 decisions
+- **Expected**: Diminishing returns more likely than breakthrough. Main value is the feature importance data.
+- **Key risks**: VCAP@500 approaching Group B floor (margin 0.0021), BRIER headroom narrowing (0.0187)
+
 ## Cumulative Evidence (all real-data experiments)
 
 | Batch | Lever | AUC Δ | AUC W/L | Promoted |
@@ -37,6 +44,7 @@ All gates pass. Not promoted (AUC < 0.837, AP flat). VCAP@100 is first statistic
 | hp-tune-144146 | Interactions (v0002) | +0.0000 | 5W/6L/1T | No |
 | feat-eng-194243 iter1 | Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | No |
 | feat-eng-060938 iter1 | Window + Interactions (v0004) | +0.0015 | 9W/3L | No |
+| feat-eng-060938 iter2 | Window 18 + importance (v0005) | ? | ? | ? |
 
 ## History
 

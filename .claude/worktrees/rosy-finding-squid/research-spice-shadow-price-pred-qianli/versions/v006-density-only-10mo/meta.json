@@ -1,0 +1,10 @@
+{
+  "model_id": "v006-density-only-10mo",
+  "created": "2026-02-23T15:15:02",
+  "description": "Same-source features only (density + DA history). 10/2/0 split. All density moments + all prob thresholds + hist_da family. No network/metadata features.",
+  "source_commit": "4b3ca42",
+  "algo": "xgb",
+  "status": "candidate",
+  "config_checksum": "sha256:97d9028e87363582",
+  "version_hash": "sha256:39de69e3b5f7aa94c2f23ba1e9082e4f"
+}

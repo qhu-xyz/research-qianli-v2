@@ -1,0 +1,26 @@
+{
+  "description": "Iteration 1: threshold_beta 0.5 -> 2.0",
+  "change_from_baseline": "ThresholdConfig.threshold_beta: 0.5 -> 2.0",
+  "features": {
+    "step1": "9 features (same as current default config)",
+    "step2": "13 features (same as current default config)"
+  },
+  "threshold": {
+    "threshold_beta": 2.0,
+    "threshold_scaling_factor": 1.0
+  },
+  "training": {
+    "split": "6/3/3",
+    "train_months": 6,
+    "val_months": 3,
+    "test_months": 3
+  },
+  "models": {
+    "classifiers": [
+      "XGBClassifier"
+    ],
+    "regressors": [
+      "XGBRegressor"
+    ]
+  }
+}

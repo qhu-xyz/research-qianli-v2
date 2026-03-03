@@ -1,0 +1,10 @@
+{
+  "description": "Iteration 2: F2.0 + density_skewness constraint=0",
+  "changes_from_baseline": [
+    "ThresholdConfig.threshold_beta: 0.5 -> 2.0 (from iter 1)",
+    "density_skewness monotonicity: +1 -> 0 (no constraint)"
+  ],
+  "threshold": {
+    "threshold_beta": 2.0
+  }
+}

@@ -1,0 +1,450 @@
+{
+  "iso": {
+    "name": "MISO",
+    "ap_tools_class": "pbase.analysis.tools.all_positions.MisoApTools",
+    "auction_schedule": {
+      "6": [
+        "f0"
+      ],
+      "7": [
+        "f0",
+        "f1",
+        "q2",
+        "q3",
+        "q4"
+      ],
+      "8": [
+        "f0",
+        "f1",
+        "f2",
+        "f3"
+      ],
+      "9": [
+        "f0",
+        "f1",
+        "f2"
+      ],
+      "10": [
+        "f0",
+        "f1",
+        "q3",
+        "q4"
+      ],
+      "11": [
+        "f0",
+        "f1",
+        "f2",
+        "f3"
+      ],
+      "12": [
+        "f0",
+        "f1",
+        "f2"
+      ],
+      "1": [
+        "f0",
+        "f1",
+        "q4"
+      ],
+      "2": [
+        "f0",
+        "f1",
+        "f2",
+        "f3"
+      ],
+      "3": [
+        "f0",
+        "f1",
+        "f2"
+      ],
+      "4": [
+        "f0",
+        "f1"
+      ],
+      "5": [
+        "f0"
+      ]
+    },
+    "data_paths": {
+      "density_path_template": "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density/auction_month={auction_month}/market_month={market_month}/market_round={market_round}/outage_date={outage_date}",
+      "constraint_path_template": "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/constraint_info/auction_month={auction_month}/market_round={market_round}/period_type={period_type}/class_type={class_type}",
+      "sf_path_template": "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/sf/auction_month={auction_month}/market_month={market_month}/market_round={market_round}/outage_date={outage_date}"
+    },
+    "outage_freq": "3D",
+    "run_at_day": 10
+  },
+  "horizon_groups": [
+    {
+      "name": "f0",
+      "min_horizon": 0,
+      "max_horizon": 0,
+      "description": "Current Month",
+      "weight_config_name": "short_term"
+    },
+    {
+      "name": "f1",
+      "min_horizon": 1,
+      "max_horizon": 1,
+      "description": "Next Month",
+      "weight_config_name": "short_term"
+    },
+    {
+      "name": "long",
+      "min_horizon": 2,
+      "max_horizon": 999,
+      "description": "Long Term (3+ months)",
+      "weight_config_name": "long_term"
+    }
+  ],
+  "period_type": "f0",
+  "class_type": "onpeak",
+  "market_round": 1,
+  "features": {
+    "step1_features": [
+      [
+        "prob_exceed_110",
+        1
+      ],
+      [
+        "prob_exceed_105",
+        1
+      ],
+      [
+        "prob_exceed_100",
+        1
+      ],
+      [
+        "prob_exceed_95",
+        1
+      ],
+      [
+        "prob_exceed_90",
+        1
+      ],
+      [
+        "prob_below_100",
+        -1
+      ],
+      [
+        "prob_below_95",
+        -1
+      ],
+      [
+        "prob_below_90",
+        -1
+      ],
+      [
+        "expected_overload",
+        1
+      ],
+      [
+        "density_skewness",
+        0
+      ],
+      [
+        "density_kurtosis",
+        0
+      ],
+      [
+        "density_cv",
+        0
+      ],
+      [
+        "hist_da",
+        1
+      ],
+      [
+        "hist_da_trend",
+        1
+      ]
+    ],
+    "step2_features": [
+      [
+        "prob_exceed_110",
+        1
+      ],
+      [
+        "prob_exceed_105",
+        1
+      ],
+      [
+        "prob_exceed_100",
+        1
+      ],
+      [
+        "prob_exceed_95",
+        1
+      ],
+      [
+        "prob_exceed_90",
+        1
+      ],
+      [
+        "prob_exceed_85",
+        1
+      ],
+      [
+        "prob_exceed_80",
+        1
+      ],
+      [
+        "prob_below_100",
+        -1
+      ],
+      [
+        "prob_below_95",
+        -1
+      ],
+      [
+        "prob_below_90",
+        -1
+      ],
+      [
+        "expected_overload",
+        1
+      ],
+      [
+        "tail_concentration",
+        1
+      ],
+      [
+        "prob_band_95_100",
+        1
+      ],
+      [
+        "prob_band_100_105",
+        1
+      ],
+      [
+        "density_mean",
+        0
+      ],
+      [
+        "density_variance",
+        0
+      ],
+      [
+        "density_skewness",
+        0
+      ],
+      [
+        "density_kurtosis",
+        0
+      ],
+      [
+        "density_entropy",
+        0
+      ],
+      [
+        "density_cv",
+        0
+      ],
+      [
+        "hist_da",
+        1
+      ],
+      [
+        "hist_da_trend",
+        1
+      ],
+      [
+        "recent_hist_da",
+        1
+      ],
+      [
+        "season_hist_da_1",
+        1
+      ],
+      [
+        "season_hist_da_2",
+        1
+      ],
+      [
+        "season_hist_da_3",
+        1
+      ],
+      [
+        "hist_da_max_season",
+        1
+      ]
+    ],
+    "all_features": [
+      "tail_concentration",
+      "season_hist_da_1",
+      "expected_overload",
+      "prob_exceed_90",
+      "season_hist_da_2",
+      "prob_band_95_100",
+      "season_hist_da_3",
+      "prob_exceed_105",
+      "prob_band_100_105",
+      "density_kurtosis",
+      "prob_exceed_100",
+      "prob_below_90",
+      "prob_exceed_95",
+      "density_skewness",
+      "density_variance",
+      "hist_da_max_season",
+      "prob_exceed_80",
+      "prob_below_100",
+      "density_cv",
+      "density_entropy",
+      "prob_exceed_110",
+      "hist_da_trend",
+      "hist_da",
+      "prob_exceed_85",
+      "recent_hist_da",
+      "density_mean",
+      "prob_below_95"
+    ]
+  },
+  "labeling": {
+    "context_window_days": 7,
+    "decay_end_weight": 0.1,
+    "noise_floor": 1.0
+  },
+  "models": {
+    "default_classifiers": [
+      {
+        "model_class": "<class 'xgboost.sklearn.XGBClassifier'>",
+        "config": {
+          "params": {
+            "n_estimators": 200,
+            "min_child_weight": 10,
+            "n_jobs": 1,
+            "max_depth": 4,
+            "learning_rate": 0.1,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "reg_alpha": 0.1,
+            "reg_lambda": 1.0,
+            "verbosity": 0,
+            "eval_metric": "logloss"
+          }
+        },
+        "weight": 1.0
+      }
+    ],
+    "branch_classifiers": [
+      {
+        "model_class": "<class 'xgboost.sklearn.XGBClassifier'>",
+        "config": {
+          "params": {
+            "n_estimators": 100,
+            "max_depth": 4,
+            "learning_rate": 0.1,
+            "min_child_weight": 1,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "reg_alpha": 0.1,
+            "reg_lambda": 1.0,
+            "n_jobs": 1,
+            "verbosity": 0,
+            "eval_metric": "logloss"
+          }
+        },
+        "weight": 1.0
+      }
+    ],
+    "default_regressors": [
+      {
+        "model_class": "<class 'xgboost.sklearn.XGBRegressor'>",
+        "config": {
+          "params": {
+            "n_estimators": 400,
+            "min_child_weight": 2,
+            "n_jobs": 1,
+            "max_depth": 5,
+            "learning_rate": 0.05,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "reg_alpha": 0.1,
+            "reg_lambda": 1.0,
+            "verbosity": 0,
+            "objective": "reg:squarederror"
+          }
+        },
+        "weight": 1.0
+      }
+    ],
+    "branch_regressors": [
+      {
+        "model_class": "<class 'xgboost.sklearn.XGBRegressor'>",
+        "config": {
+          "params": {
+            "n_estimators": 200,
+            "max_depth": 5,
+            "learning_rate": 0.05,
+            "min_child_weight": 1,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "reg_alpha": 0.1,
+            "reg_lambda": 1.0,
+            "n_jobs": 1,
+            "verbosity": 0,
+            "objective": "reg:squarederror"
+          }
+        },
+        "weight": 1.0
+      }
+    ],
+    "clf_weights": {},
+    "reg_weights": {},
+    "short_term_max_horizon": 1
+  },
+  "training": {
+    "min_samples_for_branch_model": 1,
+    "min_binding_samples_for_regression": 1,
+    "train_months": 10,
+    "val_months": 2,
+    "test_months": 0,
+    "label_threshold": 0,
+    "min_branch_positive_ratio": 0.02,
+    "label_modification_rule": [
+      "prob_exceed_90",
+      1e-05
+    ],
+    "test_unbind_rule": [
+      "prob_exceed_90",
+      1e-05
+    ]
+  },
+  "threshold": {
+    "threshold_beta": 0.7,
+    "threshold_scaling_factor": 1.0,
+    "threshold_override": 0.5
+  },
+  "anomaly_detection": {
+    "enabled": true,
+    "k_multiplier": 3.0,
+    "iqr_range_fraction": 0.3,
+    "min_samples_for_stats": 10,
+    "detection_features": [
+      "prob_exceed_100",
+      "prob_exceed_95"
+    ],
+    "detection_weights": {
+      "prob_exceed_100": 2.0,
+      "prob_exceed_95": 1.0
+    },
+    "detection_threshold": 0.5,
+    "probability_features": [
+      "prob_exceed_100",
+      "prob_exceed_95",
+      "density_skewness"
+    ],
+    "probability_weights": {
+      "prob_exceed_100": 2.0,
+      "prob_exceed_95": 1.5,
+      "density_skewness": 0.7
+    },
+    "sigmoid_alpha": 1.0,
+    "sigmoid_beta": 0.5
+  },
+  "feature_selection": {
+    "method": "both",
+    "fallback_weight": 0.5,
+    "min_correlation": 0.0,
+    "auc_threshold": 0.5
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "model_id": "v005-9mo-training",
+  "created": "2026-02-23T14:16:20",
+  "description": "9-month training window + density_skewness unconstrained + MEAN binding aggregation + relaxed gate floors",
+  "source_commit": "4b3ca42",
+  "algo": "xgb",
+  "status": "candidate",
+  "config_checksum": "sha256:ef69bf9078e6a6a9",
+  "version_hash": "sha256:280f17a92a21d483d8632857ef9e0b31"
+}

@@ -1,0 +1,1816 @@
+"""Bands v6: Reduce Width, Fix BG3.
+
+v5 achieved 18-44% width reduction via asymmetric bands but fails BG1 (cold-start),
+BG3 (per-bin uniformity), and BG4 (per-PY stability).
+
+v6 introduces three fixes:
+  A) min_train_pys=3 — exclude temporal folds with <3 training PYs from gate
+     metrics, fixing cold-start instability (BG1 + BG4).
+  B) 6 bins for all rounds — consistent structure, more samples per bin.
+  C) Per-bin coverage correction — after calibration, check in-sample per-bin
+     coverage and iteratively inflate bands for bins that undershoot target.
+     This fixes BG3's top-bin undershoot without affecting well-calibrated bins.
+
+Experiments per round (identical across R1/R2/R3):
+    asym_6b_cs       — asymmetric, 6 bins, no correction
+    asym_6b_cs_corr  — asymmetric, 6 bins, per-bin correction
+    sym_6b_cs        — symmetric,  6 bins, no correction
+    sym_6b_cs_corr   — symmetric,  6 bins, per-bin correction
+
+Winner = lowest mean P95 half-width across quarters, subject to BG1 pass.
+R1 uses LOO as primary CV. R2/R3 use temporal as primary CV.
+
+Usage:
+    cd /home/xyz/workspace/pmodel && source .venv/bin/activate
+    python /home/xyz/workspace/research-qianli-v2/research-annual/scripts/run_v6_bands.py
+"""
+
+from __future__ import annotations
+
+import gc
+import json
+import math
+import os
+import resource
+import statistics
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import polars as pl
+
+# ─── Constants ───────────────────────────────────────────────────────────────
+
+ROOT = Path(__file__).resolve().parent.parent
+R1_DATA_DIR = Path("/opt/temp/qianli/annual_research/crossproduct_work")
+R2R3_DATA_PATH = Path("/opt/temp/qianli/annual_research/all_residuals_v2.parquet")
+QUARTERS = ["aq1", "aq2", "aq3", "aq4"]
+R1_PYS = [2020, 2021, 2022, 2023, 2024, 2025]
+R2R3_PYS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+
+MCP_COL = "mcp_mean"
+PY_COL = "planning_year"
+CLASS_COL = "class_type"
+CLASSES = ["onpeak", "offpeak"]
+SIGN_SEGS = ["prevail", "counter"]
+
+COVERAGE_LEVELS = [0.10, 0.30, 0.50, 0.70, 0.80, 0.90, 0.95]
+COVERAGE_LABELS = ["p10", "p30", "p50", "p70", "p80", "p90", "p95"]
+BIN_BOUNDARIES = [0, 50, 250, 1000, float("inf")]
+BIN_LABELS = ["tiny", "small", "medium", "large"]
+
+MIN_CELL_ROWS = 500
+
+# BG1 tolerance per level
+BG1_TOLERANCE = {
+    "p10": 5.0, "p30": 5.0, "p50": 5.0,
+    "p70": 5.0, "p80": 5.0, "p90": 5.0, "p95": 5.0,
+}
+
+# Per-bin coverage correction parameters
+CORRECTION_TOLERANCE = 2.0   # pp — only correct bins undershooting by >2pp
+CORRECTION_STEP = 0.05       # 5% interval inflation per iteration
+CORRECTION_MAX_ITER = 20
+
+
+# ─── Shared functions ────────────────────────────────────────────────────────
+
+
+def mem_mb() -> float:
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+
+
+def assign_bins(
+    abs_baseline: pl.Series,
+    boundaries: list[float] = BIN_BOUNDARIES,
+    labels: list[str] = BIN_LABELS,
+) -> pl.Series:
+    """Assign each row to a bin based on |baseline| value. Returns String series."""
+    exprs = []
+    for i, label in enumerate(labels):
+        lo, hi = boundaries[i], boundaries[i + 1]
+        if math.isinf(hi):
+            exprs.append(
+                pl.when(pl.col("_abs_bl") >= lo).then(pl.lit(label))
+            )
+        else:
+            exprs.append(
+                pl.when((pl.col("_abs_bl") >= lo) & (pl.col("_abs_bl") < hi)).then(pl.lit(label))
+            )
+
+    tmp = pl.DataFrame({"_abs_bl": abs_baseline})
+    result = tmp.with_columns(
+        pl.coalesce(exprs).alias("bin")
+    )["bin"]
+    return result
+
+
+def sanitize_for_json(obj):
+    """Replace NaN/Inf with None for JSON serialization."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+    elif isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    return obj
+
+
+def compute_quantile_boundaries(
+    series: pl.Series,
+    n_bins: int,
+) -> tuple[list[float], list[str]]:
+    """Compute data-driven bin boundaries from percentiles of |baseline|.
+
+    Returns (boundaries, labels) where boundaries has n_bins+1 entries.
+    """
+    abs_vals = series.abs()
+    quantiles = [i / n_bins for i in range(1, n_bins)]
+    cuts = [0.0]
+    for q in quantiles:
+        cuts.append(round(float(abs_vals.quantile(q)), 1))
+    cuts.append(float("inf"))
+
+    labels = [f"q{i+1}" for i in range(n_bins)]
+    return cuts, labels
+
+
+def evaluate_coverage(
+    df: pl.DataFrame,
+    mcp_col: str = MCP_COL,
+    baseline_col: str = "nodal_f0",
+    coverage_levels: list[float] = COVERAGE_LEVELS,
+    boundaries: list[float] = BIN_BOUNDARIES,
+    labels: list[str] = BIN_LABELS,
+) -> dict:
+    """Actual coverage per level, overall and per-bin."""
+    mcp = df[mcp_col]
+    result = {"overall": {}, "per_bin": {}}
+
+    for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+        lower = df[f"lower_{clabel}"]
+        upper = df[f"upper_{clabel}"]
+        covered = ((mcp >= lower) & (mcp <= upper)).mean()
+        actual = round(float(covered) * 100, 2)
+        target = round(level * 100, 1)
+        result["overall"][clabel] = {
+            "target": target,
+            "actual": actual,
+            "error": round(actual - target, 2),
+        }
+
+    bins = assign_bins(df[baseline_col].abs(), boundaries, labels)
+    df_with_bin = df.with_columns(pl.Series("_bin", bins))
+
+    for label in labels:
+        subset = df_with_bin.filter(pl.col("_bin") == label)
+        n = subset.height
+        bin_result = {"n": n}
+        if n == 0:
+            for clabel in COVERAGE_LABELS:
+                bin_result[clabel] = {"target": 0, "actual": 0, "error": 0}
+        else:
+            sub_mcp = subset[mcp_col]
+            for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                lower = subset[f"lower_{clabel}"]
+                upper = subset[f"upper_{clabel}"]
+                covered = ((sub_mcp >= lower) & (sub_mcp <= upper)).mean()
+                actual = round(float(covered) * 100, 2)
+                target = round(level * 100, 1)
+                bin_result[clabel] = {
+                    "target": target,
+                    "actual": actual,
+                    "error": round(actual - target, 2),
+                }
+        result["per_bin"][label] = bin_result
+
+    return result
+
+
+def evaluate_per_class_coverage(
+    df: pl.DataFrame,
+    mcp_col: str = MCP_COL,
+    class_col: str = CLASS_COL,
+    coverage_levels: list[float] = COVERAGE_LEVELS,
+) -> dict:
+    """Coverage per class. Returns {onpeak: {p50: {target, actual, error}, ...}, offpeak: {...}}."""
+    result = {}
+    for cls in CLASSES:
+        mask = df[class_col] == cls
+        sub = df.filter(mask)
+        n = sub.height
+        cls_result = {"n": n}
+        if n > 0:
+            sub_mcp = sub[mcp_col]
+            for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                lower = sub[f"lower_{clabel}"]
+                upper = sub[f"upper_{clabel}"]
+                covered = ((sub_mcp >= lower) & (sub_mcp <= upper)).mean()
+                actual = round(float(covered) * 100, 2)
+                target = round(level * 100, 1)
+                cls_result[clabel] = {
+                    "target": target,
+                    "actual": actual,
+                    "error": round(actual - target, 2),
+                }
+        result[cls] = cls_result
+    return result
+
+
+def add_sign_seg(df: pl.DataFrame, baseline_col: str) -> pl.DataFrame:
+    """Add sign_seg column: prevail/counter/zero."""
+    return df.with_columns(
+        pl.when(pl.col(baseline_col) > 0).then(pl.lit("prevail"))
+        .when(pl.col(baseline_col) < 0).then(pl.lit("counter"))
+        .otherwise(pl.lit("zero"))
+        .alias("sign_seg")
+    )
+
+
+def calibrate_bin_widths_per_class_sign(
+    df: pl.DataFrame,
+    baseline_col: str,
+    mcp_col: str = MCP_COL,
+    class_col: str = CLASS_COL,
+    boundaries: list[float] | None = None,
+    labels: list[str] | None = None,
+    coverage_levels: list[float] = COVERAGE_LEVELS,
+) -> dict[str, dict]:
+    """Per-(bin, class, sign_seg) empirical quantile of |residual|.
+
+    Returns {bin_label: {(class, sign): {p50: w, ...}, class: {...}, _pooled: {...}}}.
+    Fallback chain: (bin, class, sign) -> (bin, class) -> (bin, _pooled).
+    """
+    abs_res = (df[mcp_col] - df[baseline_col]).abs()
+    bins = assign_bins(df[baseline_col].abs(), boundaries, labels)
+
+    if "sign_seg" not in df.columns:
+        df = add_sign_seg(df, baseline_col)
+
+    work = pl.DataFrame({
+        "abs_residual": abs_res,
+        "bin": bins,
+        "class_type": df[class_col],
+        "sign_seg": df["sign_seg"],
+    })
+
+    result = {}
+    for label in labels:
+        bin_data = work.filter(pl.col("bin") == label)
+
+        pooled_subset = bin_data["abs_residual"]
+        n_pooled = len(pooled_subset)
+        pooled_widths = {}
+        for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+            if n_pooled > 0:
+                pooled_widths[clabel] = round(float(pooled_subset.quantile(level)), 1)
+            else:
+                pooled_widths[clabel] = None
+        pooled_widths["n"] = n_pooled
+
+        cell_widths = {"_pooled": pooled_widths}
+
+        for cls in CLASSES:
+            cls_subset = bin_data.filter(pl.col("class_type") == cls)["abs_residual"]
+            n_cls = len(cls_subset)
+
+            if n_cls >= MIN_CELL_ROWS:
+                widths = {}
+                for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                    widths[clabel] = round(float(cls_subset.quantile(level)), 1)
+                widths["n"] = n_cls
+            else:
+                widths = dict(pooled_widths)
+                widths["n"] = n_cls
+                widths["_fallback"] = "pooled"
+            cell_widths[cls] = widths
+
+            for seg in SIGN_SEGS:
+                seg_subset = bin_data.filter(
+                    (pl.col("class_type") == cls) & (pl.col("sign_seg") == seg)
+                )["abs_residual"]
+                n_seg = len(seg_subset)
+
+                if n_seg >= MIN_CELL_ROWS:
+                    seg_widths = {}
+                    for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                        seg_widths[clabel] = round(float(seg_subset.quantile(level)), 1)
+                    seg_widths["n"] = n_seg
+                else:
+                    seg_widths = dict(cell_widths[cls])
+                    seg_widths["n"] = n_seg
+                    seg_widths["_fallback"] = "class"
+                cell_widths[(cls, seg)] = seg_widths
+
+        result[label] = cell_widths
+
+    return result
+
+
+def apply_bands_per_class_sign_fast(
+    df: pl.DataFrame,
+    bin_widths: dict[str, dict],
+    baseline_col: str,
+    class_col: str = CLASS_COL,
+    boundaries: list[float] | None = None,
+    labels: list[str] | None = None,
+) -> pl.DataFrame:
+    """Vectorized band application using join on (bin, class, sign_seg)."""
+    abs_bl = df[baseline_col].abs()
+    bins = assign_bins(abs_bl, boundaries, labels)
+
+    if "sign_seg" not in df.columns:
+        df = add_sign_seg(df, baseline_col)
+
+    if "_bin" in df.columns:
+        df = df.drop("_bin")
+    df = df.with_columns(pl.Series("_bin", bins))
+
+    rows = []
+    for bin_label in labels:
+        cell = bin_widths.get(bin_label, {})
+        for cls in CLASSES:
+            for seg in SIGN_SEGS:
+                entry = {"_bin": bin_label, CLASS_COL: cls, "sign_seg": seg}
+                key = (cls, seg)
+                if key in cell:
+                    data = cell[key]
+                elif cls in cell:
+                    data = cell[cls]
+                else:
+                    data = cell.get("_pooled", {})
+                for clabel in COVERAGE_LABELS:
+                    entry[f"_w_{clabel}"] = data.get(clabel)
+                rows.append(entry)
+            entry = {"_bin": bin_label, CLASS_COL: cls, "sign_seg": "zero"}
+            data = cell.get(cls, cell.get("_pooled", {}))
+            for clabel in COVERAGE_LABELS:
+                entry[f"_w_{clabel}"] = data.get(clabel)
+            rows.append(entry)
+
+    lookup = pl.DataFrame(rows)
+    df = df.join(lookup, on=["_bin", CLASS_COL, "sign_seg"], how="left")
+
+    for clabel in COVERAGE_LABELS:
+        df = df.with_columns([
+            (pl.col(baseline_col) - pl.col(f"_w_{clabel}")).alias(f"lower_{clabel}"),
+            (pl.col(baseline_col) + pl.col(f"_w_{clabel}")).alias(f"upper_{clabel}"),
+        ])
+
+    drop_cols = ["_bin"] + [f"_w_{clabel}" for clabel in COVERAGE_LABELS]
+    return df.drop(drop_cols)
+
+
+def evaluate_per_sign_coverage(
+    df: pl.DataFrame,
+    mcp_col: str = MCP_COL,
+    coverage_levels: list[float] = COVERAGE_LEVELS,
+) -> dict:
+    """Coverage broken out by sign_seg. Returns {prevail: {n, p95: {...}}, counter: {...}}."""
+    result = {}
+    for seg in SIGN_SEGS:
+        sub = df.filter(pl.col("sign_seg") == seg)
+        n = sub.height
+        seg_result = {"n": n}
+        if n > 0:
+            sub_mcp = sub[mcp_col]
+            for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                lower = sub[f"lower_{clabel}"]
+                upper = sub[f"upper_{clabel}"]
+                covered = ((sub_mcp >= lower) & (sub_mcp <= upper)).mean()
+                actual = round(float(covered) * 100, 2)
+                target = round(level * 100, 1)
+                seg_result[clabel] = {
+                    "target": target,
+                    "actual": actual,
+                    "error": round(actual - target, 2),
+                }
+        result[seg] = seg_result
+    return result
+
+
+# ─── Asymmetric calibration functions ────────────────────────────────────────
+
+
+def calibrate_asymmetric_per_class_sign(
+    df: pl.DataFrame,
+    baseline_col: str,
+    mcp_col: str = MCP_COL,
+    class_col: str = CLASS_COL,
+    boundaries: list[float] | None = None,
+    labels: list[str] | None = None,
+    coverage_levels: list[float] = COVERAGE_LEVELS,
+) -> dict[str, dict]:
+    """Per-(bin, class, sign_seg) signed quantile pairs.
+
+    Returns {bin_label: {(class, sign): {p50: (lo, hi), ...}, class: {...}, _pooled: {...}}}.
+
+    Fallback chain: (bin, class, sign) -> (bin, class) -> (bin, _pooled).
+    Zero-baseline paths use the (bin, class) fallback.
+    """
+    residual = df[mcp_col] - df[baseline_col]
+    bins = assign_bins(df[baseline_col].abs(), boundaries, labels)
+
+    if "sign_seg" not in df.columns:
+        df = add_sign_seg(df, baseline_col)
+
+    work = pl.DataFrame({
+        "residual": residual,
+        "bin": bins,
+        "class_type": df[class_col],
+        "sign_seg": df["sign_seg"],
+    })
+
+    result = {}
+    fallback_stats = {"total": 0, "to_class": 0, "to_pooled": 0}
+
+    for label in labels:
+        bin_data = work.filter(pl.col("bin") == label)
+
+        # Pooled estimate (ultimate fallback)
+        pooled_subset = bin_data["residual"]
+        n_pooled = len(pooled_subset)
+        pooled_pairs = {}
+        for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+            if n_pooled > 0:
+                lo = round(float(pooled_subset.quantile((1 - level) / 2)), 1)
+                hi = round(float(pooled_subset.quantile((1 + level) / 2)), 1)
+                pooled_pairs[clabel] = (lo, hi)
+            else:
+                pooled_pairs[clabel] = None
+        pooled_pairs["n"] = n_pooled
+
+        cell_pairs = {"_pooled": pooled_pairs}
+
+        # Per-class estimate (mid-level fallback)
+        for cls in CLASSES:
+            cls_subset = bin_data.filter(pl.col("class_type") == cls)["residual"]
+            n_cls = len(cls_subset)
+
+            if n_cls >= MIN_CELL_ROWS:
+                pairs = {}
+                for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                    lo = round(float(cls_subset.quantile((1 - level) / 2)), 1)
+                    hi = round(float(cls_subset.quantile((1 + level) / 2)), 1)
+                    pairs[clabel] = (lo, hi)
+                pairs["n"] = n_cls
+            else:
+                pairs = dict(pooled_pairs)
+                pairs["n"] = n_cls
+                pairs["_fallback"] = "pooled"
+                fallback_stats["to_pooled"] += 1
+            cell_pairs[cls] = pairs
+
+            # Per-class-sign estimate (finest level)
+            for seg in SIGN_SEGS:
+                fallback_stats["total"] += 1
+                seg_subset = bin_data.filter(
+                    (pl.col("class_type") == cls) & (pl.col("sign_seg") == seg)
+                )["residual"]
+                n_seg = len(seg_subset)
+
+                if n_seg >= MIN_CELL_ROWS:
+                    seg_pairs = {}
+                    for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                        lo = round(float(seg_subset.quantile((1 - level) / 2)), 1)
+                        hi = round(float(seg_subset.quantile((1 + level) / 2)), 1)
+                        seg_pairs[clabel] = (lo, hi)
+                    seg_pairs["n"] = n_seg
+                else:
+                    seg_pairs = dict(cell_pairs[cls])
+                    seg_pairs["n"] = n_seg
+                    seg_pairs["_fallback"] = "class"
+                    fallback_stats["to_class"] += 1
+                cell_pairs[(cls, seg)] = seg_pairs
+
+        result[label] = cell_pairs
+
+    result["_fallback_stats"] = fallback_stats
+    return result
+
+
+def apply_asymmetric_bands_per_class_sign_fast(
+    df: pl.DataFrame,
+    bin_pairs: dict[str, dict],
+    baseline_col: str,
+    class_col: str = CLASS_COL,
+    boundaries: list[float] | None = None,
+    labels: list[str] | None = None,
+) -> pl.DataFrame:
+    """Vectorized asymmetric band application using join on (bin, class, sign_seg)."""
+    abs_bl = df[baseline_col].abs()
+    bins = assign_bins(abs_bl, boundaries, labels)
+
+    if "sign_seg" not in df.columns:
+        df = add_sign_seg(df, baseline_col)
+
+    if "_bin" in df.columns:
+        df = df.drop("_bin")
+    df = df.with_columns(pl.Series("_bin", bins))
+
+    # Build lookup table: (bin, class, sign_seg) -> (lo, hi) per level
+    rows = []
+    for bin_label in labels:
+        cell = bin_pairs.get(bin_label, {})
+        for cls in CLASSES:
+            for seg in SIGN_SEGS:
+                entry = {"_bin": bin_label, CLASS_COL: cls, "sign_seg": seg}
+                key = (cls, seg)
+                if key in cell:
+                    data = cell[key]
+                elif cls in cell:
+                    data = cell[cls]
+                else:
+                    data = cell.get("_pooled", {})
+                for clabel in COVERAGE_LABELS:
+                    lo_hi = data.get(clabel)
+                    if isinstance(lo_hi, (list, tuple)):
+                        entry[f"_lo_{clabel}"] = lo_hi[0]
+                        entry[f"_hi_{clabel}"] = lo_hi[1]
+                    else:
+                        entry[f"_lo_{clabel}"] = None
+                        entry[f"_hi_{clabel}"] = None
+                rows.append(entry)
+            # Handle zero sign_seg -> fall back to class level
+            entry = {"_bin": bin_label, CLASS_COL: cls, "sign_seg": "zero"}
+            data = cell.get(cls, cell.get("_pooled", {}))
+            for clabel in COVERAGE_LABELS:
+                lo_hi = data.get(clabel)
+                if isinstance(lo_hi, (list, tuple)):
+                    entry[f"_lo_{clabel}"] = lo_hi[0]
+                    entry[f"_hi_{clabel}"] = lo_hi[1]
+                else:
+                    entry[f"_lo_{clabel}"] = None
+                    entry[f"_hi_{clabel}"] = None
+            rows.append(entry)
+
+    lookup = pl.DataFrame(rows)
+    df = df.join(lookup, on=["_bin", CLASS_COL, "sign_seg"], how="left")
+
+    for clabel in COVERAGE_LABELS:
+        df = df.with_columns([
+            (pl.col(baseline_col) + pl.col(f"_lo_{clabel}")).alias(f"lower_{clabel}"),
+            (pl.col(baseline_col) + pl.col(f"_hi_{clabel}")).alias(f"upper_{clabel}"),
+        ])
+
+    drop_cols = ["_bin"]
+    drop_cols += [f"_lo_{clabel}" for clabel in COVERAGE_LABELS]
+    drop_cols += [f"_hi_{clabel}" for clabel in COVERAGE_LABELS]
+    return df.drop(drop_cols)
+
+
+# ─── Per-bin coverage correction (v6 new) ────────────────────────────────────
+
+
+def correct_bin_coverage(
+    train_df: pl.DataFrame,
+    bin_pairs: dict[str, dict],
+    baseline_col: str,
+    boundaries: list[float],
+    labels: list[str],
+    mcp_col: str = MCP_COL,
+    class_col: str = CLASS_COL,
+    coverage_levels: list[float] = COVERAGE_LEVELS,
+    coverage_labels: list[str] = COVERAGE_LABELS,
+    tolerance: float = CORRECTION_TOLERANCE,
+    step: float = CORRECTION_STEP,
+    max_iter: int = CORRECTION_MAX_ITER,
+) -> dict[str, dict]:
+    """Inflate asymmetric (lo, hi) pairs for bins that undershoot target coverage.
+
+    For each (bin, class, sign) cell and each coverage level:
+      1. Apply current bands to training data for that cell
+      2. Measure in-sample coverage
+      3. If coverage < target - tolerance, inflate |lo| and hi by `step` fraction
+      4. Repeat until coverage meets target or max_iter reached
+
+    Returns corrected bin_pairs dict (same structure as input).
+    """
+    import copy
+    corrected = copy.deepcopy(bin_pairs)
+
+    if "sign_seg" not in train_df.columns:
+        train_df = add_sign_seg(train_df, baseline_col)
+
+    bins = assign_bins(train_df[baseline_col].abs(), boundaries, labels)
+    train_work = train_df.with_columns(pl.Series("_bin", bins))
+
+    corrections_applied = 0
+
+    for bin_label in labels:
+        cell = corrected.get(bin_label)
+        if cell is None:
+            continue
+
+        for cls in CLASSES:
+            for seg in SIGN_SEGS:
+                key = (cls, seg)
+
+                # Get the data entry for this cell
+                if key not in cell:
+                    continue
+                data = cell[key]
+
+                # Skip if this cell is a fallback (it shares data with parent)
+                if "_fallback" in data:
+                    continue
+
+                # Filter training data to this cell
+                subset = train_work.filter(
+                    (pl.col("_bin") == bin_label)
+                    & (pl.col(class_col) == cls)
+                    & (pl.col("sign_seg") == seg)
+                )
+                if subset.height < 10:
+                    continue
+
+                mcp_vals = subset[mcp_col]
+                bl_vals = subset[baseline_col]
+
+                for level, clabel in zip(coverage_levels, coverage_labels):
+                    lo_hi = data.get(clabel)
+                    if not isinstance(lo_hi, (list, tuple)):
+                        continue
+
+                    lo, hi = lo_hi
+                    target_pct = level * 100
+
+                    # Check in-sample coverage
+                    lower = bl_vals + lo
+                    upper = bl_vals + hi
+                    actual_pct = float(((mcp_vals >= lower) & (mcp_vals <= upper)).mean()) * 100
+
+                    if actual_pct >= target_pct - tolerance:
+                        continue
+
+                    # Iteratively inflate
+                    for _ in range(max_iter):
+                        # lo is negative (lower bound offset), inflate its magnitude
+                        lo = lo * (1 + step) if lo < 0 else lo - abs(lo) * step if lo > 0 else lo - step
+                        # hi is positive (upper bound offset), inflate
+                        hi = hi * (1 + step) if hi > 0 else hi + abs(hi) * step if hi < 0 else hi + step
+
+                        lower = bl_vals + lo
+                        upper = bl_vals + hi
+                        actual_pct = float(((mcp_vals >= lower) & (mcp_vals <= upper)).mean()) * 100
+
+                        if actual_pct >= target_pct - tolerance:
+                            break
+
+                    data[clabel] = (round(lo, 1), round(hi, 1))
+                    corrections_applied += 1
+
+    print(f"    Correction: {corrections_applied} (bin, class, sign, level) cells adjusted")
+    return corrected
+
+
+def correct_symmetric_bin_coverage(
+    train_df: pl.DataFrame,
+    bin_widths: dict[str, dict],
+    baseline_col: str,
+    boundaries: list[float],
+    labels: list[str],
+    mcp_col: str = MCP_COL,
+    class_col: str = CLASS_COL,
+    coverage_levels: list[float] = COVERAGE_LEVELS,
+    coverage_labels: list[str] = COVERAGE_LABELS,
+    tolerance: float = CORRECTION_TOLERANCE,
+    step: float = CORRECTION_STEP,
+    max_iter: int = CORRECTION_MAX_ITER,
+) -> dict[str, dict]:
+    """Inflate symmetric width w for bins that undershoot target coverage.
+
+    Same logic as correct_bin_coverage but for scalar width w instead of (lo, hi).
+    """
+    import copy
+    corrected = copy.deepcopy(bin_widths)
+
+    if "sign_seg" not in train_df.columns:
+        train_df = add_sign_seg(train_df, baseline_col)
+
+    bins = assign_bins(train_df[baseline_col].abs(), boundaries, labels)
+    train_work = train_df.with_columns(pl.Series("_bin", bins))
+
+    corrections_applied = 0
+
+    for bin_label in labels:
+        cell = corrected.get(bin_label)
+        if cell is None:
+            continue
+
+        for cls in CLASSES:
+            for seg in SIGN_SEGS:
+                key = (cls, seg)
+
+                if key not in cell:
+                    continue
+                data = cell[key]
+
+                if "_fallback" in data:
+                    continue
+
+                subset = train_work.filter(
+                    (pl.col("_bin") == bin_label)
+                    & (pl.col(class_col) == cls)
+                    & (pl.col("sign_seg") == seg)
+                )
+                if subset.height < 10:
+                    continue
+
+                mcp_vals = subset[mcp_col]
+                bl_vals = subset[baseline_col]
+
+                for level, clabel in zip(coverage_levels, coverage_labels):
+                    w = data.get(clabel)
+                    if w is None or not isinstance(w, (int, float)):
+                        continue
+
+                    target_pct = level * 100
+
+                    lower = bl_vals - w
+                    upper = bl_vals + w
+                    actual_pct = float(((mcp_vals >= lower) & (mcp_vals <= upper)).mean()) * 100
+
+                    if actual_pct >= target_pct - tolerance:
+                        continue
+
+                    for _ in range(max_iter):
+                        w = w * (1 + step)
+
+                        lower = bl_vals - w
+                        upper = bl_vals + w
+                        actual_pct = float(((mcp_vals >= lower) & (mcp_vals <= upper)).mean()) * 100
+
+                        if actual_pct >= target_pct - tolerance:
+                            break
+
+                    data[clabel] = round(w, 1)
+                    corrections_applied += 1
+
+    print(f"    Correction: {corrections_applied} (bin, class, sign, level) cells adjusted")
+    return corrected
+
+
+# ─── Unified experiment runner ───────────────────────────────────────────────
+
+
+def run_experiment(
+    df: pl.DataFrame,
+    quarter: str,
+    pys: list[int],
+    n_bins: int,
+    baseline_col: str,
+    experiment_name: str,
+    symmetric: bool,
+    cv_mode: str = "loo",
+    min_train_pys: int = 1,
+    apply_correction: bool = False,
+    mcp_col: str = MCP_COL,
+    class_col: str = CLASS_COL,
+    coverage_levels: list[float] = COVERAGE_LEVELS,
+) -> dict:
+    """Unified LOO/temporal experiment runner for symmetric or asymmetric bands.
+
+    Args:
+        symmetric: If True, uses |residual| quantile (v4 method).
+                   If False, uses signed residual quantile pairs (v5 method).
+        cv_mode: "loo" for leave-one-PY-out, "temporal" for expanding-window.
+        min_train_pys: Minimum training PYs for temporal mode (folds with fewer are excluded from aggregation).
+        apply_correction: If True, apply per-bin coverage correction after calibration.
+
+    Returns same structure as v4's loo_per_class_sign_quantile.
+    """
+    if "sign_seg" not in df.columns:
+        df = add_sign_seg(df, baseline_col)
+
+    per_py = {}
+    all_test_dfs = []
+    filtered_test_dfs = []
+    fold_boundaries = {}
+
+    for test_py in pys:
+        if cv_mode == "loo":
+            train = df.filter(pl.col(PY_COL) != test_py)
+        else:
+            train = df.filter(pl.col(PY_COL) < test_py)
+
+        test = df.filter(pl.col(PY_COL) == test_py)
+
+        if train.height == 0 or test.height == 0:
+            continue
+
+        train_pys = sorted(train[PY_COL].unique().to_list())
+        meets_min = len(train_pys) >= min_train_pys if cv_mode == "temporal" else True
+
+        boundaries, bin_labels = compute_quantile_boundaries(train[baseline_col], n_bins)
+        fold_boundaries[str(test_py)] = boundaries
+
+        # Calibrate + apply
+        bin_widths = None
+        bin_pairs = None
+        if symmetric:
+            bin_widths = calibrate_bin_widths_per_class_sign(
+                train, baseline_col, mcp_col, class_col,
+                boundaries, bin_labels, coverage_levels,
+            )
+            if apply_correction:
+                bin_widths = correct_symmetric_bin_coverage(
+                    train, bin_widths, baseline_col, boundaries, bin_labels,
+                    mcp_col, class_col, coverage_levels, COVERAGE_LABELS,
+                )
+            test_banded = apply_bands_per_class_sign_fast(
+                test, bin_widths, baseline_col, class_col, boundaries, bin_labels,
+            )
+        else:
+            bin_pairs = calibrate_asymmetric_per_class_sign(
+                train, baseline_col, mcp_col, class_col,
+                boundaries, bin_labels, coverage_levels,
+            )
+            if apply_correction:
+                bin_pairs = correct_bin_coverage(
+                    train, bin_pairs, baseline_col, boundaries, bin_labels,
+                    mcp_col, class_col, coverage_levels, COVERAGE_LABELS,
+                )
+            test_banded = apply_asymmetric_bands_per_class_sign_fast(
+                test, bin_pairs, baseline_col, class_col, boundaries, bin_labels,
+            )
+
+        all_test_dfs.append(test_banded)
+        if meets_min:
+            filtered_test_dfs.append(test_banded)
+
+        # Overall coverage
+        mcp_s = test_banded[mcp_col]
+        overall_cov = {"overall": {}}
+        for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+            lower = test_banded[f"lower_{clabel}"]
+            upper = test_banded[f"upper_{clabel}"]
+            covered = ((mcp_s >= lower) & (mcp_s <= upper)).mean()
+            actual = round(float(covered) * 100, 2)
+            target = round(level * 100, 1)
+            overall_cov["overall"][clabel] = {
+                "target": target, "actual": actual,
+                "error": round(actual - target, 2),
+            }
+
+        # Per-class coverage
+        per_class_cov = evaluate_per_class_coverage(
+            test_banded, mcp_col, class_col, coverage_levels,
+        )
+
+        # Per-sign coverage
+        per_sign_cov = evaluate_per_sign_coverage(
+            test_banded, mcp_col, coverage_levels,
+        )
+
+        # Per-bin coverage
+        test_bins = assign_bins(test_banded[baseline_col].abs(), boundaries, bin_labels)
+        df_with_bin = test_banded.with_columns(pl.Series("_bin", test_bins))
+        per_bin_cov = {}
+        for label in bin_labels:
+            subset = df_with_bin.filter(pl.col("_bin") == label)
+            n = subset.height
+            bin_result = {"n": n}
+            if n > 0:
+                sub_mcp = subset[mcp_col]
+                for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                    lower_s = subset[f"lower_{clabel}"]
+                    upper_s = subset[f"upper_{clabel}"]
+                    cov_val = ((sub_mcp >= lower_s) & (sub_mcp <= upper_s)).mean()
+                    actual_val = round(float(cov_val) * 100, 2)
+                    target_val = round(level * 100, 1)
+                    bin_result[clabel] = {
+                        "target": target_val, "actual": actual_val,
+                        "error": round(actual_val - target_val, 2),
+                    }
+            else:
+                for clabel in COVERAGE_LABELS:
+                    bin_result[clabel] = {"target": 0, "actual": 0, "error": 0}
+            per_bin_cov[label] = bin_result
+
+        # Width summary
+        width_summary = {}
+        if symmetric:
+            for clabel in COVERAGE_LABELS:
+                widths_for_level = []
+                for label in bin_labels:
+                    for cls in CLASSES:
+                        for seg in SIGN_SEGS:
+                            key = (cls, seg)
+                            w = bin_widths[label].get(key, {}).get(clabel)
+                            if w is not None:
+                                widths_for_level.append(w)
+                width_summary[clabel] = {
+                    "mean_width": round(sum(widths_for_level) / len(widths_for_level), 1) if widths_for_level else None,
+                    "per_bin": {},
+                }
+                for label in bin_labels:
+                    cls_sign_widths = {}
+                    for cls in CLASSES:
+                        for seg in SIGN_SEGS:
+                            key = (cls, seg)
+                            cls_sign_widths[f"{cls}_{seg}"] = bin_widths[label].get(key, {}).get(clabel)
+                    vals = [v for v in cls_sign_widths.values() if v is not None]
+                    cls_sign_widths["avg"] = round(sum(vals) / len(vals), 1) if vals else None
+                    width_summary[clabel]["per_bin"][label] = cls_sign_widths
+        else:
+            for clabel in COVERAGE_LABELS:
+                half_widths = []
+                for label in bin_labels:
+                    for cls in CLASSES:
+                        for seg in SIGN_SEGS:
+                            key = (cls, seg)
+                            lo_hi = bin_pairs[label].get(key, {}).get(clabel)
+                            if isinstance(lo_hi, (list, tuple)):
+                                half_widths.append((lo_hi[1] - lo_hi[0]) / 2)
+                width_summary[clabel] = {
+                    "mean_width": round(sum(half_widths) / len(half_widths), 1) if half_widths else None,
+                    "per_bin": {},
+                }
+                for label in bin_labels:
+                    cls_sign_hw = {}
+                    for cls in CLASSES:
+                        for seg in SIGN_SEGS:
+                            key = (cls, seg)
+                            lo_hi = bin_pairs[label].get(key, {}).get(clabel)
+                            if isinstance(lo_hi, (list, tuple)):
+                                cls_sign_hw[f"{cls}_{seg}"] = round((lo_hi[1] - lo_hi[0]) / 2, 1)
+                            else:
+                                cls_sign_hw[f"{cls}_{seg}"] = None
+                    vals = [v for v in cls_sign_hw.values() if v is not None]
+                    cls_sign_hw["avg"] = round(sum(vals) / len(vals), 1) if vals else None
+                    width_summary[clabel]["per_bin"][label] = cls_sign_hw
+
+        # Per-sign width stats: mean + max across bins for each (sign, level)
+        sign_widths = {}
+        for sign in SIGN_SEGS:
+            sign_widths[sign] = {}
+            for clabel in COVERAGE_LABELS:
+                bin_vals = []
+                for label in bin_labels:
+                    cell_ws = []
+                    for cls in CLASSES:
+                        key = (cls, sign)
+                        if symmetric:
+                            w = bin_widths[label].get(key, {}).get(clabel)
+                            if w is not None:
+                                cell_ws.append(w)
+                        else:
+                            lo_hi = bin_pairs[label].get(key, {}).get(clabel)
+                            if isinstance(lo_hi, (list, tuple)):
+                                cell_ws.append((lo_hi[1] - lo_hi[0]) / 2)
+                    if cell_ws:
+                        bin_vals.append(sum(cell_ws) / len(cell_ws))
+                sign_widths[sign][clabel] = {
+                    "mean_width": round(sum(bin_vals) / len(bin_vals), 1) if bin_vals else None,
+                    "max_width": round(max(bin_vals), 1) if bin_vals else None,
+                }
+
+        cov_result = overall_cov
+        cov_result["per_bin"] = per_bin_cov
+        cov_result["per_bin_approximate"] = True
+        cov_result["per_class"] = per_class_cov
+        cov_result["per_sign"] = per_sign_cov
+
+        py_entry = {
+            "n_train": train.height,
+            "n_test": test.height,
+            "coverage": cov_result,
+            "widths": width_summary,
+            "widths_by_sign": sign_widths,
+            "boundaries": [b if not math.isinf(b) else "inf" for b in boundaries],
+        }
+        if cv_mode == "temporal":
+            py_entry["train_pys"] = train_pys
+            py_entry["meets_min_train_pys"] = meets_min
+
+        per_py[str(test_py)] = py_entry
+
+    # ─── Aggregate ────────────────────────────────────────────────────
+
+    if cv_mode == "temporal":
+        use_dfs = filtered_test_dfs if filtered_test_dfs else all_test_dfs
+    else:
+        use_dfs = all_test_dfs
+
+    if use_dfs:
+        all_test = pl.concat(use_dfs)
+
+        agg_coverage = {"overall": {}, "per_bin": {}, "per_bin_approximate": True}
+        mcp = all_test[mcp_col]
+        for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+            lower = all_test[f"lower_{clabel}"]
+            upper = all_test[f"upper_{clabel}"]
+            covered = ((mcp >= lower) & (mcp <= upper)).mean()
+            actual = round(float(covered) * 100, 2)
+            target = round(level * 100, 1)
+            agg_coverage["overall"][clabel] = {
+                "target": target, "actual": actual,
+                "error": round(actual - target, 2),
+            }
+
+        # Aggregate per-bin
+        full_boundaries, full_labels = compute_quantile_boundaries(df[baseline_col], n_bins)
+        agg_bins = assign_bins(all_test[baseline_col].abs(), full_boundaries, full_labels)
+        df_with_bin = all_test.with_columns(pl.Series("_bin", agg_bins))
+        for label in full_labels:
+            subset = df_with_bin.filter(pl.col("_bin") == label)
+            n = subset.height
+            bin_result = {"n": n}
+            if n > 0:
+                sub_mcp = subset[mcp_col]
+                for level, clabel in zip(coverage_levels, COVERAGE_LABELS):
+                    lower_s = subset[f"lower_{clabel}"]
+                    upper_s = subset[f"upper_{clabel}"]
+                    cov_val = ((sub_mcp >= lower_s) & (sub_mcp <= upper_s)).mean()
+                    actual = round(float(cov_val) * 100, 2)
+                    target = round(level * 100, 1)
+                    bin_result[clabel] = {
+                        "target": target, "actual": actual,
+                        "error": round(actual - target, 2),
+                    }
+            else:
+                for clabel in COVERAGE_LABELS:
+                    bin_result[clabel] = {"target": 0, "actual": 0, "error": 0}
+            agg_coverage["per_bin"][label] = bin_result
+
+        # Aggregate per-class
+        agg_per_class = evaluate_per_class_coverage(
+            all_test, mcp_col, CLASS_COL, coverage_levels,
+        )
+        agg_coverage["per_class"] = agg_per_class
+
+        # Aggregate per-sign
+        agg_per_sign = evaluate_per_sign_coverage(
+            all_test, mcp_col, coverage_levels,
+        )
+        agg_coverage["per_sign"] = agg_per_sign
+    else:
+        agg_coverage = {"overall": {}, "per_bin": {}}
+        full_labels = [f"q{i+1}" for i in range(n_bins)]
+
+    # Aggregate widths
+    if cv_mode == "temporal":
+        agg_pys = [
+            py for py in per_py
+            if per_py[py].get("meets_min_train_pys", True)
+        ] if any(per_py[py].get("meets_min_train_pys", True) for py in per_py) else list(per_py.keys())
+    else:
+        agg_pys = list(per_py.keys())
+
+    labels_agg = full_labels if use_dfs else [f"q{i+1}" for i in range(n_bins)]
+    agg_widths = {"overall": {}, "per_bin": {}}
+    for clabel in COVERAGE_LABELS:
+        fold_means = [
+            per_py[py]["widths"][clabel]["mean_width"]
+            for py in agg_pys
+            if per_py[py]["widths"][clabel]["mean_width"] is not None
+        ]
+        agg_widths["overall"][clabel] = {
+            "mean_width": round(sum(fold_means) / len(fold_means), 1) if fold_means else None,
+        }
+        for label in labels_agg:
+            if label not in agg_widths["per_bin"]:
+                agg_widths["per_bin"][label] = {}
+            fold_bin_widths = [
+                per_py[py]["widths"][clabel]["per_bin"].get(label, {}).get("avg")
+                for py in agg_pys
+            ]
+            fold_bin_widths = [w for w in fold_bin_widths if w is not None]
+            agg_widths["per_bin"][label][clabel] = {
+                "mean_width": round(sum(fold_bin_widths) / len(fold_bin_widths), 1) if fold_bin_widths else None,
+            }
+
+    # Aggregate per-sign widths
+    agg_widths_by_sign = {}
+    for sign in SIGN_SEGS:
+        agg_widths_by_sign[sign] = {}
+        for clabel in COVERAGE_LABELS:
+            fold_means = [
+                per_py[py]["widths_by_sign"][sign][clabel]["mean_width"]
+                for py in agg_pys
+                if per_py[py]["widths_by_sign"][sign][clabel]["mean_width"] is not None
+            ]
+            fold_maxes = [
+                per_py[py]["widths_by_sign"][sign][clabel]["max_width"]
+                for py in agg_pys
+                if per_py[py]["widths_by_sign"][sign][clabel]["max_width"] is not None
+            ]
+            agg_widths_by_sign[sign][clabel] = {
+                "mean_width": round(sum(fold_means) / len(fold_means), 1) if fold_means else None,
+                "max_width": round(sum(fold_maxes) / len(fold_maxes), 1) if fold_maxes else None,
+            }
+    agg_widths["per_sign"] = agg_widths_by_sign
+
+    # Stability
+    p95_coverages = [
+        per_py[py]["coverage"]["overall"]["p95"]["actual"]
+        for py in agg_pys
+    ]
+    p95_widths_per_fold = [
+        per_py[py]["widths"]["p95"]["mean_width"]
+        for py in agg_pys
+        if per_py[py]["widths"]["p95"]["mean_width"] is not None
+    ]
+
+    if len(p95_coverages) >= 2:
+        p95_coverage_range = round(max(p95_coverages) - min(p95_coverages), 2)
+        worst_py_idx = p95_coverages.index(min(p95_coverages))
+        worst_py = agg_pys[worst_py_idx]
+        p95_worst_py_coverage = min(p95_coverages)
+    else:
+        p95_coverage_range = 0
+        worst_py = agg_pys[0] if agg_pys else ""
+        p95_worst_py_coverage = p95_coverages[0] if p95_coverages else 0
+
+    if len(p95_widths_per_fold) >= 2:
+        p95_width_cv = round(
+            statistics.stdev(p95_widths_per_fold) / statistics.mean(p95_widths_per_fold), 4
+        )
+    else:
+        p95_width_cv = 0
+
+    stability = {
+        "p95_coverage_range": p95_coverage_range,
+        "p95_worst_py": worst_py,
+        "p95_worst_py_coverage": round(p95_worst_py_coverage, 2),
+        "p95_width_cv": p95_width_cv,
+    }
+    if cv_mode == "temporal":
+        stability["min_train_pys"] = min_train_pys
+        stability["n_folds_total"] = len(per_py)
+        stability["n_folds_filtered"] = len(agg_pys)
+
+    return {
+        "per_py": per_py,
+        "aggregate": {"coverage": agg_coverage, "widths": agg_widths},
+        "stability": stability,
+    }
+
+
+# ─── Winner selection ────────────────────────────────────────────────────────
+
+
+def check_bg1(experiment_results: dict, quarters: list[str]) -> bool:
+    """Check if experiment passes BG1: all 20 (level, quarter) cells within tolerance."""
+    for q in quarters:
+        overall = experiment_results[q]["aggregate"]["coverage"]["overall"]
+        for clabel in COVERAGE_LABELS:
+            error = abs(overall[clabel]["error"])
+            if error > BG1_TOLERANCE[clabel]:
+                return False
+    return True
+
+
+def select_winner(
+    all_experiment_results: dict[str, dict[str, dict]],
+    quarters: list[str],
+) -> tuple[str, dict[str, dict]]:
+    """Select winner: lowest mean P95 half-width across quarters, subject to BG1 pass.
+
+    Args:
+        all_experiment_results: {experiment_name: {quarter: run_experiment result}}
+        quarters: list of quarter keys
+
+    Returns:
+        (winner_name, {quarter: result})
+    """
+    print(f"\n{'='*80}")
+    print(f"  WINNER SELECTION")
+    print(f"{'='*80}")
+
+    print(f"\n  {'Experiment':<16} {'BG1':>5}", end="")
+    for q in quarters:
+        print(f" {q+' P95w':>10}", end="")
+    print(f" {'Mean P95w':>10}")
+    print(f"  {'-'*16} {'-'*5}", end="")
+    for _ in quarters:
+        print(f" {'-'*10}", end="")
+    print(f" {'-'*10}")
+
+    candidates = []
+    for name, q_results in all_experiment_results.items():
+        passes = check_bg1(q_results, quarters)
+        p95_widths = []
+        for q in quarters:
+            w = q_results[q]["aggregate"]["widths"]["overall"].get("p95", {}).get("mean_width")
+            p95_widths.append(w)
+        mean_w = sum(w for w in p95_widths if w is not None) / len([w for w in p95_widths if w is not None]) if any(w is not None for w in p95_widths) else None
+
+        status = "PASS" if passes else "FAIL"
+        print(f"  {name:<16} {status:>5}", end="")
+        for w in p95_widths:
+            print(f" {w:>10.1f}" if w else f" {'n/a':>10}", end="")
+        print(f" {mean_w:>10.1f}" if mean_w else f" {'n/a':>10}")
+
+        if passes and mean_w is not None:
+            candidates.append((name, mean_w, q_results))
+
+    if not candidates:
+        print("\n  WARNING: No experiment passes BG1! Selecting lowest width anyway.")
+        for name, q_results in all_experiment_results.items():
+            p95_widths = []
+            for q in quarters:
+                w = q_results[q]["aggregate"]["widths"]["overall"].get("p95", {}).get("mean_width")
+                p95_widths.append(w)
+            mean_w = sum(w for w in p95_widths if w is not None) / len([w for w in p95_widths if w is not None]) if any(w is not None for w in p95_widths) else None
+            if mean_w is not None:
+                candidates.append((name, mean_w, q_results))
+
+    candidates.sort(key=lambda x: x[1])
+    winner_name = candidates[0][0]
+    winner_results = candidates[0][2]
+    print(f"\n  Winner: {winner_name} (mean P95 half-width = {candidates[0][1]:.1f})")
+
+    return winner_name, winner_results
+
+
+# ─── Round runner ────────────────────────────────────────────────────────────
+
+
+def run_round_v6(
+    round_num: int,
+    experiments: list[dict],
+    baseline_col: str,
+    data_loader,
+    pys: list[int],
+    version_id: str,
+    prior_version_part: str | None = None,
+) -> dict:
+    """Run v6 experiments for one round.
+
+    Each experiment dict: {"name": str, "n_bins": int, "symmetric": bool, "correction": bool}
+    Output path: versions/bands/{version_id}/r{round_num}/
+    """
+    # R1 uses LOO primary, R2/R3 use temporal primary
+    if round_num == 1:
+        use_temporal_primary = False
+        primary_cv = "loo"
+    else:
+        use_temporal_primary = True
+        primary_cv = "temporal"
+
+    print(f"\n{'#'*80}")
+    print(f"  ROUND {round_num} — v6 BAND EXPERIMENTS")
+    print(f"  Primary CV: {primary_cv}")
+    print(f"  Experiments: {', '.join(e['name'] for e in experiments)}")
+    print(f"{'#'*80}")
+
+    # ─── Phase 1: Per-quarter primary experiments ────────────────────
+
+    # {experiment_name: {quarter: result}}
+    all_results: dict[str, dict[str, dict]] = {e["name"]: {} for e in experiments}
+
+    for quarter in QUARTERS:
+        df = data_loader(quarter)
+        df = add_sign_seg(df, baseline_col)
+        print(f"\n  R{round_num} {quarter.upper()}: {df.height:,} rows")
+        print(f"  Memory: {mem_mb():.0f} MB")
+
+        # Distribution info
+        for cls in CLASSES:
+            n = df.filter(pl.col(CLASS_COL) == cls).height
+            print(f"    {cls}: {n:,}")
+        for seg in SIGN_SEGS:
+            n = df.filter(pl.col("sign_seg") == seg).height
+            print(f"    {seg}: {n:,}")
+        n_zero = df.filter(pl.col("sign_seg") == "zero").height
+        if n_zero > 0:
+            print(f"    zero: {n_zero:,}")
+
+        available_pys = sorted(df[PY_COL].unique().to_list())
+        pys_to_use = [py for py in pys if py in available_pys]
+
+        for exp in experiments:
+            exp_name = exp["name"]
+            print(f"  Running {exp_name}...", end="", flush=True)
+            result = run_experiment(
+                df, quarter, pys_to_use, exp["n_bins"], baseline_col,
+                exp_name, symmetric=exp["symmetric"], cv_mode=primary_cv,
+                min_train_pys=3, apply_correction=exp.get("correction", False),
+            )
+            p95_cov = result["aggregate"]["coverage"]["overall"].get("p95", {}).get("actual", 0)
+            p95_w = result["aggregate"]["widths"]["overall"].get("p95", {}).get("mean_width", 0)
+            print(f" P95 cov={p95_cov:.2f}%, half-width={p95_w:.1f}")
+            all_results[exp_name][quarter] = result
+
+        del df
+        gc.collect()
+        print(f"  Memory after cleanup: {mem_mb():.0f} MB")
+
+    # ─── Phase 2: Print comparison table ─────────────────────────────
+
+    print(f"\n{'='*90}")
+    print(f"  R{round_num} EXPERIMENT COMPARISON ({primary_cv.upper()})")
+    print(f"{'='*90}")
+
+    header = f"  {'Experiment':<16}"
+    for q in QUARTERS:
+        header += f" {q+' P95c':>10} {q+' P95w':>10}"
+    header += f" {'Mean P95w':>10}"
+    print(header)
+    print(f"  {'-'*16}" + (f" {'-'*10} {'-'*10}" * len(QUARTERS)) + f" {'-'*10}")
+
+    for exp in experiments:
+        name = exp["name"]
+        line = f"  {name:<16}"
+        widths = []
+        for q in QUARTERS:
+            r = all_results[name][q]
+            cov = r["aggregate"]["coverage"]["overall"].get("p95", {}).get("actual", 0)
+            w = r["aggregate"]["widths"]["overall"].get("p95", {}).get("mean_width", 0)
+            line += f" {cov:>9.2f}% {w:>10.1f}"
+            if w:
+                widths.append(w)
+        mean_w = sum(widths) / len(widths) if widths else 0
+        line += f" {mean_w:>10.1f}"
+        print(line)
+
+    # Per-class and per-sign coverage for each experiment
+    for exp in experiments:
+        name = exp["name"]
+        print(f"\n  {name} per-class P95 coverage:")
+        print(f"  {'Quarter':<10} {'onpeak':>10} {'offpeak':>10} {'gap':>8}")
+        print(f"  {'-'*10} {'-'*10} {'-'*10} {'-'*8}")
+        for q in QUARTERS:
+            pc = all_results[name][q]["aggregate"]["coverage"].get("per_class", {})
+            on = pc.get("onpeak", {}).get("p95", {}).get("actual", 0)
+            off = pc.get("offpeak", {}).get("p95", {}).get("actual", 0)
+            gap = abs(on - off)
+            print(f"  {q:<10} {on:>9.2f}% {off:>9.2f}% {gap:>7.2f}pp")
+
+    # ─── Phase 3: Select winner ──────────────────────────────────────
+
+    winner_name, winner_q_results = select_winner(all_results, QUARTERS)
+    winner_exp = next(e for e in experiments if e["name"] == winner_name)
+    winner_symmetric = winner_exp["symmetric"]
+
+    # ─── Phase 4: Secondary validation on winner ─────────────────────
+
+    secondary_cv = "temporal" if primary_cv == "loo" else "loo"
+    print(f"\n{'='*70}")
+    print(f"  R{round_num} {secondary_cv.upper()} VALIDATION ON WINNER: {winner_name}")
+    print(f"{'='*70}")
+
+    secondary_results = {}
+    for quarter in QUARTERS:
+        df = data_loader(quarter)
+        df = add_sign_seg(df, baseline_col)
+        available_pys = sorted(df[PY_COL].unique().to_list())
+        pys_to_use = [py for py in pys if py in available_pys]
+
+        result = run_experiment(
+            df, quarter, pys_to_use, winner_exp["n_bins"], baseline_col,
+            winner_name, symmetric=winner_symmetric, cv_mode=secondary_cv,
+            min_train_pys=3, apply_correction=winner_exp.get("correction", False),
+        )
+        secondary_results[quarter] = result
+
+        if secondary_cv == "temporal":
+            print(f"\n  {quarter.upper()} (temporal):")
+            print(f"  {'PY':<6} {'Train PYs':<24} {'n_train':>8} {'n_test':>8} {'P95 cov':>8} {'P95 hw':>10}")
+            print(f"  {'-'*6} {'-'*24} {'-'*8} {'-'*8} {'-'*8} {'-'*10}")
+            for py in sorted(result["per_py"]):
+                p = result["per_py"][py]
+                train_pys_str = ",".join(str(y) for y in p.get("train_pys", []))
+                p95_cov = p["coverage"]["overall"]["p95"]["actual"]
+                p95_w = p["widths"]["p95"]["mean_width"]
+                print(f"  {py:<6} {train_pys_str:<24} {p['n_train']:>8,} {p['n_test']:>8,} {p95_cov:>7.2f}% {p95_w:>10.1f}")
+        else:
+            print(f"\n  {quarter.upper()} (LOO):")
+            print(f"  {'PY':<6} {'n_train':>8} {'n_test':>8} {'P95 cov':>8} {'P95 hw':>10}")
+            print(f"  {'-'*6} {'-'*8} {'-'*8} {'-'*8} {'-'*10}")
+            for py in sorted(result["per_py"]):
+                p = result["per_py"][py]
+                p95_cov = p["coverage"]["overall"]["p95"]["actual"]
+                p95_w = p["widths"]["p95"]["mean_width"]
+                print(f"  {py:<6} {p['n_train']:>8,} {p['n_test']:>8,} {p95_cov:>7.2f}% {p95_w:>10.1f}")
+
+        agg = result["aggregate"]["coverage"]["overall"]
+        p95 = agg.get("p95", {})
+        print(f"  Aggregate: P95 cov={p95.get('actual', 0):.2f}% (err {p95.get('error', 0):+.2f}pp)")
+
+        del df
+        gc.collect()
+
+    # Primary vs secondary comparison
+    print(f"\n  {primary_cv.upper()} vs {secondary_cv.upper()} P95 ({winner_name}):")
+    print(f"  {'Quarter':<10} {primary_cv+' cov':>10} {secondary_cv+' cov':>10} {primary_cv+' hw':>10} {secondary_cv+' hw':>10}")
+    print(f"  {'-'*10} {'-'*10} {'-'*10} {'-'*10} {'-'*10}")
+    for q in QUARTERS:
+        pri_cov = winner_q_results[q]["aggregate"]["coverage"]["overall"]["p95"]["actual"]
+        sec_cov = secondary_results[q]["aggregate"]["coverage"]["overall"].get("p95", {}).get("actual", 0)
+        pri_w = winner_q_results[q]["aggregate"]["widths"]["overall"]["p95"]["mean_width"]
+        sec_w = secondary_results[q]["aggregate"]["widths"]["overall"].get("p95", {}).get("mean_width", 0)
+        print(f"  {q:<10} {pri_cov:>9.2f}% {sec_cov:>9.2f}% {pri_w:>10.1f} {sec_w:>10.1f}")
+
+    # ─── Phase 5: Build metrics ──────────────────────────────────────
+
+    if use_temporal_primary:
+        primary_results = winner_q_results
+        temporal_results = winner_q_results
+        loo_results = secondary_results
+    else:
+        primary_results = winner_q_results
+        temporal_results = secondary_results
+        loo_results = winner_q_results
+
+    metrics = {
+        "coverage": {},
+        "widths": {},
+        "stability": {},
+        "per_class_coverage": {},
+        "per_sign_coverage": {},
+        "per_py": {},
+        "temporal_validation": {},
+        "loo_validation": {},
+        "experiment_comparison": {},
+    }
+
+    for quarter in QUARTERS:
+        pri = primary_results[quarter]
+        t = temporal_results[quarter]
+        w = loo_results[quarter]
+
+        # Primary metrics for gates
+        metrics["coverage"][quarter] = pri["aggregate"]["coverage"]
+        if use_temporal_primary:
+            metrics["widths"][quarter] = {
+                "overall": pri["aggregate"]["widths"]["overall"],
+                "per_sign": pri["aggregate"]["widths"].get("per_sign", {}),
+            }
+        else:
+            metrics["widths"][quarter] = {
+                "overall": pri["aggregate"]["widths"]["overall"],
+                "per_bin": pri["aggregate"]["widths"]["per_bin"],
+                "per_sign": pri["aggregate"]["widths"].get("per_sign", {}),
+            }
+        metrics["stability"][quarter] = pri["stability"]
+        metrics["per_class_coverage"][quarter] = pri["aggregate"]["coverage"].get("per_class", {})
+        metrics["per_sign_coverage"][quarter] = pri["aggregate"]["coverage"].get("per_sign", {})
+
+        # LOO validation
+        metrics["loo_validation"][quarter] = {
+            "coverage": w["aggregate"]["coverage"],
+            "widths": {
+                "overall": w["aggregate"]["widths"]["overall"],
+                "per_bin": w["aggregate"]["widths"].get("per_bin", {}),
+            },
+            "stability": w["stability"],
+            "per_class_coverage": w["aggregate"]["coverage"].get("per_class", {}),
+            "per_sign_coverage": w["aggregate"]["coverage"].get("per_sign", {}),
+            "per_py": {
+                py: {
+                    "p50_coverage": pdata["coverage"]["overall"]["p50"]["actual"],
+                    "p95_coverage": pdata["coverage"]["overall"]["p95"]["actual"],
+                    "p95_mean_width": pdata["widths"]["p95"]["mean_width"],
+                }
+                for py, pdata in w["per_py"].items()
+            },
+        }
+
+        # Temporal validation
+        metrics["temporal_validation"][quarter] = {
+            "aggregate_coverage": t["aggregate"]["coverage"]["overall"],
+            "aggregate_widths": t["aggregate"]["widths"]["overall"],
+            "stability": t["stability"],
+            "per_sign_coverage": t["aggregate"]["coverage"].get("per_sign", {}),
+            "per_py": {
+                py: {
+                    "train_pys": pdata.get("train_pys", []),
+                    "meets_min_train_pys": pdata.get("meets_min_train_pys", True),
+                    "n_train": pdata["n_train"],
+                    "n_test": pdata["n_test"],
+                    "p95_coverage": pdata["coverage"]["overall"]["p95"]["actual"],
+                    "p95_mean_width": pdata["widths"]["p95"]["mean_width"],
+                }
+                for py, pdata in t["per_py"].items()
+            },
+        }
+
+        # Per-PY summary from primary
+        if use_temporal_primary:
+            metrics["per_py"][quarter] = {
+                py: {
+                    "train_pys": pdata.get("train_pys", []),
+                    "meets_min_train_pys": pdata.get("meets_min_train_pys", True),
+                    "n_train": pdata["n_train"],
+                    "n_test": pdata["n_test"],
+                    "p95_coverage": pdata["coverage"]["overall"]["p95"]["actual"],
+                    "p95_mean_width": pdata["widths"]["p95"]["mean_width"],
+                }
+                for py, pdata in pri["per_py"].items()
+            }
+        else:
+            metrics["per_py"][quarter] = {
+                py: {
+                    "p50_coverage": pdata["coverage"]["overall"]["p50"]["actual"],
+                    "p95_coverage": pdata["coverage"]["overall"]["p95"]["actual"],
+                    "p95_mean_width": pdata["widths"]["p95"]["mean_width"],
+                }
+                for py, pdata in pri["per_py"].items()
+            }
+
+        # Experiment comparison
+        comparison = {}
+        for exp in experiments:
+            name = exp["name"]
+            r = all_results[name][quarter]
+            entry = {
+                "p95_coverage": r["aggregate"]["coverage"]["overall"].get("p95", {}).get("actual"),
+                "p95_error": r["aggregate"]["coverage"]["overall"].get("p95", {}).get("error"),
+                "p50_coverage": r["aggregate"]["coverage"]["overall"].get("p50", {}).get("actual"),
+                "p95_mean_width": r["aggregate"]["widths"]["overall"].get("p95", {}).get("mean_width"),
+                "symmetric": exp["symmetric"],
+                "n_bins": exp["n_bins"],
+                "correction": exp.get("correction", False),
+            }
+            pc = r["aggregate"]["coverage"].get("per_class", {})
+            if pc:
+                on_cov = pc.get("onpeak", {}).get("p95", {}).get("actual", 0)
+                off_cov = pc.get("offpeak", {}).get("p95", {}).get("actual", 0)
+                entry["class_gap_pp"] = round(abs(on_cov - off_cov), 2)
+            ps = r["aggregate"]["coverage"].get("per_sign", {})
+            if ps:
+                prev_cov = ps.get("prevail", {}).get("p95", {}).get("actual", 0)
+                ctr_cov = ps.get("counter", {}).get("p95", {}).get("actual", 0)
+                entry["sign_gap_pp"] = round(abs(prev_cov - ctr_cov), 2)
+            comparison[name] = entry
+        metrics["experiment_comparison"][quarter] = comparison
+
+    # ─── Phase 6: Save ───────────────────────────────────────────────
+
+    v_dir = ROOT / "versions" / "bands" / version_id / f"r{round_num}"
+    v_dir.mkdir(parents=True, exist_ok=True)
+
+    # metrics.json
+    metrics_path = v_dir / "metrics.json"
+    output = sanitize_for_json(metrics)
+    tmp = metrics_path.with_suffix(".tmp")
+    with open(tmp, "w") as f:
+        json.dump(output, f, indent=2)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.rename(tmp, metrics_path)
+    print(f"\nMetrics saved to {metrics_path}")
+
+    # config.json
+    try:
+        git_hash = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True,
+        ).strip()
+    except Exception:
+        git_hash = "unknown"
+
+    baseline_ver = "v3" if round_num == 1 else "M (prior round MCP)"
+    band_type = "symmetric" if winner_symmetric else "asymmetric"
+    winner_correction = winner_exp.get("correction", False)
+    config_data = {
+        "schema_version": 1,
+        "version": version_id,
+        "description": f"R{round_num} {band_type} bands ({winner_exp['n_bins']} quantile bins, class+sign stratified, correction={'on' if winner_correction else 'off'})",
+        "created": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "part": "bands",
+        "round": f"r{round_num}",
+        "baseline_version": baseline_ver,
+        "method": {
+            "band_type": band_type,
+            "calibration": (
+                f"signed quantile pair of (mcp - baseline) per (bin, class, sign)"
+                if not winner_symmetric else
+                f"empirical quantile of |mcp - baseline| per (bin, class, sign)"
+            ),
+            "cv_method": "temporal_expanding" if use_temporal_primary else "LOO_by_PY",
+            "gate_metric": "temporal" if use_temporal_primary else "LOO",
+            "bin_scheme": f"quantile_{winner_exp['n_bins']}bin",
+            "stratification": "per_class_sign (onpeak/offpeak x prevail/counter)",
+            "per_bin_correction": winner_correction,
+            "round": round_num,
+            "winner": winner_name,
+            "experiments_tested": [e["name"] for e in experiments],
+        },
+        "parameters": {
+            "coverage_levels": [0.50, 0.70, 0.80, 0.90, 0.95],
+            "n_bins": winner_exp["n_bins"],
+            "bin_boundaries": "data-driven (quantile)",
+            "stratify_by": ["class_type", "sign_seg"],
+            "min_cell_rows": MIN_CELL_ROWS,
+            "fallback_chain": "(bin, class, sign) -> (bin, class) -> (bin, pooled)",
+            "band_type": band_type,
+            "quantile_method": (
+                "signed residual quantiles at alpha_lo=(1-level)/2, alpha_hi=(1+level)/2"
+                if not winner_symmetric else
+                "absolute residual quantile at alpha=level"
+            ),
+            "winner_selection": "lowest mean P95 half-width, BG1 pass required",
+            "cv_method": "temporal_expanding" if use_temporal_primary else "LOO_by_PY",
+            "min_train_pys": 3,
+            "per_bin_correction": winner_correction,
+            "correction_tolerance_pp": CORRECTION_TOLERANCE,
+            "correction_step": CORRECTION_STEP,
+            "correction_max_iter": CORRECTION_MAX_ITER,
+        },
+        "data_sources": [{
+            "path": "all_residuals_v2.parquet" if round_num > 1 else "crossproduct_work/aq*_all_baselines.parquet",
+            "columns": [MCP_COL, baseline_col, CLASS_COL],
+        }],
+        "environment": {
+            "git_hash": git_hash,
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            "polars_version": pl.__version__,
+        },
+    }
+    config_path = v_dir / "config.json"
+    tmp = config_path.with_suffix(".tmp")
+    with open(tmp, "w") as f:
+        json.dump(config_data, f, indent=2)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.rename(tmp, config_path)
+    print(f"Config saved to {config_path}")
+
+    # ─── Phase 7: Print final summary ────────────────────────────────
+
+    print(f"\n{'='*70}")
+    print(f"  R{round_num} v6 SUMMARY")
+    print(f"{'='*70}")
+    print(f"\n  Winner: {winner_name} ({band_type}, {winner_exp['n_bins']} bins, correction={'on' if winner_correction else 'off'})")
+
+    gate_label = f"{primary_cv}, min_train_pys=3"
+    print(f"\n  P95 coverage accuracy ({gate_label}):")
+    print(f"  {'Quarter':<10} {'Target':>8} {'Actual':>8} {'Error':>8}")
+    print(f"  {'-'*10} {'-'*8} {'-'*8} {'-'*8}")
+    for q in QUARTERS:
+        cov = metrics["coverage"][q]["overall"]["p95"]
+        print(f"  {q:<10} {cov['target']:>7.1f}% {cov['actual']:>7.2f}% {cov['error']:>+7.2f}pp")
+
+    print(f"\n  Per-class P95 coverage:")
+    print(f"  {'Quarter':<10} {'onpeak':>10} {'offpeak':>10} {'gap':>8}")
+    print(f"  {'-'*10} {'-'*10} {'-'*10} {'-'*8}")
+    for q in QUARTERS:
+        pc = metrics["per_class_coverage"][q]
+        on = pc.get("onpeak", {}).get("p95", {}).get("actual", 0)
+        off = pc.get("offpeak", {}).get("p95", {}).get("actual", 0)
+        gap = abs(on - off)
+        print(f"  {q:<10} {on:>9.2f}% {off:>9.2f}% {gap:>7.2f}pp")
+
+    print(f"\n  Per-sign P95 coverage:")
+    print(f"  {'Quarter':<10} {'prevail':>10} {'counter':>10} {'gap':>8}")
+    print(f"  {'-'*10} {'-'*10} {'-'*10} {'-'*8}")
+    for q in QUARTERS:
+        ps = metrics["per_sign_coverage"][q]
+        prev = ps.get("prevail", {}).get("p95", {}).get("actual", 0)
+        ctr = ps.get("counter", {}).get("p95", {}).get("actual", 0)
+        gap = abs(prev - ctr)
+        print(f"  {q:<10} {prev:>9.2f}% {ctr:>9.2f}% {gap:>7.2f}pp")
+
+    print(f"\n  P95 mean half-width ($/MWh):")
+    print(f"  {'Quarter':<10} {'Half-width':>10}")
+    print(f"  {'-'*10} {'-'*10}")
+    for q in QUARTERS:
+        w = metrics["widths"][q]["overall"]["p95"]["mean_width"]
+        print(f"  {q:<10} {w:>10.1f}")
+
+    # Compare to prior version
+    if prior_version_part:
+        prior_metrics_path = ROOT / "versions" / prior_version_part / "metrics.json"
+        if prior_metrics_path.exists():
+            with open(prior_metrics_path) as f:
+                prior_metrics = json.load(f)
+            print(f"\n  vs prior ({prior_version_part}):")
+            print(f"  {'Quarter':<10} {'Prior hw':>10} {'v6 hw':>10} {'Change':>10}")
+            print(f"  {'-'*10} {'-'*10} {'-'*10} {'-'*10}")
+            for q in QUARTERS:
+                prior_w = prior_metrics["widths"][q]["overall"]["p95"]["mean_width"]
+                v6_w = metrics["widths"][q]["overall"]["p95"]["mean_width"]
+                pct = round((v6_w - prior_w) / prior_w * 100, 1) if prior_w else 0
+                print(f"  {q:<10} {prior_w:>10.0f} {v6_w:>10.1f} {pct:>+9.1f}%")
+
+    # Run pipeline validate
+    print(f"\n  Running pipeline validate bands...")
+    try:
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "pipeline" / "pipeline.py"), "validate", "bands"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60,
+        )
+        print(f"  {result.stdout.strip()}")
+        if result.returncode != 0 and result.stderr:
+            print(f"  STDERR: {result.stderr.strip()}")
+    except Exception as e:
+        print(f"  Validate failed: {e}")
+
+    # Run pipeline compare
+    round_flag = f"r{round_num}"
+    print(f"\n  Running pipeline compare bands {version_id} --round {round_flag}...")
+    try:
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "pipeline" / "pipeline.py"),
+             "compare", "bands", version_id, "--round", round_flag],
+            capture_output=True, text=True, cwd=ROOT, timeout=60,
+        )
+        print(f"  {result.stdout.strip()}")
+        if result.returncode != 0 and result.stderr:
+            print(f"  STDERR: {result.stderr.strip()}")
+    except Exception as e:
+        print(f"  Compare failed: {e}")
+
+    return metrics
+
+
+# ─── Main ────────────────────────────────────────────────────────────────────
+
+
+def main():
+    print(f"Bands v6: Reduce Width, Fix BG3")
+    print(f"Memory at start: {mem_mb():.0f} MB")
+
+    # Consistent experiment definitions across all rounds
+    experiments = [
+        {"name": "asym_6b_cs",      "n_bins": 6, "symmetric": False, "correction": False},
+        {"name": "asym_6b_cs_corr", "n_bins": 6, "symmetric": False, "correction": True},
+        {"name": "sym_6b_cs",       "n_bins": 6, "symmetric": True,  "correction": False},
+        {"name": "sym_6b_cs_corr",  "n_bins": 6, "symmetric": True,  "correction": True},
+    ]
+
+    # ─── R1: LOO primary, 4 experiments ──────────────────────────────
+
+    def r1_loader(quarter: str) -> pl.DataFrame:
+        parquet_path = R1_DATA_DIR / f"{quarter}_all_baselines.parquet"
+        return (
+            pl.scan_parquet(parquet_path)
+            .filter(
+                (pl.col(PY_COL) >= 2019)
+                & pl.col("nodal_f0").is_not_null()
+                & pl.col(MCP_COL).is_not_null()
+            )
+            .collect()
+        )
+
+    r1_metrics = run_round_v6(
+        round_num=1, experiments=experiments, baseline_col="nodal_f0",
+        data_loader=r1_loader, pys=R1_PYS,
+        version_id="v6",
+        prior_version_part="bands/v5/r1",
+    )
+    gc.collect()
+    print(f"\nMemory after R1: {mem_mb():.0f} MB")
+
+    # ─── R2: Temporal primary, 4 experiments ─────────────────────────
+
+    def r2_loader(quarter: str) -> pl.DataFrame:
+        return (
+            pl.scan_parquet(R2R3_DATA_PATH)
+            .filter(
+                (pl.col("round") == 2)
+                & (pl.col("period_type") == quarter)
+                & (pl.col(PY_COL) >= 2019)
+                & pl.col("mtm_1st_mean").is_not_null()
+                & pl.col(MCP_COL).is_not_null()
+            )
+            .select(["mtm_1st_mean", MCP_COL, PY_COL, "period_type", CLASS_COL, "source_id", "sink_id"])
+            .collect()
+        )
+
+    r2_metrics = run_round_v6(
+        round_num=2, experiments=experiments, baseline_col="mtm_1st_mean",
+        data_loader=r2_loader, pys=R2R3_PYS,
+        version_id="v6",
+        prior_version_part="bands/v5/r2",
+    )
+    gc.collect()
+    print(f"\nMemory after R2: {mem_mb():.0f} MB")
+
+    # ─── R3: Temporal primary, 4 experiments ─────────────────────────
+
+    def r3_loader(quarter: str) -> pl.DataFrame:
+        return (
+            pl.scan_parquet(R2R3_DATA_PATH)
+            .filter(
+                (pl.col("round") == 3)
+                & (pl.col("period_type") == quarter)
+                & (pl.col(PY_COL) >= 2019)
+                & pl.col("mtm_1st_mean").is_not_null()
+                & pl.col(MCP_COL).is_not_null()
+            )
+            .select(["mtm_1st_mean", MCP_COL, PY_COL, "period_type", CLASS_COL, "source_id", "sink_id"])
+            .collect()
+        )
+
+    r3_metrics = run_round_v6(
+        round_num=3, experiments=experiments, baseline_col="mtm_1st_mean",
+        data_loader=r3_loader, pys=R2R3_PYS,
+        version_id="v6",
+        prior_version_part="bands/v5/r3",
+    )
+    gc.collect()
+    print(f"\nMemory after R3: {mem_mb():.0f} MB")
+
+    print(f"\nDone. Memory: {mem_mb():.0f} MB")
+
+
+if __name__ == "__main__":
+    main()

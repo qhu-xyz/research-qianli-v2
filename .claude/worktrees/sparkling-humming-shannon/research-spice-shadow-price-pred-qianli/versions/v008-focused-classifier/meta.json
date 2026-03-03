@@ -1,0 +1,10 @@
+{
+  "model_id": "v008-focused-classifier",
+  "created": "2026-02-24T14:29:28",
+  "description": "Focused classifier (14 features, v000 hyperparams + regularization), rich regressor (27 features), 10/2 split, beta=0.7",
+  "source_commit": "v008",
+  "algo": "focused-clf-rich-reg",
+  "status": "candidate",
+  "config_checksum": "sha256:9a18b699fc628db0",
+  "version_hash": "sha256:0cbf6b27c939c90a7e1e6d2c3de7e93b"
+}

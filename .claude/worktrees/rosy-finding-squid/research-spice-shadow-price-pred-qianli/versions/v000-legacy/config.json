@@ -1,0 +1,99 @@
+{
+  "description": "Legacy pipeline defaults (commit b32bf6b)",
+  "features": {
+    "step1_features": [
+      {
+        "name": "prob_exceed_110",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_exceed_105",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_exceed_100",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_exceed_95",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_exceed_90",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_below_95",
+        "monotonicity": -1
+      },
+      {
+        "name": "prob_below_90",
+        "monotonicity": -1
+      },
+      {
+        "name": "density_skewness",
+        "monotonicity": 1
+      }
+    ],
+    "step2_features": [
+      {
+        "name": "prob_exceed_110",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_exceed_105",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_exceed_100",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_exceed_95",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_exceed_90",
+        "monotonicity": 1
+      },
+      {
+        "name": "prob_below_95",
+        "monotonicity": -1
+      },
+      {
+        "name": "prob_below_90",
+        "monotonicity": -1
+      },
+      {
+        "name": "density_skewness",
+        "monotonicity": 1
+      }
+    ],
+    "note": "hist_da was commented out in legacy code"
+  },
+  "training": {
+    "train_months": 12,
+    "val_months": 0,
+    "test_months": 0,
+    "split": "12/0/0 (rolling 12-month window, no val/test split)",
+    "min_samples_for_branch_model": 1,
+    "min_binding_samples_for_regression": 1
+  },
+  "threshold": {
+    "threshold_beta": 0.5,
+    "note": "F0.5 (precision-weighted), in-sample optimization"
+  },
+  "models": {
+    "classifiers": [
+      "XGBClassifier"
+    ],
+    "regressors": [
+      "XGBRegressor"
+    ],
+    "note": "ElasticNet was commented out in legacy code"
+  },
+  "anomaly_detection": {
+    "enabled": true,
+    "k_multiplier": 3.0
+  }
+}

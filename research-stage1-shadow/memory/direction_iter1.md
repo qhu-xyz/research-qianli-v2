@@ -1,142 +1,211 @@
-# Direction — Iteration 1 (feat-eng-20260302-154125)
+# Direction — Iteration 1 (feat-eng-20260302-194243)
 
 ## Hypothesis
 
-**H5: Training window expansion (10→14 months) improves ranking quality by exposing the model to more diverse market regimes, directly addressing the late-2022 distribution shift.**
+**H5: Training window expansion (10→14 months) breaks AUC ceiling by addressing late-2022 distribution shift**
 
-Revert to v0's 14 base features (remove 3 interaction features from v0002) to isolate the training window effect.
+The AUC ceiling at ~0.835 is confirmed across two independent levers:
+- HP tuning (v0003): AUC 0W/11L — complexity not the bottleneck
+- Interaction features (v0002): AUC 5W/6L/1T — information ceiling within feature set
 
-## Rationale
+The weakest months (2022-09, 2022-12) consistently underperform, and early months benefit more from changes than late months. This pattern suggests the 10-month rolling window may not capture sufficient seasonal diversity. Expanding to 14 months provides 40% more training examples, including data from seasons absent in the shorter window.
 
-Two independent levers have failed to break the AUC ceiling at ~0.835:
-- **v0003** (HP tuning): AUC -0.0025, 0W/11L — model is not complexity-limited
-- **v0002** (interaction features): AUC +0.0000, 5W/6L/1T — interactions don't add new information
-
-Both reviewers and the previous orchestrator converge on: **the dominant remaining problem is temporal non-stationarity (late-2022 distribution shift)**. The 10-month rolling training window may not capture enough regime diversity.
-
-Evidence for distribution shift:
-- Weakest months: 2022-09 (AP=0.315), 2022-12 (AUC=0.809), 2022-06 (REC=0.313)
-- Interaction features helped early months (2020-09 to 2021-04) but not late months (2022+)
-- Late-2022 weakness unchanged across HP tuning AND interaction features
-
-Why remove interaction features:
-- v0002 showed bottom-2 regressed on 3/4 Group A metrics (AP -0.0017, VCAP@100 -0.0008, NDCG -0.0013)
-- Gains concentrated in distribution middle, not tails
-- VCAP@500 -0.0043 and VCAP@1000 -0.0031 (hurt broader ranking)
-- Clean single-variable comparison (v0 features + new window) gives the clearest signal
+For eval month 2022-09 with `train_months=14`:
+- v0 sees: ~2021-09 to 2022-07 (10 months) — misses spring 2021
+- New sees: ~2021-05 to 2022-07 (14 months) — captures spring/summer 2021 patterns
 
 ## Specific Changes
 
-### 1. Fix benchmark.py train_months plumbing (BUG — blocking for this experiment)
+### 1. Revert FeatureConfig to v0 baseline (14 features)
 
-**Problem**: `_eval_single_month` creates `PipelineConfig` with default `train_months=10`, ignoring any override. The `run_benchmark` overrides set `train_months` on `pc_dummy` but never pass it to `_eval_single_month`.
+**File**: `ml/config.py` → `FeatureConfig.step1_features`
+
+Remove the 3 interaction features added for v0002. This isolates the training window effect cleanly.
+
+```python
+# REMOVE these 3 entries from step1_features:
+("exceed_severity_ratio", 1),
+("hist_physical_interaction", 1),
+("overload_exceedance_product", 1),
+```
+
+After removal, `step1_features` should have exactly 14 entries (the v0 baseline set).
+
+### 2. Guard interaction feature computation in features.py
+
+**File**: `ml/features.py` → `prepare_features()`
+
+The interaction features are unconditionally computed on line 38-45. Guard them so they only compute if the config requests them:
+
+```python
+# In prepare_features(), BEFORE the df.select(cols):
+interaction_cols = {"exceed_severity_ratio", "hist_physical_interaction", "overload_exceedance_product"}
+if interaction_cols & set(cols):
+    df = df.with_columns([
+        (pl.col("prob_exceed_110") / (pl.col("prob_exceed_90") + 1e-6))
+            .alias("exceed_severity_ratio"),
+        (pl.col("hist_da") * pl.col("prob_exceed_100"))
+            .alias("hist_physical_interaction"),
+        (pl.col("expected_overload") * pl.col("prob_exceed_105"))
+            .alias("overload_exceedance_product"),
+    ])
+```
+
+Also add a schema guard: verify all requested feature columns exist in the DataFrame before `df.select(cols)`. This addresses the Codex MEDIUM from iter1:
+
+```python
+missing = set(cols) - set(df.columns) - interaction_cols  # interactions may be computed above
+if missing:
+    raise ValueError(f"Missing feature columns in data: {missing}")
+```
+
+### 3. Fix benchmark.py train_months plumbing (BUG FIX)
 
 **File**: `ml/benchmark.py`
 
-**Changes**:
-- Add `train_months: int = 10` and `val_months: int = 2` parameters to `_eval_single_month` signature
-- Pass them when constructing `PipelineConfig` inside `_eval_single_month`:
-  ```python
-  config = PipelineConfig(
-      auction_month=auction_month,
-      class_type=class_type,
-      period_type=ptype,
-      threshold_beta=threshold_beta,
-      train_months=train_months,
-      val_months=val_months,
-  )
-  ```
-- Extract `train_months` and `val_months` from `pc_dummy` in `run_benchmark` after `_apply_overrides`, and pass them to `_eval_single_month`:
-  ```python
-  train_months = pc_dummy.train_months
-  val_months = pc_dummy.val_months
-  ```
-- Fix the hardcoded `"train_months": 10` on line 178 — use the actual value:
-  ```python
-  "train_months": train_months,
-  "val_months": val_months,
-  ```
+Three changes required:
 
-### 2. Remove interaction features — revert to v0's 14 base features
-
-**File**: `ml/config.py`
-- Remove the 3 interaction feature tuples from `FeatureConfig.step1_features`:
-  - `("exceed_severity_ratio", 1)`
-  - `("hist_physical_interaction", 1)`
-  - `("overload_exceedance_product", 1)`
-- Update docstring: features property should say "14 items" (already does, but verify)
-
-**File**: `ml/features.py`
-- Remove the `df.with_columns([...])` block that computes the 3 interaction features (lines 38-45)
-- Fix docstrings: "14 feature columns" is correct after removal; "shape (n_samples, 14)" is correct
-
-**File**: `ml/data_loader.py`
-- Fix docstring on line 24: "14 feature columns" is correct after removal
-
-### 3. Set train_months=14 in PipelineConfig default
-
-**File**: `ml/config.py`
-- Change `train_months: int = 10` to `train_months: int = 14` in `PipelineConfig`
-
-### 4. Update tests
-
-**File**: `ml/tests/test_config.py`
-- Update assertion `assert pc.train_months == 10` → `assert pc.train_months == 14`
-- Update any feature count assertions from 17 back to 14
-
-**File**: `ml/tests/test_features.py` (if exists)
-- Remove test data for interaction features
-- Update expected feature count assertions from 17 to 14
-
-### 5. Add schema guard for base feature columns (from Codex review, MEDIUM)
-
-**File**: `ml/features.py`
-- Before `df.select(cols)`, add validation that all base columns exist in the DataFrame:
-  ```python
-  missing = [c for c in cols if c not in df.columns]
-  if missing:
-      raise ValueError(f"Missing feature columns in DataFrame: {missing}")
-  ```
-
-## Run Configuration
-
-The worker should run benchmark with:
-```bash
-cd /home/xyz/workspace/pmodel && source .venv/bin/activate
-cd /home/xyz/workspace/research-qianli-v2/research-stage1-shadow
-
-python -m ml.benchmark --version-id ${VERSION_ID} --ptype f0 --class-type onpeak
+**(a)** Add `train_months` parameter to `_eval_single_month()`:
+```python
+def _eval_single_month(
+    auction_month: str,
+    class_type: str,
+    ptype: str,
+    hyperparam_config: HyperparamConfig,
+    feature_config: FeatureConfig,
+    threshold_beta: float = 0.7,
+    train_months: int = 10,       # <-- ADD THIS
+    val_months: int = 2,          # <-- ADD THIS
+) -> dict | None:
 ```
 
-No `--overrides` needed since `train_months=14` is set as the new default.
+And pass them to PipelineConfig:
+```python
+config = PipelineConfig(
+    auction_month=auction_month,
+    class_type=class_type,
+    period_type=ptype,
+    threshold_beta=threshold_beta,
+    train_months=train_months,    # <-- ADD THIS
+    val_months=val_months,        # <-- ADD THIS
+)
+```
+
+**(b)** Add `train_months` parameter to `run_benchmark()`:
+```python
+def run_benchmark(
+    version_id: str,
+    eval_months: list[str],
+    class_type: str = "onpeak",
+    ptype: str = "f0",
+    registry_dir: str = "registry",
+    hyperparam_config: HyperparamConfig | None = None,
+    feature_config: FeatureConfig | None = None,
+    threshold_beta: float = 0.7,
+    train_months: int = 10,       # <-- ADD THIS
+    val_months: int = 2,          # <-- ADD THIS
+    overrides: dict | None = None,
+) -> dict:
+```
+
+Extract `train_months` and `val_months` from overrides:
+```python
+if overrides:
+    from ml.pipeline import _apply_overrides
+    pc_dummy = PipelineConfig(threshold_beta=threshold_beta)
+    hyperparam_config, pc_dummy = _apply_overrides(hyperparam_config, pc_dummy, overrides)
+    threshold_beta = pc_dummy.threshold_beta
+    train_months = pc_dummy.train_months    # <-- ADD THIS
+    val_months = pc_dummy.val_months        # <-- ADD THIS
+```
+
+Pass them to each `_eval_single_month()` call:
+```python
+metrics = _eval_single_month(
+    month, class_type, ptype, hyperparam_config, feature_config,
+    threshold_beta, train_months, val_months  # <-- ADD THESE
+)
+```
+
+**(c)** Fix hardcoded eval_config (line 178):
+```python
+"eval_config": {
+    "eval_months": eval_months,
+    "class_type": class_type,
+    "ptype": ptype,
+    "train_months": train_months,   # <-- was hardcoded 10
+    "val_months": val_months,        # <-- was hardcoded 2
+    "threshold_beta": threshold_beta,
+},
+```
+
+### 4. Set train_months=14 for this version
+
+**File**: `ml/config.py` → `PipelineConfig`
+
+Change the default:
+```python
+train_months: int = 14  # was 10
+```
+
+**Rationale for changing the default rather than using overrides**: The overrides mechanism works, but changing the default makes the experiment config explicit in `config.py` and ensures it flows through all code paths (benchmark, pipeline, etc.) without needing every caller to pass it.
+
+### 5. Update stale docstrings
+
+**File**: `ml/features.py`
+- Line 20: Change "14 feature columns" → "feature columns" (count depends on config)
+- Line 30: Change "Feature matrix of shape (n_samples, 14)" → "Feature matrix of shape (n_samples, n_features)"
+
+**File**: `ml/data_loader.py`
+- Line 24: Change "14 feature columns" → "feature columns"
+
+### 6. Keep all v0 hyperparameters
+
+**IMPORTANT**: Do NOT change any hyperparameters. Keep v0 defaults:
+- `n_estimators=200`, `max_depth=4`, `learning_rate=0.1`
+- `subsample=0.8`, `colsample_bytree=0.8`
+- `reg_alpha=0.1`, `reg_lambda=1.0`, `min_child_weight=10`
+
+This isolates the training window effect.
+
+## Run Instructions
+
+After making the above changes:
+
+1. Run tests: `python -m pytest ml/tests/ -v`
+2. Run benchmark: `python ml/benchmark.py --version-id ${VERSION_ID}`
+3. Run validate: `python ml/validate.py --version-id ${VERSION_ID}`
+4. Run compare: `python ml/compare.py --version-id ${VERSION_ID} --baseline v0`
+5. Commit, then write handoff
 
 ## Expected Impact
 
-| Metric | Direction | Rationale |
-|--------|-----------|-----------|
-| S1-AUC | +0.002–0.008 | More diverse training data → better generalization, especially late-2022 |
-| S1-AP | +0.005–0.015 | Ranking quality should improve with broader regime coverage |
-| S1-NDCG | +0.002–0.010 | Better ordering of borderline cases |
-| S1-VCAP@100 | ~neutral | Top-100 captures extreme cases that may not benefit from more training data |
-| S1-BRIER | ~neutral | Calibration effects are unclear; monitor closely |
+| Metric | Expected Direction | Rationale |
+|--------|-------------------|-----------|
+| S1-AUC | +0.002 to +0.008 | More diverse training examples improve discrimination |
+| S1-AP | +0.005 to +0.015 | Better positive ranking from seasonal diversity |
+| S1-NDCG | +0.002 to +0.010 | Improved ranking quality from richer training |
+| S1-VCAP@100 | +0.001 to +0.005 | Top-100 benefit from better tail discrimination |
+| S1-BRIER | ±0.002 | Neutral — calibration mostly unaffected by window size |
+| Late-2022 months | Strongest improvement | 2022-09, 2022-12 gain most from additional historical context |
 
-**Primary success metric**: AUC improvement in late-2022 months (2022-09, 2022-12).
-**Secondary**: AUC win count ≥ 8/12 months.
+**Success criteria**: AUC improvement in ≥7/12 months AND mean AUC > 0.835
 
 ## Risk Assessment
 
-1. **Stale pattern inclusion** (MEDIUM): Older months in the training window may contain patterns that no longer hold. The 14-month window includes data from ~1 year before the auction month. If market dynamics changed, this could hurt rather than help. Mitigation: compare early-months vs late-months performance to detect this.
+| Risk | Likelihood | Mitigation |
+|------|-----------|------------|
+| Stale data dilution (old patterns hurt) | LOW | 14 months is moderate; not reaching back 2+ years |
+| Data availability for earliest months | LOW | 2020-09 needs data from 2019-05; MISO data available |
+| Compute time increase (~40%) | MEDIUM | 14-month lookback loads more data; monitor mem_mb() closely |
+| Overfitting to seasonal patterns | LOW | Larger training set generally regularizes, not overfits |
+| Neutral result (window isn't the answer) | MEDIUM | If AUC stays at ~0.835, need fundamentally new features or methods |
 
-2. **Data loading time** (LOW): Loading 4 additional months of training data per eval month increases runtime. At ~270K rows/month, this adds ~1.1M rows per eval month (~40% more data). Training time scales roughly linearly with data size. Total benchmark time may increase from ~45min to ~60min. Within worker timeout.
+## What NOT to Change
 
-3. **Overfitting risk** (LOW): More training data generally reduces overfitting, not increases it. This is the safest direction available.
-
-4. **train_months plumbing fix could introduce bugs** (LOW): The benchmark.py fix is mechanical — adding parameter passthrough. Test by verifying that v0 baseline results are reproduced when train_months=10 is explicitly passed.
-
-## Validation Checklist
-
-- [ ] All existing tests pass after changes
-- [ ] Benchmark with train_months=10 (explicit override) reproduces v0 metrics (±0.001) — confirms the plumbing fix doesn't break anything
-- [ ] Benchmark with train_months=14 (new default) completes successfully for all 12 months
-- [ ] No month produces empty training or validation set with the expanded window
-- [ ] eval_config in metrics.json correctly shows train_months=14
+- Hyperparameters (keep v0 defaults)
+- `threshold_beta` (keep 0.7)
+- `threshold_scaling_factor` (keep 1.0)
+- `gates.json` or `evaluate.py` (HUMAN-WRITE-ONLY)
+- `registry/v0/` (immutable)
+- `val_months` (keep 2)

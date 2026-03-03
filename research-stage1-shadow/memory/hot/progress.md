@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| Batch | feat-eng-20260302-154125 |
+| Batch | feat-eng-20260302-194243 |
 | Iteration | 1 of 3 (planning complete, worker pending) |
 | State | ORCHESTRATOR_PLANNING → next: WORKER |
 | Champion | None (v0 baseline) |
@@ -25,7 +25,7 @@
 |-------|-------|--------|------------|
 | hp-tune-134412 | HP tuning (v0003) | AUC -0.0025, 0W/11L | Model not complexity-limited |
 | hp-tune-144146 | Interaction features (v0002) | AUC +0.000, 5W/6L/1T | Information ceiling reached |
-| **feat-eng** | **Training window (10→14)** | **Pending** | **Addresses distribution shift directly** |
+| **feat-eng-194243** | **Training window (10→14)** | **Pending** | **Addresses distribution shift directly** |
 
 ## History
 
@@ -35,4 +35,5 @@
 | smoke-v7 | Bug fixes + beta experiment | Fixes merged, H2 failed (beta direction inverted) |
 | hp-tune-20260302-134412 iter1 | HP tuning (v0003) | H3 refuted — AUC -0.0025, 0W/11L |
 | hp-tune-20260302-144146 iter1 | Interaction features (v0002) | H4 not supported — AUC +0.000, 5W/6L |
-| feat-eng-20260302-154125 iter1 | Training window expansion (10→14) | Worker pending |
+| feat-eng-20260302-154125 iter1 | Training window expansion (10→14) | Superseded by current batch |
+| feat-eng-20260302-194243 iter1 | Training window expansion (10→14) | Worker pending |

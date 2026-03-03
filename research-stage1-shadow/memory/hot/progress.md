@@ -4,41 +4,27 @@
 
 | Field | Value |
 |-------|-------|
-| Batch | feat-eng-20260303-060938 |
-| Iteration | 3 of 3 (**COMPLETE** — final synthesis) |
-| State | ORCHESTRATOR_SYNTHESIZING → next: HUMAN_SYNC |
+| Batch | feat-eng-2-20260303-092848 |
+| Iteration | 1 of 3 |
+| State | ORCHESTRATOR_PLANNING → WORKER next |
 | Champion | None (v0 baseline) |
-| Best Version | v0004 (recommended for HUMAN_SYNC promotion consideration) |
-| Last Hypothesis | H8: Feature pruning 17→13 + revert window — TRADEOFF DISCOVERY |
+| Best Version | v0004 (from prior batch, recommended for promotion at HUMAN_SYNC) |
+| Current Hypothesis | H9: Add shift factor + constraint metadata features (6 new features, 19 total) |
 
-## This Batch Results
+## This Batch Strategy
 
-- **Iter 1**: H6 — 14-month window + 3 interaction features → v0004. AUC +0.0015 (9W/3L), VCAP@100 +0.0056 (10W/2L, **p=0.039**). Not promoted but best balanced version.
-- **Iter 2**: H7 — 18-month window + feature importance → v0005. Diminishing returns confirmed. Feature importance data collected. Not promoted.
-- **Iter 3**: H8 — Prune to 13 features + revert to 14mo → v0006. NDCG +0.0227 and VCAP@100 +0.0121 (**both p=0.039**), but AP -0.0044 (3W/9L). Tradeoff discovery — not promoted.
+**Human directive**: Aggressive feature engineering. The ~0.836 AUC ceiling is a feature ceiling. Source loader has 15+ unused features. Priority is adding many new features, not tweaking parameters. train_months=14 is HARD MAX.
 
-## v0006 Key Results (iter 3)
+### Planned Iterations
+- **Iter 1**: H9 — Add 6 shift factor + constraint metadata features (sf_max_abs, sf_mean_abs, sf_std, sf_nonzero_frac, is_interface, constraint_limit). Completely new signal class (network topology + structural).
+- **Iter 2**: Depends on iter 1 results. If promising → add distribution + band features. If marginal → kitchen sink. If failed → pivot approach.
+- **Iter 3**: Depends on iter 1+2 results.
 
-| Metric | v0 | v0004 (best balanced) | v0006 (iter 3) | vs v0 | vs v0004 |
-|--------|-----|----------------------|----------------|-------|----------|
-| S1-AUC | 0.8348 | 0.8363 | 0.8354 | +0.0006 | -0.0009 |
-| S1-AP | 0.3936 | 0.3951 | 0.3892 | **-0.0044** | **-0.0059** |
-| S1-VCAP@100 | 0.0149 | 0.0205 | **0.0270** | **+0.0121** | +0.0065 |
-| S1-NDCG | 0.7333 | 0.7371 | **0.7560** | **+0.0227** | +0.0189 |
+## Prior Batch Results (feat-eng-20260303-060938)
 
-## Batch Recommendation for HUMAN_SYNC
-
-**Promote v0004** as a modest improvement over v0:
-- AUC 0.8363 (+0.0015, 9W/3L — best W/L)
-- AP 0.3951 (+0.0015 — best AP)
-- VCAP@100 0.0205 (+0.0056, 10W/2L, p=0.039 — statistically significant)
-- NDCG 0.7371 (+0.0038)
-
-**Document v0006** as a research finding:
-- Novel monotone constraint structure effect on ranking quality
-- Potential value if business acts only on top-100 predictions
-
-**Feature set ceiling reached**: 6 experiments, 3 independent levers, AUC range [0.832, 0.836]. Next improvement requires new data sources.
+- **Iter 1**: H6 — 14-month window + 3 interaction features → v0004. AUC +0.0015 (9W/3L), VCAP@100 +0.0056 (10W/2L, **p=0.039**). Best balanced version.
+- **Iter 2**: H7 — 18-month window + feature importance → v0005. Diminishing returns confirmed.
+- **Iter 3**: H8 — Prune to 13 features + revert to 14mo → v0006. NDCG +0.0227 and VCAP@100 +0.0121 (both p=0.039), but AP -0.0044 (3W/9L). Tradeoff discovery.
 
 ## Cumulative Evidence (all real-data experiments)
 
@@ -55,11 +41,12 @@
 
 | Batch | Type | Result |
 |-------|------|--------|
-| smoke-v6 | Infrastructure validation | PASS (determinism confirmed) |
+| smoke-v6 | Infrastructure validation | PASS |
 | smoke-v7 | Bug fixes + beta experiment | Fixes merged, H2 failed |
 | hp-tune-134412 iter1 | HP tuning (v0003-HP) | H3 refuted |
 | hp-tune-144146 iter1 | Interaction features (v0002) | H4 not supported |
 | feat-eng-194243 iter1 | Training window 10-14 (v0003) | H5 inconclusive |
 | feat-eng-060938 iter1 | Window + Interactions (v0004) | H6 partially confirmed |
 | feat-eng-060938 iter2 | Window 18 + importance (v0005) | H7 failed |
-| **feat-eng-060938 iter3** | **Feature pruning 17-13 (v0006)** | **H8 tradeoff discovery** |
+| feat-eng-060938 iter3 | Feature pruning 17-13 (v0006) | H8 tradeoff discovery |
+| **feat-eng-2-092848 iter1** | **SF + metadata features (v0006)** | **H9 — in progress** |

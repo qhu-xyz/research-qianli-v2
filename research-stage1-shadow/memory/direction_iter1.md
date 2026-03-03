@@ -1,127 +1,165 @@
-# Direction — Iteration 1 (feat-eng-20260303-060938, v0003)
+# Direction — Iteration 1 (feat-eng-2-20260303-092848, v0006)
 
-## Hypothesis: H6 — Combined 14-Month Window + Interaction Features (Additivity Test)
+## Hypothesis H9: Shift Factor + Constraint Metadata Features
 
-**Core question**: Are the two positive-signal levers (window expansion, interaction features) additive?
+**Hypothesis**: Adding 6 new features from entirely new signal categories (network topology via shift factors + constraint structural metadata) will break the AUC ceiling at ~0.836 because the current model is feature-starved, not complexity-starved. These features capture WHERE in the network a constraint sits (shift factors) and WHAT TYPE of constraint it is (interface vs line, MW limit) — information completely absent from the current density-curve-based feature set.
 
-Three real-data experiments have isolated individual levers:
-- **HP tuning (v0003-HP)**: AUC -0.0025 (0W/11L) — REFUTED. Model not complexity-limited.
-- **Interaction features (v0002)**: AUC +0.0000 (5W/6L/1T) — NOT SUPPORTED. But NDCG 8W/4L, AP 7W/5L show marginal ranking signal.
-- **Window expansion (v0003)**: AUC +0.0013 (7W/4L/1T) — INCONCLUSIVE. Best lever so far. VCAP@100 9W/3L (p≈0.07).
-
-If effects are additive, we expect AUC ~0.836–0.838, NDCG ~+0.0035, VCAP@100 ~+0.0043. Even partial additivity would be the strongest result yet.
+**Evidence supporting this hypothesis**:
+1. 6 real-data experiments confirmed the model is feature-limited: HP tuning (-0.0025 AUC), window expansion (+0.0013 ceiling), interaction features (+0.0000), feature pruning (tradeoff only). The AUC operating range across all experiments is [0.832, 0.836] — a 0.004 span.
+2. Feature importance shows 79% of model signal comes from historical trend/level features. Physical flow features provide only 18%. Adding a completely independent signal class (network topology) could break the ceiling.
+3. The source data loader already computes all 6 features — they just need to be wired through.
 
 ## Specific Changes
 
-### 1. Add 3 interaction features to FeatureConfig (MAIN CHANGE)
+### 1. Verify new columns exist in loaded DataFrame
 
-**File**: `ml/config.py` → `FeatureConfig.step1_features`
+In `ml/data_loader.py`, add a diagnostic print after data loading (after `train_data = pl.from_pandas(train_data_pd)`, around line 122):
 
-Add these 3 tuples after the existing 14 base features:
 ```python
-# --- Interaction features ---
-("exceed_severity_ratio", 1),      # prob_exceed_110 / (prob_exceed_90 + 1e-6)
-("hist_physical_interaction", 1),   # hist_da * prob_exceed_100
-("overload_exceedance_product", 1), # expected_overload * prob_exceed_105
+# Diagnostic: verify new feature columns are available
+new_cols = ["sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"]
+available = [c for c in new_cols if c in train_data.columns]
+missing = [c for c in new_cols if c not in train_data.columns]
+print(f"[data_loader] new feature columns available: {available}")
+if missing:
+    print(f"[data_loader] WARNING: missing columns: {missing}")
 ```
 
-Total features: 14 → 17. All three are monotone +1 (higher = more likely to bind).
+**If any columns are missing**: The source loader may require specific config flags or the columns may be named differently. Check the source loader's `load_training_data()` output columns and adapt. Do NOT proceed with missing columns — report in handoff.
 
-The computation logic already exists in `ml/features.py:prepare_features()` (lines 38–47) — it dynamically computes interaction columns when they appear in `config.features`. No changes needed in `features.py`.
+### 2. Update `ml/config.py` — FeatureConfig
 
-### 2. Keep train_months=14 (NO CHANGE)
+Replace the `step1_features` list to add 6 new features (20 total: 13 retained from v0006 + 1 restored + 6 new):
 
-`ml/config.py` → `PipelineConfig.train_months` is already 14 from the previous v0003. Verify it is still 14 before running — do NOT change it.
-
-### 3. Keep v0 HP defaults (NO CHANGE)
-
-`ml/config.py` → `HyperparamConfig` should remain:
-- n_estimators=200, max_depth=4, learning_rate=0.1
-- subsample=0.8, colsample_bytree=0.8
-- reg_alpha=0.1, reg_lambda=1.0, min_child_weight=10
-
-### 4. Fix f2p parsing crash (BUG FIX — HIGH)
-
-**File**: `ml/benchmark.py` (or wherever `int(ptype[1:])` is used for cascade stage parsing)
-
-**Problem**: `int(ptype[1:])` crashes for ptype="f2p" → `int("2p")` raises ValueError. This blocks cascade stage-3 evaluation.
-
-**Fix**: Replace `int(ptype[1:])` with a robust parser. Options:
-- Use a mapping dict: `{"f0": 0, "f1": 1, "f2p": 2}`
-- Or use regex: `int(re.match(r'f(\d+)', ptype).group(1))`
-- Test with all 3 cascade ptypes: f0, f1, f2p
-
-### 5. Fix dual-default fragility in benchmark.py (BUG FIX — MEDIUM)
-
-**File**: `ml/benchmark.py`
-
-**Problem**: `_eval_single_month()` and `run_benchmark()` have `train_months=14` hardcoded in function signatures alongside `PipelineConfig.train_months=14`. If one changes, the other must change in lockstep — fragile.
-
-**Fix**: Use `None` sentinel with fallback:
 ```python
-def _eval_single_month(
-    ...,
-    train_months: int | None = None,
-    val_months: int | None = None,
-    ...
-):
-    # Resolve from PipelineConfig if not provided
-    if train_months is None:
-        train_months = PipelineConfig().train_months
-    if val_months is None:
-        val_months = PipelineConfig().val_months
+step1_features: list[tuple[str, int]] = field(
+    default_factory=lambda: [
+        # --- Density exceedance probabilities (core 5) ---
+        ("prob_exceed_110", 1),
+        ("prob_exceed_105", 1),
+        ("prob_exceed_100", 1),
+        ("prob_exceed_95", 1),
+        ("prob_exceed_90", 1),
+        # --- Density below-threshold probabilities ---
+        ("prob_below_100", -1),
+        ("prob_below_95", -1),
+        ("prob_below_90", -1),
+        # --- Severity signal ---
+        ("expected_overload", 1),
+        # --- Historical DA shadow price ---
+        ("hist_da", 1),
+        ("hist_da_trend", 1),
+        # --- Interaction features (retained: top 2 of 3) ---
+        ("hist_physical_interaction", 1),
+        ("overload_exceedance_product", 1),
+        # --- NEW: Shift factor features (network topology) ---
+        ("sf_max_abs", 1),      # peak node sensitivity
+        ("sf_mean_abs", 1),     # average sensitivity
+        ("sf_std", 0),          # sensitivity spread (unconstrained)
+        ("sf_nonzero_frac", 0), # constraint reach (unconstrained)
+        # --- NEW: Constraint metadata ---
+        ("is_interface", 0),    # flowgate vs line (unconstrained)
+        ("constraint_limit", 0), # MW limit log-transformed (unconstrained)
+    ]
+)
 ```
 
-Apply the same pattern to `run_benchmark()`.
+**Key design decisions**:
+- Start from the v0004 feature set (13 features from v0006 + the 2 interaction features already present = current 13). This is the CURRENT config (v0006 config has 13 features). We keep all 13 and ADD 6.
+- `sf_max_abs` and `sf_mean_abs` get monotone=1 (higher sensitivity → more likely to bind)
+- `sf_std`, `sf_nonzero_frac`, `is_interface`, `constraint_limit` get monotone=0 (direction uncertain)
+- Total: 19 features (13 current + 6 new)
 
-### 6. Update tests for 17 features
+### 3. Update `ml/features.py` — prepare_features()
 
-**File**: `ml/tests/` — update any test fixtures that hardcode 14-wide feature arrays to 17-wide (or make them dynamic from FeatureConfig).
+The new features (sf_max_abs, sf_mean_abs, sf_std, sf_nonzero_frac, is_interface, constraint_limit) should already exist in the DataFrame from the source loader. They do NOT require computation like interaction features. Update the `missing` check to also exclude them from the "must compute" set:
 
-Codex flagged (LOW) that synthetic fixtures are 17-wide while production config was 14 — this was from a previous iteration. Now that we're going back to 17 features, ensure fixtures match.
+In `prepare_features()`, update the missing-column check. Currently:
+```python
+interaction_cols = {"exceed_severity_ratio", "hist_physical_interaction", "overload_exceedance_product"}
+...
+missing = set(cols) - set(df.columns) - interaction_cols
+```
 
-## Execution Order
+The new features are NOT interaction features — they come from the source loader. The existing logic should work if they're in the DataFrame. **However**, verify this by:
+1. First checking if the columns exist in df.columns
+2. If any new column is missing, raise a clear error (not silently fill with 0)
 
-1. Make config change (add 3 interaction features)
-2. Fix f2p parsing crash
-3. Fix dual-default fragility
-4. Run tests: `python -m pytest ml/tests/ -v`
-5. Run benchmark pipeline (full 12-month eval)
-6. Run validate + compare against v0
-7. Commit, then write handoff
+Add after the interaction computation block:
+```python
+# Verify source-loader features exist (not computed here — must come from data_loader)
+source_features = {"sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"}
+source_needed = source_features & set(cols)
+source_missing = source_needed - set(df.columns)
+if source_missing:
+    raise ValueError(
+        f"Source-loader features missing from DataFrame: {source_missing}. "
+        f"These must come from MisoDataLoader. Available columns: {sorted(df.columns)}"
+    )
+```
+
+### 4. Update `ml/data_loader.py` — _load_smoke()
+
+The smoke test generator needs to produce the new columns. Add synthetic values:
+```python
+# Add new feature columns for smoke test
+for feat in ["sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"]:
+    if feat == "is_interface":
+        data[feat] = (rng.random(n) < 0.3).astype(float).tolist()  # 30% interface
+    elif feat == "constraint_limit":
+        data[feat] = np.log1p(rng.uniform(100, 2000, n)).tolist()  # log-transformed MW
+    else:
+        data[feat] = np.abs(rng.randn(n)).tolist()  # positive SF features
+```
+
+### 5. Update tests
+
+In `ml/tests/`, update any test that checks feature count, feature names, or monotone constraint strings to account for the new 19-feature configuration.
+
+### 6. Do NOT change
+
+- `train_months`: keep at 14 (HARD MAX)
+- `threshold_beta`: keep at 0.7
+- HPs: keep v0 defaults
+- `evaluate.py`: do NOT modify
+- `gates.json`: do NOT modify
 
 ## Expected Impact
 
-| Metric | v0 Baseline | Expected (if additive) | Expected (if not additive) |
-|--------|-------------|----------------------|---------------------------|
-| S1-AUC | 0.8348 | 0.836–0.838 | ~0.836 |
-| S1-AP | 0.3936 | 0.396–0.400 | ~0.395 |
-| S1-VCAP@100 | 0.0149 | 0.019–0.023 | ~0.018 |
-| S1-NDCG | 0.7333 | 0.737–0.740 | ~0.736 |
-| AUC W/L | — | ≥8/12 (additive) | 6-7/12 (not additive) |
+| Metric | Expected Direction | Reasoning |
+|--------|-------------------|-----------|
+| S1-AUC | **+0.003 to +0.010** | Network topology is a fundamentally new signal class. If shift factors discriminate at all, this could push AUC past 0.840. |
+| S1-AP | **+0.005 to +0.015** | More features for positive-class ranking. AP has been stagnant at ~0.394. |
+| S1-VCAP@100 | **+0.005 to +0.020** | Topology features may help rank the most valuable constraints. |
+| S1-NDCG | **+0.005 to +0.015** | Better ranking quality overall. |
+| S1-BRIER | **neutral to +0.003** | More features could slightly degrade calibration (ongoing trend). |
 
 **Success criteria** (from human input):
-- **Promotion-worthy**: AUC > 0.837 AND ≥8/12 wins AND AP > 0.396
-- **Encouraging**: AUC > 0.835, 7+/12 wins → continue refining in iter 2
-- **Dead end**: AUC ≤ 0.835 or <6/12 wins → feature set has hard ceiling, pivot in iter 2
+- **Promotion-worthy**: AUC > 0.840 AND 8+/12 wins AND AP > 0.400
+- **Encouraging**: AUC > 0.837 with 7+/12 wins → continue refining
+- **Marginal**: AUC 0.835-0.837 → features helped but not enough
+- **Dead end**: AUC ≤ 0.835 or <6/12 wins → features don't discriminate, pivot
 
 ## Risk Assessment
 
-1. **Non-additivity (MEDIUM)**: Window expansion and interactions may overlap in signal — both primarily help early months (2020–2021H1). If so, combined effect ≈ max(individual effects) rather than sum. Mitigation: the experiment still provides valuable information about which features carry independent signal.
+| Risk | Likelihood | Mitigation |
+|------|-----------|------------|
+| SF columns missing from source loader output | LOW | Verified: source loader computes all 6. Diagnostic print will catch issues. |
+| SF features are noise (no discriminative power) | MEDIUM | Even if SF features are weak, they shouldn't HURT (monotone constraints prevent overfitting). 6 experiments show feature additions don't degrade AUC. |
+| AP bot2 continues declining (now at -0.0094 vs v0) | MEDIUM | More features could either help (more signal) or hurt (more complexity for weak months). Monitor closely. Margin to Layer 3 fail is 0.0106. |
+| BRIER headroom narrows further (now 0.0163) | MEDIUM | Group B (non-blocking). More features historically worsen BRIER slightly (+0.002-0.004). |
+| Memory/compute increase from 6 more features | LOW | 19 features is still modest for XGBoost. No OOM risk. |
+| Smoke test fails on new columns | LOW | Explicitly adding synthetic data for new columns in _load_smoke(). |
 
-2. **Broader ranking degradation (LOW-MEDIUM)**: Both v0002 (interactions) and v0003 (window) showed VCAP@500 and CAP@100/500 regression. Combined may amplify this. Mitigation: acceptable per business objective (top-100 precision > broad ranking), but monitor closely.
+## Feature Importance Watch
 
-3. **BRIER regression (LOW)**: v0003 showed BRIER +0.0011 (slightly worse calibration). Combined with interactions may push BRIER closer to floor (headroom only 0.019). Mitigation: BRIER is Group B (non-blocking), and AUC/ranking improvements are more business-relevant.
+After training, check feature importance for the 6 new features:
+- If sf_max_abs or sf_mean_abs are in the top 5 → strong signal, this is a breakthrough
+- If all 6 are below 2% → they're noise, but the base model is unaffected
+- If is_interface or constraint_limit show >5% → structural metadata matters, explore further in iter 2
 
-4. **2022-09 remains stuck (HIGH likelihood, LOW impact)**: Three independent levers all failed to improve 2022-09 (lowest binding rate 6.63%, AP consistently worst). This iteration will not fix it. Mitigation: document the result; if iter 1 confirms the ceiling, iter 2 can try feature selection to explicitly address this month.
+## Connection to Future Iterations
 
-5. **Bug fix scope creep (LOW)**: The f2p and dual-default fixes are surgical. Risk of unintended side effects is minimal since both are in evaluation/benchmarking code, not in the training pipeline itself.
-
-## What NOT To Do
-
-- Do NOT change hyperparameters (proven dead end — 3 experiments confirm)
-- Do NOT change threshold_beta (keep 0.7)
-- Do NOT change val_months (keep 2)
-- Do NOT modify gates.json or evaluate.py
-- Do NOT add more than the 3 specified interaction features this iteration
-- Do NOT touch registry/v0/ or any other registry/v*/ except registry/v0003/
+- **If H9 succeeds (AUC > 0.837)**: Iter 2 adds distribution shape + probability band features (density_mean, density_variance, density_entropy, tail_concentration, prob_band_95_100, prob_band_100_105). Cumulative with iter 1.
+- **If H9 is marginal (0.835-0.837)**: Iter 2 tries a "kitchen sink" approach — add ALL remaining features at once (~25 features), then prune in iter 3.
+- **If H9 fails (≤ 0.835)**: Iter 2 pivots to ranking-focused objectives (LambdaRank) or selective monotone constraint relaxation, since new data sources didn't help.

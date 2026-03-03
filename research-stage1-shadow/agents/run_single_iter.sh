@@ -126,7 +126,8 @@ if (( WORKER_FAILED == 0 )); then
       WORKER_BRANCH=$(git rev-parse --abbrev-ref HEAD)
       cd "$PROJECT_DIR"
       # Ensure clean working tree before merge (RT-5: stale files from prior runs cause merge conflicts)
-      git -C "$PROJECT_DIR" checkout -- . 2>/dev/null || true
+      # Exclude version_counter.json — it's incremented by allocate_version_id and must not be reset
+      git -C "$PROJECT_DIR" diff --name-only | grep -v 'version_counter.json' | xargs -r git -C "$PROJECT_DIR" checkout -- 2>/dev/null || true
       if ! git merge "$WORKER_BRANCH" --no-edit -m "iter${N}: merge worker ${VERSION_ID}"; then
         echo "ERROR: merge failed for branch $WORKER_BRANCH" >&2
         git merge --abort 2>/dev/null || true

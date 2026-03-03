@@ -104,15 +104,16 @@ class TestSmokeDataHasMetadata:
 
 
 # ---------------------------------------------------------------------------
-# Real data raises NotImplementedError
+# Real data requires Ray / pbase
 # ---------------------------------------------------------------------------
 
-class TestLoadRealRaises:
-    def test_real_mode_not_implemented(self, cfg: PipelineConfig) -> None:
-        """Without SMOKE_TEST env var, load_data should raise NotImplementedError."""
-        # Ensure SMOKE_TEST is not set
+class TestLoadRealRequiresInfra:
+    def test_real_mode_dispatches_to_real_loader(self, cfg: PipelineConfig) -> None:
+        """Without SMOKE_TEST, load_data dispatches to _load_real which needs pbase."""
         os.environ.pop("SMOKE_TEST", None)
-        with pytest.raises(NotImplementedError, match="real data"):
+        # _load_real tries to import source repo + connect to Ray.
+        # In a test environment either import or connection will fail.
+        with pytest.raises(Exception):
             load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
 
 

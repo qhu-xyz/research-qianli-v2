@@ -105,12 +105,120 @@ def _load_real(
     class_type: str,
     period_type: str,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Load real data for benchmarking.
+    """Load real data via source repo's MisoDataLoader + Ray.
 
-    Not yet implemented -- will be added when we run real benchmarks.
+    Requires Ray cluster and pbase data access. If called from
+    benchmark.py (which manages Ray lifecycle), Ray will already be
+    initialized and this function skips init/shutdown.
+
+    Parameters
+    ----------
+    cfg : PipelineConfig
+        Pipeline configuration (train_months, val_months read from here).
+    auction_month : str
+        Auction month in YYYY-MM format.
+    class_type : str
+        "onpeak" or "offpeak".
+    period_type : str
+        Period type, e.g. "f0", "f1".
+
+    Returns
+    -------
+    tuple[pl.DataFrame, pl.DataFrame]
+        (fit_df, val_df) polars DataFrames.
     """
-    raise NotImplementedError(
-        "Loading real data is not yet implemented. "
-        "Set SMOKE_TEST=true for synthetic data, or implement "
-        "_load_real() when real benchmark data is available."
+    import gc
+    import re
+    import sys
+
+    import pandas as pd
+
+    print(f"[data_loader] mem before imports: {mem_mb():.0f} MB")
+
+    # Import source repo's loader
+    src_path = "/home/xyz/workspace/research-qianli-v2/research-spice-shadow-price-pred-qianli/src"
+    if src_path not in sys.path:
+        sys.path.insert(0, src_path)
+    from shadow_price_prediction.data_loader import MisoDataLoader
+    from shadow_price_prediction.config import PredictionConfig
+
+    # Init Ray if not already initialized (benchmark.py manages lifecycle)
+    import ray
+    we_inited_ray = not ray.is_initialized()
+    if we_inited_ray:
+        os.environ.setdefault("RAY_ADDRESS", "ray://10.8.0.36:10001")
+        from pbase.config.ray import init_ray
+        import pmodel
+        import ml as shadow_ml
+        init_ray(extra_modules=[pmodel, shadow_ml])
+    print(f"[data_loader] mem after Ray check: {mem_mb():.0f} MB")
+
+    # Create source config
+    pred_config = PredictionConfig()
+    pred_config.class_type = class_type
+
+    loader = MisoDataLoader(pred_config)
+
+    # Compute training window: lookback accounts for forecast horizon
+    # so val months' market months fall before train_end.
+    auction_ts = pd.Timestamp(auction_month)
+    m = re.match(r"f(\d+)", period_type)
+    horizon = int(m.group(1)) if m else 3
+    lookback = cfg.train_months + cfg.val_months + horizon
+    train_start = auction_ts - pd.DateOffset(months=lookback)
+    train_end = auction_ts
+
+    required_ptypes = {period_type}
+
+    print(f"[data_loader] loading {train_start} to {train_end}, ptypes={required_ptypes}")
+    train_data_pd = loader.load_training_data(
+        train_start=train_start,
+        train_end=train_end,
+        required_period_types=required_ptypes,
     )
+    print(f"[data_loader] loaded {len(train_data_pd)} rows, mem: {mem_mb():.0f} MB")
+
+    # Rename label → actual_shadow_price (source repo uses "label" for DA shadow price)
+    if "label" in train_data_pd.columns and "actual_shadow_price" not in train_data_pd.columns:
+        train_data_pd = train_data_pd.rename(columns={"label": "actual_shadow_price"})
+
+    # Diagnostic: verify regressor feature columns are available
+    all_features = list(cfg.regressor.features)
+    available = [c for c in all_features if c in train_data_pd.columns]
+    missing = [c for c in all_features if c not in train_data_pd.columns]
+    print(f"[data_loader] regressor features available: {len(available)}/{len(all_features)}")
+    if missing:
+        print(f"[data_loader] WARNING: missing regressor features: {missing}")
+
+    # Convert to polars
+    train_data = pl.from_pandas(train_data_pd)
+    del train_data_pd
+    gc.collect()
+
+    # Split: first train_months for fit, last val_months for val
+    val_boundary = train_start + pd.DateOffset(months=cfg.train_months)
+    val_boundary_str = val_boundary.strftime("%Y-%m")
+
+    # auction_month column may be Timestamp or string; normalize for comparison
+    if "auction_month" in train_data.columns:
+        if train_data["auction_month"].dtype != pl.Utf8:
+            train_data = train_data.with_columns(
+                pl.col("auction_month").cast(pl.Utf8).str.slice(0, 7).alias("auction_month")
+            )
+        fit_df = train_data.filter(pl.col("auction_month") < val_boundary_str)
+        val_df = train_data.filter(pl.col("auction_month") >= val_boundary_str)
+    else:
+        # Fallback: split by row proportion
+        split = int(len(train_data) * cfg.train_months / (cfg.train_months + cfg.val_months))
+        fit_df = train_data[:split]
+        val_df = train_data[split:]
+
+    del train_data
+    gc.collect()
+    print(f"[data_loader] fit: {fit_df.shape}, val: {val_df.shape}, mem: {mem_mb():.0f} MB")
+
+    if we_inited_ray:
+        ray.shutdown()
+        print(f"[data_loader] Ray shutdown, mem: {mem_mb():.0f} MB")
+
+    return fit_df, val_df

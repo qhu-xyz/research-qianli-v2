@@ -1,26 +1,112 @@
 {
   "version": 2,
-  "pending_v0": true,
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
   "eval_months": {
-    "primary": ["2020-09", "2020-11", "2021-01", "2021-03", "2021-05",
-                 "2021-07", "2021-09", "2021-11", "2022-03", "2022-06",
-                 "2022-09", "2022-12"]
+    "primary": [
+      "2020-09",
+      "2020-11",
+      "2021-01",
+      "2021-03",
+      "2021-05",
+      "2021-07",
+      "2021-09",
+      "2021-11",
+      "2022-03",
+      "2022-06",
+      "2022-09",
+      "2022-12"
+    ]
   },
   "cascade_stages": [
-    {"stage": 1, "ptype": "f0", "blocking": true},
-    {"stage": 2, "ptype": "f1", "blocking": true},
-    {"stage": 3, "ptype": "f2p", "blocking": false}
+    {
+      "stage": 1,
+      "ptype": "f0",
+      "blocking": true
+    },
+    {
+      "stage": 2,
+      "ptype": "f1",
+      "blocking": true
+    },
+    {
+      "stage": 3,
+      "ptype": "f2p",
+      "blocking": false
+    }
   ],
   "gates": {
-    "EV-VC@100": {"floor": null, "tail_floor": null, "direction": "higher", "group": "A"},
-    "EV-VC@500": {"floor": null, "tail_floor": null, "direction": "higher", "group": "A"},
-    "EV-NDCG": {"floor": null, "tail_floor": null, "direction": "higher", "group": "A"},
-    "Spearman": {"floor": null, "tail_floor": null, "direction": "higher", "group": "A"},
-    "C-RMSE": {"floor": null, "tail_floor": null, "direction": "lower", "group": "B"},
-    "C-MAE": {"floor": null, "tail_floor": null, "direction": "lower", "group": "B"},
-    "EV-VC@1000": {"floor": null, "tail_floor": null, "direction": "higher", "group": "B"},
-    "R-REC@500": {"floor": null, "tail_floor": null, "direction": "higher", "group": "B"}
+    "EV-VC@100": {
+      "floor": 0.022266,
+      "tail_floor": 0.001383,
+      "direction": "higher",
+      "group": "A",
+      "pending_v0": false,
+      "v0_offset": 0.008,
+      "v0_tail_offset": 0.001
+    },
+    "EV-VC@500": {
+      "floor": 0.087962,
+      "tail_floor": 0.02281,
+      "direction": "higher",
+      "group": "A",
+      "pending_v0": false,
+      "v0_offset": 0.03,
+      "v0_tail_offset": 0.01
+    },
+    "EV-NDCG": {
+      "floor": 0.689979,
+      "tail_floor": 0.624664,
+      "direction": "higher",
+      "group": "A",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.03
+    },
+    "Spearman": {
+      "floor": 0.342121,
+      "tail_floor": 0.288853,
+      "direction": "higher",
+      "group": "A",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.03
+    },
+    "C-RMSE": {
+      "floor": 3900.366561,
+      "tail_floor": 6746.203111,
+      "direction": "lower",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 500,
+      "v0_tail_offset": 500
+    },
+    "C-MAE": {
+      "floor": 1476.484019,
+      "tail_floor": 2345.508927,
+      "direction": "lower",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 200,
+      "v0_tail_offset": 200
+    },
+    "EV-VC@1000": {
+      "floor": 0.136432,
+      "tail_floor": 0.069288,
+      "direction": "higher",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.02
+    },
+    "R-REC@500": {
+      "floor": 0.014179,
+      "tail_floor": 0.009272,
+      "direction": "higher",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 0.005,
+      "v0_tail_offset": 0.003
+    }
   }
 }

@@ -104,7 +104,30 @@
     "unified_regressor": false,
     "value_weighted": false
   },
-  "train_months": 10,
-  "val_months": 2,
-  "ev_scoring": true
+  "pipeline": {
+    "train_months": 10,
+    "val_months": 2,
+    "ev_scoring": true
+  },
+  "eval_config": {
+    "eval_months": [
+      "2020-09",
+      "2020-11",
+      "2021-01",
+      "2021-03",
+      "2021-05",
+      "2021-07",
+      "2021-09",
+      "2021-11",
+      "2022-03",
+      "2022-06",
+      "2022-09",
+      "2022-12"
+    ],
+    "class_type": "onpeak",
+    "period_type": "f0",
+    "train_months": 10,
+    "val_months": 2,
+    "ev_scoring": true
+  }
 }

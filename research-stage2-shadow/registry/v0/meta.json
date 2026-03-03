@@ -1,0 +1,5 @@
+{
+  "version_id": "v0",
+  "created_at": "2026-03-03T00:00:00Z",
+  "description": "Baseline: gated regressor with 24 features, frozen stage 1 classifier"
+}

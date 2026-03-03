@@ -46,6 +46,16 @@ def prepare_features(
                 .alias("overload_exceedance_product"),
         ])
 
+    # Verify source-loader features exist (not computed here — must come from data_loader)
+    source_features = {"sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"}
+    source_needed = source_features & set(cols)
+    source_missing = source_needed - set(df.columns)
+    if source_missing:
+        raise ValueError(
+            f"Source-loader features missing from DataFrame: {source_missing}. "
+            f"These must come from MisoDataLoader. Available columns: {sorted(df.columns)}"
+        )
+
     # Verify all requested columns exist
     missing = set(cols) - set(df.columns) - interaction_cols
     if missing:

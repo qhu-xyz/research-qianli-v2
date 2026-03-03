@@ -39,9 +39,21 @@ def _load_smoke(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
 
     binding = (rng.random(n) < 0.07).astype(bool)
 
+    # New source-loader features need specialized synthetic generators
+    sf_meta_features = {"sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"}
+
     data = {}
     for feat in fc.features:
-        data[feat] = rng.randn(n).tolist()
+        if feat not in sf_meta_features:
+            data[feat] = rng.randn(n).tolist()
+
+    # Shift factor features (positive values)
+    for feat in ["sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac"]:
+        data[feat] = np.abs(rng.randn(n)).tolist()
+
+    # Constraint metadata
+    data["is_interface"] = (rng.random(n) < 0.3).astype(float).tolist()
+    data["constraint_limit"] = np.log1p(rng.uniform(100, 2000, n)).tolist()
 
     data["actual_shadow_price"] = np.where(
         binding, rng.lognormal(3, 1.5, size=n), 0.0
@@ -120,6 +132,14 @@ def _load_real(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     # Rename label → actual_shadow_price (source repo's DA shadow price label)
     if "label" in train_data_pd.columns and "actual_shadow_price" not in train_data_pd.columns:
         train_data_pd = train_data_pd.rename(columns={"label": "actual_shadow_price"})
+
+    # Diagnostic: verify new feature columns are available
+    new_cols = ["sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"]
+    available = [c for c in new_cols if c in train_data_pd.columns]
+    missing = [c for c in new_cols if c not in train_data_pd.columns]
+    print(f"[data_loader] new feature columns available: {available}")
+    if missing:
+        print(f"[data_loader] WARNING: missing columns: {missing}")
 
     # Convert to polars
     train_data = pl.from_pandas(train_data_pd)

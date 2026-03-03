@@ -33,6 +33,14 @@ class FeatureConfig:
             # --- Interaction features (retained: top 2 of 3) ---
             ("hist_physical_interaction", 1),
             ("overload_exceedance_product", 1),
+            # --- Shift factor features (network topology) ---
+            ("sf_max_abs", 1),
+            ("sf_mean_abs", 1),
+            ("sf_std", 0),
+            ("sf_nonzero_frac", 0),
+            # --- Constraint metadata ---
+            ("is_interface", 0),
+            ("constraint_limit", 0),
         ]
     )
 

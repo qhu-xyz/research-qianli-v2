@@ -4,8 +4,9 @@ import pytest
 
 @pytest.fixture
 def synthetic_features():
+    from ml.config import FeatureConfig
     rng = np.random.RandomState(42)
-    return rng.randn(100, 13)
+    return rng.randn(100, len(FeatureConfig().features))
 
 
 @pytest.fixture

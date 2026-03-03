@@ -47,7 +47,13 @@ def prepare_features(
         ])
 
     # Verify source-loader features exist (not computed here — must come from data_loader)
-    source_features = {"sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"}
+    source_features = {
+        "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac",
+        "is_interface", "constraint_limit",
+        "density_mean", "density_variance", "density_entropy",
+        "tail_concentration", "prob_band_95_100", "prob_band_100_105",
+        "hist_da_max_season",
+    }
     source_needed = source_features & set(cols)
     source_missing = source_needed - set(df.columns)
     if source_missing:

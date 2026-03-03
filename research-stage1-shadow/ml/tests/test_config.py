@@ -1,23 +1,23 @@
 from ml.config import FeatureConfig, HyperparamConfig, PipelineConfig, GateConfig
 
 
-def test_feature_config_has_19_features():
+def test_feature_config_has_26_features():
     fc = FeatureConfig()
-    assert len(fc.features) == 19
+    assert len(fc.features) == 26
 
 
 def test_monotone_constraints_length():
     fc = FeatureConfig()
     mc = fc.get_monotone_constraints_str()
-    # String format: "(1,1,1,1,1,...)" -- count commas + 1 == 19
+    # String format: "(1,1,1,1,1,...)" -- count commas + 1 == 26
     values = mc.strip("()").split(",")
-    assert len(values) == 19
+    assert len(values) == 26
 
 
 def test_monotone_constraints_values():
     fc = FeatureConfig()
     mc = fc.get_monotone_constraints_str()
-    assert mc == "(1,1,1,1,1,-1,-1,-1,1,1,1,1,1,1,1,0,0,0,0)"
+    assert mc == "(1,1,1,1,1,-1,-1,-1,1,1,1,1,1,1,1,0,0,0,0,1,0,0,1,1,1,1)"
 
 
 def test_feature_names_match_expected():
@@ -42,6 +42,13 @@ def test_feature_names_match_expected():
         "sf_nonzero_frac",
         "is_interface",
         "constraint_limit",
+        "density_mean",
+        "density_variance",
+        "density_entropy",
+        "tail_concentration",
+        "prob_band_95_100",
+        "prob_band_100_105",
+        "hist_da_max_season",
     ]
     assert fc.features == expected
 

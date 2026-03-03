@@ -39,12 +39,18 @@ def _load_smoke(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
 
     binding = (rng.random(n) < 0.07).astype(bool)
 
-    # New source-loader features need specialized synthetic generators
-    sf_meta_features = {"sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"}
+    # Source-loader features need specialized synthetic generators
+    source_loader_features = {
+        "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac",
+        "is_interface", "constraint_limit",
+        "density_mean", "density_variance", "density_entropy",
+        "tail_concentration", "prob_band_95_100", "prob_band_100_105",
+        "hist_da_max_season",
+    }
 
     data = {}
     for feat in fc.features:
-        if feat not in sf_meta_features:
+        if feat not in source_loader_features:
             data[feat] = rng.randn(n).tolist()
 
     # Shift factor features (positive values)
@@ -54,6 +60,19 @@ def _load_smoke(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     # Constraint metadata
     data["is_interface"] = (rng.random(n) < 0.3).astype(float).tolist()
     data["constraint_limit"] = np.log1p(rng.uniform(100, 2000, n)).tolist()
+
+    # Distribution shape features
+    data["density_mean"] = (rng.uniform(0.5, 1.2, n) * np.where(binding, 1.05, 0.85)).tolist()
+    data["density_variance"] = np.abs(rng.randn(n) * 0.1).tolist()
+    data["density_entropy"] = rng.uniform(1.0, 5.0, n).tolist()
+
+    # Near-boundary band features
+    data["tail_concentration"] = np.where(binding, rng.uniform(0.3, 0.9, n), rng.uniform(0.01, 0.3, n)).tolist()
+    data["prob_band_95_100"] = np.abs(rng.randn(n) * 0.05).tolist()
+    data["prob_band_100_105"] = np.abs(rng.randn(n) * 0.03).tolist()
+
+    # Historical enrichment
+    data["hist_da_max_season"] = np.where(binding, rng.lognormal(2, 1, n), rng.exponential(0.5, n)).tolist()
 
     data["actual_shadow_price"] = np.where(
         binding, rng.lognormal(3, 1.5, size=n), 0.0
@@ -134,7 +153,13 @@ def _load_real(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
         train_data_pd = train_data_pd.rename(columns={"label": "actual_shadow_price"})
 
     # Diagnostic: verify new feature columns are available
-    new_cols = ["sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit"]
+    new_cols = [
+        "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac",
+        "is_interface", "constraint_limit",
+        "density_mean", "density_variance", "density_entropy",
+        "tail_concentration", "prob_band_95_100", "prob_band_100_105",
+        "hist_da_max_season",
+    ]
     available = [c for c in new_cols if c in train_data_pd.columns]
     missing = [c for c in new_cols if c not in train_data_pd.columns]
     print(f"[data_loader] new feature columns available: {available}")

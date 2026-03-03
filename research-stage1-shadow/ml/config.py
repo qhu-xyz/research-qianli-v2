@@ -41,6 +41,16 @@ class FeatureConfig:
             # --- Constraint metadata ---
             ("is_interface", 0),
             ("constraint_limit", 0),
+            # --- Distribution shape features ---
+            ("density_mean", 1),
+            ("density_variance", 0),
+            ("density_entropy", 0),
+            # --- Near-boundary band features ---
+            ("tail_concentration", 1),
+            ("prob_band_95_100", 1),
+            ("prob_band_100_105", 1),
+            # --- Historical enrichment ---
+            ("hist_da_max_season", 1),
         ]
     )
 

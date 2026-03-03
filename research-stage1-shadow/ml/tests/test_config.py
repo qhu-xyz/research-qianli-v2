@@ -1,23 +1,23 @@
 from ml.config import FeatureConfig, HyperparamConfig, PipelineConfig, GateConfig
 
 
-def test_feature_config_has_26_features():
+def test_feature_config_has_29_features():
     fc = FeatureConfig()
-    assert len(fc.features) == 26
+    assert len(fc.features) == 29
 
 
 def test_monotone_constraints_length():
     fc = FeatureConfig()
     mc = fc.get_monotone_constraints_str()
-    # String format: "(1,1,1,1,1,...)" -- count commas + 1 == 26
+    # String format: "(1,1,1,1,1,...)" -- count commas + 1 == 29
     values = mc.strip("()").split(",")
-    assert len(values) == 26
+    assert len(values) == 29
 
 
 def test_monotone_constraints_values():
     fc = FeatureConfig()
     mc = fc.get_monotone_constraints_str()
-    assert mc == "(1,1,1,1,1,-1,-1,-1,1,1,1,1,1,1,1,0,0,0,0,1,0,0,1,1,1,1)"
+    assert mc == "(1,1,1,1,1,-1,-1,-1,1,1,1,1,1,1,1,0,0,0,0,1,0,0,1,1,1,1,1,1,1)"
 
 
 def test_feature_names_match_expected():
@@ -49,6 +49,9 @@ def test_feature_names_match_expected():
         "prob_band_95_100",
         "prob_band_100_105",
         "hist_da_max_season",
+        "band_severity",
+        "sf_exceed_interaction",
+        "hist_seasonal_band",
     ]
     assert fc.features == expected
 
@@ -59,7 +62,7 @@ def test_hyperparam_defaults():
     assert hc.max_depth == 4
     assert hc.learning_rate == 0.1
     assert hc.subsample == 0.8
-    assert hc.colsample_bytree == 0.8
+    assert hc.colsample_bytree == 0.9
     assert hc.reg_alpha == 0.1
     assert hc.reg_lambda == 1.0
     assert hc.min_child_weight == 10

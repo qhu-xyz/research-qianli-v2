@@ -74,6 +74,11 @@ def _load_smoke(config: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     # Historical enrichment
     data["hist_da_max_season"] = np.where(binding, rng.lognormal(2, 1, n), rng.exponential(0.5, n)).tolist()
 
+    # Derived interaction features (v0009 — computed from existing synthetic columns)
+    data["band_severity"] = (np.array(data["prob_band_95_100"]) * np.array(data["expected_overload"])).tolist()
+    data["sf_exceed_interaction"] = (np.array(data["sf_max_abs"]) * np.array(data["prob_exceed_100"])).tolist()
+    data["hist_seasonal_band"] = (np.array(data["hist_da_max_season"]) * np.array(data["prob_band_100_105"])).tolist()
+
     data["actual_shadow_price"] = np.where(
         binding, rng.lognormal(3, 1.5, size=n), 0.0
     ).tolist()

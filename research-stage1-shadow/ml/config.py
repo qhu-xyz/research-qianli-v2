@@ -51,6 +51,10 @@ class FeatureConfig:
             ("prob_band_100_105", 1),
             # --- Historical enrichment ---
             ("hist_da_max_season", 1),
+            # --- Derived interaction features (targeting VCAP@100) ---
+            ("band_severity", 1),
+            ("sf_exceed_interaction", 1),
+            ("hist_seasonal_band", 1),
         ]
     )
 
@@ -76,7 +80,7 @@ class HyperparamConfig:
     max_depth: int = 4
     learning_rate: float = 0.1
     subsample: float = 0.8
-    colsample_bytree: float = 0.8
+    colsample_bytree: float = 0.9
     reg_alpha: float = 0.1
     reg_lambda: float = 1.0
     min_child_weight: int = 10

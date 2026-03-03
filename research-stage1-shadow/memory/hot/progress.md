@@ -5,36 +5,46 @@
 | Field | Value |
 |-------|-------|
 | Batch | feat-eng-20260303-060938 |
-| Iteration | 2 of 3 (planning complete, worker next) |
-| State | ORCHESTRATOR_PLANNING → next: WORKER (iter 2) |
+| Iteration | 3 of 3 (synthesis complete, planning next) |
+| State | ORCHESTRATOR_SYNTHESIZING → next: ORCHESTRATOR_PLANNING (iter 3) |
 | Champion | None (v0 baseline) |
-| Last Hypothesis | H6: Combined window + interactions — PARTIALLY CONFIRMED (AUC 9W/3L, VCAP@100 p=0.039) |
-| Current Hypothesis | H7: train_months=18 + feature importance diagnostic |
+| Last Hypothesis | H7: train_months=18 + feature importance — FAILED (diminishing returns) |
+| Next Hypothesis | H8: Feature pruning (17→13 features) + revert to 14-month window |
 
 ## This Batch Strategy
 
 From human input: test additivity of the two positive-signal levers, then refine or pivot.
 - **Iter 1**: H6 — 14-month window + 3 interaction features → **DONE** (AUC +0.0015, 9W/3L, VCAP@100 +0.0056, 10W/2L. Not promoted.)
-- **Iter 2**: H7 — train_months=18 with 17 features + feature importance export → **IN PROGRESS** (direction written)
-- **Iter 3**: Depends on iter 2 — if 18-month window helps → consider promotion; if diminishing returns → feature importance-guided pruning or ratio features
+- **Iter 2**: H7 — train_months=18 with 17 features + feature importance → **DONE** (Diminishing returns confirmed. AUC -0.0002 vs v0004. Feature importance collected. Not promoted.)
+- **Iter 3**: H8 — Prune bottom 4 features (17→13), revert to 14-month window. Test if noise reduction improves AP tail.
 
-## v0004 Key Results (iter 1)
+## v0005 Key Results (iter 2)
 
-| Metric | v0 | v0004 | Delta | W/L | Stat Sig |
-|--------|-----|-------|-------|-----|----------|
-| S1-AUC | 0.8348 | 0.8363 | +0.0015 | 9W/3L | p=0.073 |
-| S1-AP | 0.3936 | 0.3951 | +0.0015 | 6W/6L | p=1.0 |
-| S1-VCAP@100 | 0.0149 | 0.0205 | +0.0056 | 10W/2L | **p=0.039** |
-| S1-NDCG | 0.7333 | 0.7371 | +0.0038 | 7W/5L | p=0.39 |
+| Metric | v0 | v0004 (iter 1) | v0005 (iter 2) | Δ vs v0 | Δ vs v0004 |
+|--------|-----|----------------|----------------|---------|------------|
+| S1-AUC | 0.8348 | 0.8363 | 0.8361 | +0.0013 | -0.0002 |
+| S1-AP | 0.3936 | 0.3951 | 0.3929 | -0.0007 | -0.0023 |
+| S1-VCAP@100 | 0.0149 | 0.0205 | 0.0193 | +0.0044 | -0.0012 |
+| S1-NDCG | 0.7333 | 0.7371 | 0.7365 | +0.0032 | -0.0007 |
 
-All gates pass. Not promoted (AUC < 0.837, AP flat). VCAP@100 is first statistically significant improvement in pipeline history.
+All gates pass. Not promoted (strictly worse than v0004 on all Group A means). Feature importance data successfully collected.
 
-## Iter 2 Strategy (H7)
+## Feature Importance Summary (from v0005)
 
-- **Primary**: Expand train_months from 14 to 18 — test if window expansion continues positive trend
-- **Secondary**: Export per-month feature importance (gain-based) — diagnostic data for iter 3 decisions
-- **Expected**: Diminishing returns more likely than breakthrough. Main value is the feature importance data.
-- **Key risks**: VCAP@500 approaching Group B floor (margin 0.0021), BRIER headroom narrowing (0.0187)
+| Tier | Features | % Gain |
+|------|----------|--------|
+| Dominant | hist_da_trend | 53.9% |
+| Strong | hist_physical_interaction, hist_da | 25.5% |
+| Moderate | prob_below_90, prob_exceed_90, prob_exceed_95 | 10.3% |
+| Weak | 7 features (prob_below_95 through expected_overload) | 8.9% |
+| **Prune** | **density_kurtosis, density_cv, exceed_severity_ratio, density_skewness** | **1.4%** |
+
+## Iter 3 Strategy (H8)
+
+- **Primary**: Remove 4 near-zero features (17→13): density_skewness, exceed_severity_ratio, density_cv, density_kurtosis
+- **Secondary**: Revert train_months from 18 to 14 (v0004 config was strictly better)
+- **Expected**: Small positive or neutral on mean metrics. Primary hope is improving AP bot2 and BRIER calibration.
+- **Endgame awareness**: This is the final iteration. If pruning produces modest improvement, consider promoting the best version (likely v0004). If pruning is neutral/negative, declare the ceiling reached and summarize findings for HUMAN_SYNC.
 
 ## Cumulative Evidence (all real-data experiments)
 
@@ -44,7 +54,8 @@ All gates pass. Not promoted (AUC < 0.837, AP flat). VCAP@100 is first statistic
 | hp-tune-144146 | Interactions (v0002) | +0.0000 | 5W/6L/1T | No |
 | feat-eng-194243 iter1 | Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | No |
 | feat-eng-060938 iter1 | Window + Interactions (v0004) | +0.0015 | 9W/3L | No |
-| feat-eng-060938 iter2 | Window 18 + importance (v0005) | ? | ? | ? |
+| feat-eng-060938 iter2 | Window 18 + importance (v0005) | -0.0002 vs v0004 | 7W/5L vs v0 | No |
+| feat-eng-060938 iter3 | Feature pruning (H8) | ? | ? | ? |
 
 ## History
 
@@ -55,4 +66,5 @@ All gates pass. Not promoted (AUC < 0.837, AP flat). VCAP@100 is first statistic
 | hp-tune-20260302-134412 iter1 | HP tuning (v0003-HP) | H3 refuted — AUC -0.0025, 0W/11L |
 | hp-tune-20260302-144146 iter1 | Interaction features (v0002) | H4 not supported — AUC +0.000, 5W/6L |
 | feat-eng-20260302-194243 iter1 | Training window 10→14 (v0003) | H5 inconclusive — AUC +0.0013, 7W/4L/1T |
-| feat-eng-20260303-060938 iter1 | Window + Interactions (v0004) | **H6 partially confirmed — AUC +0.0015, 9W/3L, VCAP@100 +0.0056, 10W/2L** |
+| feat-eng-20260303-060938 iter1 | Window + Interactions (v0004) | H6 partially confirmed — AUC +0.0015, 9W/3L |
+| **feat-eng-20260303-060938 iter2** | **Window 18 + importance (v0005)** | **H7 failed — diminishing returns, AUC -0.0002 vs v0004** |

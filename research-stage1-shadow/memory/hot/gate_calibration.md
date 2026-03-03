@@ -82,3 +82,16 @@ Calibrated from real-data v0 benchmark (commit d167090). Gate floors set as:
 - Layer 3 still disabled (champion=null). Against v0 reference: AUC bot2 +0.0059, AP bot2 -0.0040, NDCG bot2 -0.0060, VCAP@100 bot2 -0.0003 — all well within 0.02 tolerance. Closest to boundary: NDCG at -0.0060 (margin 0.0140 to fail).
 - **Codex recommendation**: Tighten Layer 3 to metric-specific tolerances: AUC/AP/NDCG ~0.005-0.01, keep VCAP@100 looser. With 4 iterations of data, the observed bot2 shifts range ±0.006 for AUC, ±0.005 for AP, ±0.006 for NDCG, ±0.001 for VCAP@100. A tolerance of 0.01 for AUC/AP/NDCG would still pass all versions seen so far. Worth discussing at HUMAN_SYNC.
 - **Cumulative ranges across 4 real-data experiments**: AUC mean ∈ [0.8323, 0.8363], AP ∈ [0.3921, 0.3951], NDCG ∈ [0.7323, 0.7371], VCAP@100 ∈ [0.0149, 0.0205]. The operating range is narrow — ~0.004 AUC, ~0.003 AP, ~0.005 NDCG, ~0.006 VCAP@100.
+
+## Iteration 2 Observations (v0005, feat-eng-20260303-060938)
+
+- All floors remain appropriate — v0005 passed all 3 layers with ~0.05 headroom on Group A means
+- No gate calibration changes recommended (5 real-data iterations now)
+- v0005 gate headroom: AUC +0.0513, AP +0.0493, VCAP@100 +0.0544, NDCG +0.0532 — stable
+- **BRIER headroom continues narrowing**: v0005 BRIER=0.1525 vs floor=0.1703, headroom=0.0178. Trend: v0(0.0200) → v0003-HP(0.0241) → v0002(0.0198) → v0003-win(0.0189) → v0004(0.0187) → **v0005(0.0178)**. 5th consecutive narrowing. If iter 3 feature pruning simplifies the model, calibration may improve (v0003-HP showed simpler models have better BRIER). Otherwise, BRIER could approach the floor within 2-3 more iterations.
+- **VCAP@500 bot2 RECOVERED**: v0005 bot2=0.0449 (vs v0004's 0.0387, vs floor 0.0408). The 18-month window stabilized the VCAP@500 tail. This is encouraging — the dangerous approach to the floor seen in v0004 was not structural.
+- **AP bot2 is the new concern**: v0005 AP bot2=0.3247 vs v0's 0.3322 (Δ=-0.0075). Trend: v0002(-0.0017) → v0003-win(-0.0045) → v0004(-0.0040) → **v0005(-0.0075)**. Largest Group A bot2 regression. Still within 0.02 tolerance (margin 0.0125) but the trend is monotonically worsening across window expansions. Reverting to 14-month window in iter 3 may help.
+- CAP@100=0.7825 (identical to v0), CAP@500=0.7723 (slightly below v0's 0.774). Stable.
+- Layer 3 still disabled (champion=null). Against v0 reference: AUC bot2 +0.0051, AP bot2 -0.0075, NDCG bot2 -0.0017, VCAP@100 bot2 +0.0010 — all within 0.02 tolerance. Closest to boundary: AP at -0.0075 (margin 0.0125 to fail).
+- **Codex reiteration**: Metric-specific Layer 3 tolerances after champion is set. With 5 iterations: observed bot2 shifts range AUC ±0.006, AP ±0.008 (increasing), NDCG ±0.006, VCAP@100 ±0.001. AP is the most volatile. A tolerance of 0.01 for AUC/NDCG, 0.015 for AP, and keeping 0.02 for VCAP@100 would be reasonable. Defer to HUMAN_SYNC.
+- **Cumulative ranges across 5 real-data experiments**: AUC mean ∈ [0.8323, 0.8363], AP ∈ [0.3921, 0.3951], NDCG ∈ [0.7323, 0.7371], VCAP@100 ∈ [0.0149, 0.0205]. Range unchanged — v0005 falls within the envelope established by prior experiments.

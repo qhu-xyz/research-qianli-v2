@@ -213,3 +213,48 @@
 - 2022-09 has resisted 4 independent interventions — likely structural
 
 **Code Issues**: Both bug fixes correct (f2p regex, dual-default sentinel). No new issues introduced. Codex flagged silent fallback in ptype parser (MEDIUM). Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), missing schema guard for interaction base columns (MEDIUM).
+
+---
+
+## Iteration 2 — v0005 (H7: 18-month window + feature importance diagnostic — fifth real-data experiment)
+
+**Batch**: feat-eng-20260303-060938
+**Date**: 2026-03-03
+**Hypothesis**: H7 — Does further window expansion (14→18 months) continue the positive AUC trend, and which features actually drive predictions?
+**Changes**: (1) `train_months` 14→18 in PipelineConfig, (2) Added gain-based feature importance extraction to benchmark.py (captures per-month importance, saves to feature_importance.json), (3) Updated test assertion for train_months.
+**Result**: **DIMINISHING RETURNS CONFIRMED** — v0005 is marginally worse than v0004 on every Group A metric mean. Feature importance diagnostic successfully collected.
+
+| Gate | v0 Mean | v0004 Mean | v0005 Mean | Δ vs v0 | Δ vs v0004 | v0 Bot2 | v0005 Bot2 | Δ Bot2 vs v0 | Pass |
+|------|---------|------------|------------|---------|------------|---------|------------|--------------|------|
+| S1-AUC | 0.8348 | 0.8363 | 0.8361 | +0.0013 | -0.0002 | 0.8105 | 0.8156 | +0.0051 | YES |
+| S1-AP | 0.3936 | 0.3951 | 0.3929 | -0.0007 | -0.0023 | 0.3322 | 0.3247 | **-0.0075** | YES |
+| S1-VCAP@100 | 0.0149 | 0.0205 | 0.0193 | +0.0044 | -0.0012 | 0.0014 | 0.0024 | +0.0010 | YES |
+| S1-NDCG | 0.7333 | 0.7371 | 0.7365 | +0.0032 | -0.0007 | 0.6716 | 0.6699 | -0.0017 | YES |
+| S1-BRIER | 0.1503 | 0.1516 | 0.1525 | +0.0022 | +0.0009 | — | 0.1605 | — | YES |
+
+**Overall Pass**: YES (all 3 layers pass for all Group A gates)
+**Promoted**: No — strictly worse than v0004 on all Group A means
+**Per-month consistency vs v0004**: AUC 7W/5L (noise), AP 6W/6L (noise), VCAP@100 6W/6L (noise), NDCG 7W/5L (noise)
+**Per-month consistency vs v0**: AUC 7W/5L, VCAP@100 10W/2L, NDCG 8W/4L, AP 6W/6L
+**Weakest months**: 2022-09 AP=0.2986 (**worst ever recorded**), 2021-12 AUC=0.8133, 2022-12 AUC=0.8180
+
+**Feature importance (first empirical data)**:
+| Rank | Feature | % Gain | Assessment |
+|------|---------|--------|------------|
+| 1 | hist_da_trend | 53.9% | Dominant — single feature > half the model |
+| 2 | hist_physical_interaction | 14.3% | Strong — validates interaction features from iter 1 |
+| 3 | hist_da | 11.3% | Strong — historical collective = 79.4% of gain |
+| 4-6 | prob_below_90, prob_exceed_90, prob_exceed_95 | 10.3% | Moderate — core physical flow features |
+| 7-13 | 7 features | 8.9% | Weak — contributing but minor |
+| 14-17 | density_kurtosis, density_cv, exceed_severity_ratio, density_skewness | 1.4% | Near-zero — **pruning candidates** |
+
+**Key Learnings**:
+- Window expansion exhausted: 14→18 months provides zero marginal benefit. Older 2018-2019 data dilutes more than it diversifies.
+- The model is essentially a historical trend predictor (79% of gain from hist_da_trend + hist_physical_interaction + hist_da), augmented by physical flow features (18%).
+- Distribution shape features (skewness, kurtosis, CV) contribute <1.3% collectively — clear noise.
+- hist_physical_interaction (#2 at 14%) validates iter 1's decision to add interaction features. exceed_severity_ratio (#16 at 0.38%) does not.
+- AP bot2 trend is worsening: v0002(-0.0017) → v0003(-0.0045) → v0004(-0.0040) → v0005(-0.0075). Each window expansion degrades the AP tail.
+- 2022-09 AP now at 0.2986 — worst across all 5 experiments. Structural, not addressable by current features.
+- VCAP@500 bot2 recovered to 0.0449 (from v0004's 0.0387) — 18-month window stabilized VCAP@500 tail despite not improving mean.
+
+**Code Issues**: Clean implementation, no new issues introduced. New LOW: feature importance output has no test coverage for file existence/schema (Codex). Carried: threshold leakage (HIGH), threshold `>` vs `>=` (MEDIUM), missing schema guard (MEDIUM).

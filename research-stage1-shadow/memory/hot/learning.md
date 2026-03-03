@@ -116,7 +116,40 @@
 - AUC actually improved slightly (+0.0011) but AP didn't follow — the model ranks constraints slightly better overall but cannot identify the sparse positives in this month
 - Likely requires either new feature sources or time-series features capturing temporal regime shifts
 
-## Cumulative Evidence Summary (4 real-data experiments)
+## From v0005 — Extended Training Window 18 months (feat-eng-060938 iter2, real data)
+
+### Window Expansion Is Definitively Exhausted
+- 14→18 months provides zero marginal benefit: AUC -0.0002, AP -0.0023, VCAP@100 -0.0012, NDCG -0.0007 (all vs v0004)
+- All deltas vs v0004 are pure noise (W/L all within 5-7 range out of 12)
+- Optimal training window is 14 months. Older data (2018-2019) adds noise, not signal.
+- The productive window expansion range was 10→14 months. Beyond that, diminishing returns dominate.
+
+### Feature Importance Reveals Model Architecture (CRITICAL — First Empirical Data)
+- **The model is 79% a historical trend predictor**: hist_da_trend (54%), hist_physical_interaction (14%), hist_da (11%)
+- **Physical flow features provide 18% of signal**: prob_below_90 (5.1%), prob_exceed_90 (3.1%), prob_exceed_95 (2.1%), plus minor physical features
+- **Distribution shape features are noise**: density_skewness (0.31%), density_cv (0.40%), density_kurtosis (0.58%) = 1.3% collectively
+- **exceed_severity_ratio (0.38%) does not earn its keep** — weakest interaction feature, prune candidate
+- **hist_physical_interaction validates iter 1** — #2 feature at 14% gain
+- Feature importance is remarkably stable across 12 months (hist_da_trend CV=3.5%) — pruning decisions are reliable
+
+### AP Bot2 Trend Is the New Risk
+- Monotonically worsening: v0002(-0.0017) → v0003(-0.0045) → v0004(-0.0040) → v0005(-0.0075)
+- Each window expansion degrades the AP tail — more training data may spread the model's attention across more patterns, making it slightly worse at the hardest months
+- Still within 0.02 tolerance (margin 0.0125) but the trend is clear
+- Reverting to 14-month window in iter 3 may partially reverse this
+
+### 2022-09 Is Definitively Structural
+- AP at 0.2986 — all-time worst across 5 experiments
+- 5 independent interventions have failed to improve it
+- Binding rate 6.63% (lowest in eval set) makes class separation fundamentally harder
+- This month likely requires entirely new feature sources (e.g., economic indicators, seasonal forecasts, grid topology changes)
+
+### VCAP@500 Bot2 Is Not Structural After All
+- v0005 bot2=0.0449 recovered from v0004's 0.0387 (which was approaching floor 0.0408)
+- The 18-month window stabilized the tail even while mean ranking quality was flat
+- This suggests VCAP@500 bot2 variability is more about training data composition than a systematic tradeoff
+
+## Cumulative Evidence Summary (5 real-data experiments)
 
 | Lever | AUC Δ | AUC W/L | Key Learning |
 |-------|-------|---------|-------------|
@@ -124,6 +157,7 @@
 | Interactions (v0002) | +0.0000 | 5W/6L/1T | Information ceiling within features |
 | Window 10→14 (v0003) | +0.0013 | 7W/4L/1T | Small signal, best single lever |
 | **Combined (v0004)** | **+0.0015** | **9W/3L** | **Partially additive; VCAP@100 super-additive** |
+| Window 14→18 (v0005) | -0.0002 | 7W/5L (vs v0) | **Exhausted — zero marginal benefit** |
 
 ### Statistical Testing
 - Month-level win/loss counts more informative than mean deltas at n=12
@@ -131,3 +165,8 @@
 - Practical decision making must rely on consistency (W/L ratio) and direction, not p-values
 - Always check for outlier-driven means: exclude best month and recalculate
 - Sign test is more appropriate than z-test for W/L data — doesn't assume normality
+
+### Levers Exhausted vs Available
+- **Exhausted**: HP tuning, window expansion (beyond 14 months), interaction features (within current data columns)
+- **Available (iter 3)**: Feature pruning (remove near-zero contributors to reduce noise), feature ratios (new derived features)
+- **Available (future batches)**: New data sources, time-series features, regime detection, alternative models

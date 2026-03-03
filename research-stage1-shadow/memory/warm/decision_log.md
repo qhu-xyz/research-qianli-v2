@@ -151,3 +151,29 @@ If the marginal benefit of window expansion hasn't diminished, train_months=18 c
 
 ### D31: Continue deferring threshold methodology fixes
 **Rationale**: Same as D14/D19/D25. Both reviewers continue flagging threshold leakage (HIGH) and `>` vs `>=` (MEDIUM). Both acknowledge these affect threshold-dependent metrics only, and all Group A gates are threshold-independent. Fix remains best addressed at HUMAN_SYNC. The Codex suggestion to make ptype fallback raise ValueError (instead of silent horizon=3) is valid but low-priority — it only matters for malformed ptypes, which don't occur in the current pipeline.
+
+---
+
+## Iteration 2 Synthesis (feat-eng-20260303-060938, v0005) — 2026-03-03
+
+### D32: No promotion for v0005
+**Rationale**: v0005 (18-month window + feature importance) is strictly worse than v0004 on every Group A metric mean: AUC -0.0002, AP -0.0023, VCAP@100 -0.0012, NDCG -0.0007. Deltas vs v0004 are all noise-level (7W/5L on AUC, 6W/6L on AP). The 14→18 window expansion provides zero marginal benefit — older 2018-2019 training data dilutes more than it diversifies. Both reviewers independently recommend against promotion. Gate status: all 3 layers pass for all gates, but passing gates is necessary not sufficient for promotion.
+
+### D33: No gate calibration changes
+**Rationale**: 5 real-data iterations now. All versions produce Group A metrics within ±0.004 AUC of v0. Gates remain non-binding — the problem is insufficient improvement, not restrictive gates. Specific observations:
+- **BRIER headroom**: 0.0178 (narrowing monotonically: v0→0.0200, v0003-HP→0.0241, v0002→0.0198, v0003-win→0.0189, v0004→0.0187, v0005→0.0178). If iter 3 feature pruning simplifies the model, calibration may improve (v0003-HP showed simpler models have better BRIER). Monitor.
+- **VCAP@500 bot2 recovered**: 0.0449 (from v0004's 0.0387). The 18-month window stabilized the VCAP@500 tail.
+- **AP bot2 worsening trend**: v0005 AP bot2=0.3247 vs v0's 0.3322 (Δ=-0.0075). Largest Group A bot2 regression observed. Still within 0.02 tolerance but monotonically worsening across window expansions.
+- **Layer 3 tolerance (0.02)**: Remains appropriate. Codex's tightening suggestion deferred to HUMAN_SYNC.
+- **VCAP@100 floor (-0.035)**: Non-binding. Claude recommends tightening to 0.0 at HUMAN_SYNC.
+
+### D34: Revert train_months to 14 for iter 3
+**Rationale**: v0004 (train_months=14) outperforms v0005 (train_months=18) on all Group A means. Window expansion beyond 14 months provides no benefit and slightly degrades AP. The 14-month window is the optimal configuration.
+
+### D35: Feature importance-guided pruning for iter 3 (H8)
+**Rationale**: Feature importance reveals a clear hierarchy. Four features contribute <2% of total gain collectively:
+- density_skewness (0.31%), exceed_severity_ratio (0.38%), density_cv (0.40%), density_kurtosis (0.58%)
+Pruning reduces features from 17 to 13. May slightly reduce overfitting in tail months, improve calibration, and have minimal impact on mean ranking. Conservative prune — more aggressive pruning (also dropping overload_exceedance_product at 0.9%) deferred.
+
+### D36: Continue deferring threshold methodology fixes
+**Rationale**: Same as D14/D19/D25/D31. Group A gates remain unaffected. Defer to HUMAN_SYNC.

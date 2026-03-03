@@ -93,3 +93,34 @@
 - Dead end (AUC ≤ 0.835): NO
 
 **Lesson**: The 17-feature + 14-month window configuration represents a local optimum. Breaking AUC ~0.836 likely requires either (a) further window expansion (test 18 months), (b) fundamentally new feature sources, or (c) feature pruning to reduce noise (especially for AP). The feature set has a confirmed ceiling — 4 experiments spanning 3 independent levers have produced max AUC improvement of +0.0015 from v0. The VCAP@100 super-additivity signal is genuine and valuable (the model captures more value at the very top of the prediction stack), but the AUC/AP ceiling is real.
+
+---
+
+## H7 (real data, iter2): Extended training window (18 months) — FAILED (diminishing returns)
+**Batch**: feat-eng-20260303-060938, **Version**: v0005
+**Changes**: train_months 14→18 + feature importance diagnostic extraction. No feature or HP changes.
+**Expected**: Diminishing returns (more likely) or AUC 0.837–0.839 (less likely)
+**Actual**:
+- AUC: -0.0002 vs v0004 (7W/5L) — zero signal, pure noise
+- AP: -0.0023 vs v0004 (6W/6L) — zero signal, slightly negative mean
+- VCAP@100: -0.0012 vs v0004 (6W/6L) — zero signal
+- NDCG: -0.0007 vs v0004 (7W/5L) — zero signal
+- vs v0: AUC +0.0013 (7W/5L), AP -0.0007 (6W/6L), VCAP@100 +0.0044 (10W/2L), NDCG +0.0032 (8W/4L)
+
+**Key Insight**: Window expansion is now definitively exhausted. The 10→14 expansion gave a small positive signal; the 14→18 expansion gives zero. The optimal window for this dataset is 14 months. Older data (2018-2019) introduces more noise than diversity. This matches the intuition that electricity market regimes shift — training data from 3+ years ago may reflect different grid topology or market rules.
+
+**Feature importance (primary diagnostic deliverable)**:
+- hist_da_trend: 53.9% — model is fundamentally a historical trend extrapolator
+- hist_physical_interaction: 14.3% — validates iter 1 interaction feature decision
+- hist_da: 11.3% — historical shadow price is the #3 signal
+- Physical features (prob_exceed/below): ~18% collectively
+- Distribution shape (skewness, kurtosis, CV): 1.3% — noise, prune candidates
+- exceed_severity_ratio: 0.38% — weakest interaction feature, prune candidate
+
+**Assessment vs direction criteria**:
+- Promotion-worthy (AUC > 0.837): NO (0.8361)
+- Encouraging (AUC ≥ 0.836, feature importance collected): YES on importance, NO on AUC improvement
+- Diminishing returns (AUC ≤ v0004): **YES — this is the outcome** (0.8361 ≤ 0.8363)
+- Regression (AUC < v0): NO (0.8361 > 0.8348)
+
+**Lesson**: Window expansion lever is fully exhausted. 5 experiments have established the operating envelope: AUC ∈ [0.832, 0.836], AP ∈ [0.393, 0.395], NDCG ∈ [0.732, 0.737]. The feature importance data reveals clear pruning candidates. Iter 3 should test whether removing the near-zero features (17→13) reduces noise and improves tail metrics, especially AP bottom-2 which has been worsening monotonically.

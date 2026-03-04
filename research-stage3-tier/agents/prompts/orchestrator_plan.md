@@ -31,9 +31,9 @@ VERSION_ID=$(jq -r '.version_id // empty' state.json)
 
 This pipeline uses a **single XGBoost multi-class classifier** (`objective='multi:softprob'`, `num_class=5`) to predict shadow price tiers directly.
 
-**All TierConfig parameters are mutable**: features, monotone_constraints, bins, tier_midpoints, class_weights, and all XGBoost hyperparams (n_estimators, max_depth, learning_rate, etc.).
+**IMPORTANT**: Check `memory/human_input.md` for per-batch constraints. If it specifies "FE only" or similar restrictions, ONLY propose feature engineering / selection hypotheses. Do NOT propose hyperparameter, class weight, bin, or midpoint changes unless explicitly allowed by human_input.md.
 
-**Hypothesis axes include**:
+**Hypothesis axes** (subject to human_input.md constraints):
 - Feature selection/engineering (add, remove, or transform features)
 - Class weight tuning (adjust per-tier sample weights for imbalance)
 - XGBoost hyperparameters (n_estimators, max_depth, learning_rate, min_child_weight, etc.)

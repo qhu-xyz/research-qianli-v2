@@ -31,7 +31,7 @@ The first line of your input is `WORKER_FAILED=0` or `WORKER_FAILED=1`. Branch a
 
 # KEY DESIGN: SINGLE MULTI-CLASS MODEL
 
-This pipeline uses a **single XGBoost multi-class classifier** (`objective='multi:softprob'`, `num_class=5`) to predict shadow price tiers directly. All `TierConfig` parameters are mutable.
+This pipeline uses a **single XGBoost multi-class classifier** (`objective='multi:softprob'`, `num_class=5`) to predict shadow price tiers directly. `TierConfig` parameters are mutable subject to per-batch constraints in `memory/human_input.md`.
 
 # GATE SYSTEM -- Three-Layer Promotion Checks
 

@@ -1,6 +1,8 @@
-# Runbook — Shadow Price Regression Pipeline (Stage 2)
+# Runbook — Tier Classification Pipeline (Stage 3)
 
-Shadow price regression pipeline using XGBoost with a frozen stage 1 classifier. Four autonomous agents (orchestrator, worker, Claude reviewer, Codex reviewer) coordinate via file-based handoffs. Runs 3 iterations per batch, fully autonomous after launch. Uses CLI subscriptions only (Claude Max/Pro + ChatGPT Pro) -- no API keys required.
+Tier classification pipeline using a single multi-class XGBoost classifier predicting 5 shadow-price tiers. Four autonomous agents (orchestrator, worker, Claude reviewer, Codex reviewer) coordinate via file-based handoffs. Runs 3 iterations per batch, fully autonomous after launch. Uses CLI subscriptions only (Claude Max/Pro + ChatGPT Pro) -- no API keys required.
+
+For complete model settings, features, and metrics documentation, see `docs/tier-pipeline-settings.md`.
 
 ---
 
@@ -9,7 +11,7 @@ Shadow price regression pipeline using XGBoost with a frozen stage 1 classifier.
 ```bash
 # Activate venv first
 cd /home/xyz/workspace/pmodel && source .venv/bin/activate
-cd /home/xyz/workspace/research-qianli-v2/research-stage2-shadow
+cd /home/xyz/workspace/research-qianli-v2/research-stage3-tier
 
 # 3-iteration batch (default)
 bash agents/run_pipeline.sh --batch-name my-batch
@@ -47,7 +49,6 @@ Log:     .logs/sessions/pipeline-20260303-142305.log
 | `jq` | `apt install jq` |
 | Python venv | `cd /home/xyz/workspace/pmodel && source .venv/bin/activate` |
 | v0 baseline | `ls registry/v0/metrics.json` |
-| Stage 1 classifier | Frozen at v0008 -- no setup needed, config is in `ml/config.py` |
 
 Run `bash agents/check_clis.sh` to verify all CLIs are available.
 
@@ -74,19 +75,25 @@ IDLE
 - **Git worktree isolation** -- worker operates in a separate worktree (no cross-iteration pollution)
 - **Single-writer rule** -- only one agent modifies state at a time (CAS transitions + flock)
 - **CLI subscriptions only** -- `claude --print` and `codex exec`, not API calls
-- **Frozen classifier** -- stage 1 classifier is immutable; only regressor config changes between iterations
+- **Single model** -- one XGBoost multi:softprob classifier for all 5 tiers, no frozen components
 
 ---
 
-## Stage 2 Identity: Regression Pipeline
+## Stage 3 Identity: Tier Classification Pipeline
 
-This pipeline is the **second stage** of a two-stage shadow price prediction system:
+This pipeline replaces the two-stage approach (stage-1 classifier + stage-2 regressor) with a single multi-class XGBoost model that directly predicts 5 shadow price tiers:
 
-1. **Stage 1 (frozen)**: Binary classifier -- P(constraint binds). Champion v0008, 13 features, XGBoost.
-2. **Stage 2 (this pipeline)**: Regressor -- predicted shadow price magnitude in dollars.
-3. **Combined**: EV score = P(binding) x predicted_$ -- used for ranking and capital allocation.
+| Tier | Range | Midpoint |
+|------|-------|----------|
+| 0 | [$3000, +inf) | $4000 |
+| 1 | [$1000, $3000) | $2000 |
+| 2 | [$100, $1000) | $550 |
+| 3 | [$0, $100) | $50 |
+| 4 | (-inf, $0) | $0 |
 
-**Critical constraint**: The classifier in `ml/config.py` (`ClassifierConfig`) is `frozen=True` and must NEVER be modified. All experimentation happens on `RegressorConfig`.
+**EV Score** for ranking: `sum(P(tier=t) * midpoint[t])` — continuous signal for capital allocation.
+
+**Current constraint**: Autonomous loop may only modify features and monotone constraints (see `memory/human_input.md`).
 
 ---
 
@@ -171,7 +178,7 @@ Write guidance here before launching a batch to steer the orchestrator's strateg
 | Agent | Role | Reads | Writes | Key Constraints |
 |---|---|---|---|---|
 | **Orchestrator (plan)** | Develops iteration strategy | `memory/hot/*`, `memory/warm/*`, `memory/archive/index.md`, `registry/gates.json`, champion metrics | `memory/hot/progress.md`, `memory/direction_iter{N}.md` | No ML code changes, no training |
-| **Worker** | Implements ML changes | `memory/direction_iter{N}.md`, `memory/hot/champion.md`, `memory/hot/learning.md`, `memory/hot/runbook.md` | `ml/`, `registry/{VERSION_ID}/`, handoff JSON | Runs in worktree, must pass tests, must commit before handoff, NEVER modify ClassifierConfig |
+| **Worker** | Implements ML changes | `memory/direction_iter{N}.md`, `memory/hot/champion.md`, `memory/hot/learning.md`, `memory/hot/runbook.md` | `ml/`, `registry/{VERSION_ID}/`, handoff JSON | Runs in worktree, must pass tests, must commit before handoff, must check human_input.md constraints |
 | **Claude Reviewer** | Independent code + gate review | Direction, changes summary, comparison table, gates.json, `memory/warm/*`, `ml/` codebase | `reviews/{batch}_iter{N}_claude.md`, handoff JSON | Cannot see Codex review, may critique gates |
 | **Codex Reviewer** | Independent second review | Same as Claude reviewer | `reviews/{batch}_iter{N}_codex.md`, handoff JSON | Cannot see Claude review, may critique gates |
 | **Orchestrator (synth)** | Merges reviews, decides promotion | Both reviews, comparison table, `memory/warm/*` | `memory/hot/*`, `memory/warm/*`, handoff JSON (with `decisions` field) | No ML code changes, no training |
@@ -182,7 +189,7 @@ Write guidance here before launching a batch to steer the orchestrator's strateg
 
 ### Overview
 
-Models are evaluated across **12 primary eval months** using a rolling window (10-month train, 2-month val per eval month). Promotion requires passing all three layers on all Group A gates.
+Models are evaluated across **12 primary eval months** using a rolling window (6-month train, 2-month val for early stopping per eval month). Promotion requires passing all three layers on all Group A gates.
 
 ### Three Layers
 
@@ -197,7 +204,7 @@ Models are evaluated across **12 primary eval months** using a rolling window (1
 | Group | Gates | Role |
 |---|---|---|
 | **A (hard)** | Tier-VC@100, Tier-VC@500, Tier-NDCG, QWK | Must pass all 3 layers to promote |
-| **B (monitor)** | Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0, Tier-Recall@1 | Tracked, don't block promotion |
+| **B (monitor)** | Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0, Tier-Recall@1, Value-QWK | Tracked, don't block promotion |
 
 ### Cascade Stages
 
@@ -253,7 +260,7 @@ Unlike stage 2 (which had lower-is-better C-RMSE and C-MAE), all tier metrics ar
 | Codex Reviewer | 7 min (non-fatal) | 10 min |
 | Orchestrator (synth) | 20 min | 25 min |
 
-Worker timeout is longer than stage 1 because regression benchmarks run ~35-50 min (12 months x 400 trees via Ray). Synthesizer timeout is longer due to observed ~14 min runs that read ~15 files and write 8 files.
+Worker timeout is longer because tier benchmarks run ~20-40 min (12 months with early stopping via Ray). Synthesizer timeout is longer due to observed ~14 min runs that read ~15 files and write 8 files.
 
 ### Watchdog Recovery
 
@@ -272,7 +279,7 @@ Worker timeout is longer than stage 1 because regression benchmarks run ~35-50 m
 - `__pycache__/` gitignored to prevent merge conflicts
 - All handoff JSON validated with `jq empty` before parsing
 - Codex timeout is non-fatal (pipeline continues with Claude review only)
-- **Frozen classifier**: ClassifierConfig is `frozen=True` dataclass; any modification causes runtime error
+- **FE-only constraint**: `memory/human_input.md` restricts autonomous loop to feature changes only
 
 ---
 
@@ -282,7 +289,7 @@ All tunables live in `agents/config.sh`:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PROJECT_DIR` | `.../research-stage2-shadow` | Absolute path to project root |
+| `PROJECT_DIR` | `.../research-stage3-tier` | Absolute path to project root |
 | `RAY_ADDRESS` | `ray://10.8.0.36:10001` | Ray cluster for data loading |
 | `DATA_ROOT` | `/opt/temp/tmp/pw_data/spice6` | Production data directory |
 | `VENV_ACTIVATE` | `.../pmodel/.venv/bin/activate` | Python venv activation script |
@@ -406,7 +413,7 @@ tmux kill-session -t worker-my-batch-iter1
 | CAS transitions (not locks per state) | Prevents race conditions without deadlock risk; single atomic operation |
 | Dual independent reviewers | Reduces blind spots; neither reviewer sees the other's output; synthesis resolves disagreements |
 | Codex timeout non-fatal | Codex is less reliable; pipeline degrades gracefully to Claude-only review |
-| Frozen classifier | Stage 1 is mature and stable; decouples classifier risk from regressor experimentation |
+| Single model (no frozen stage) | Simpler architecture; one model output; aligns ML objective with downstream tier decisions |
 
 ### Common Mistakes to Avoid
 
@@ -417,4 +424,4 @@ tmux kill-session -t worker-my-batch-iter1
 5. **Assuming agents write valid JSON** -- always validate with `jq empty` before parsing
 6. **Interactive prompts in non-interactive sessions** -- use `--full-auto` or equivalent; agents in tmux can't answer "Are you sure?"
 7. **Not testing with `--dry-run` first** -- every launcher supports it; use it before real runs to verify env and paths
-8. **Modifying ClassifierConfig** -- the classifier is frozen from stage 1; any experiment must only touch RegressorConfig
+8. **Ignoring human_input.md** -- always check per-batch constraints before modifying parameters

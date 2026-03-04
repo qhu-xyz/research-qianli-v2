@@ -89,6 +89,13 @@
       "direction": "higher",
       "group": "B",
       "pending_baseline": false
+    },
+    "Value-QWK": {
+      "floor": 0,
+      "tail_floor": 0,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": true
     }
   }
 }

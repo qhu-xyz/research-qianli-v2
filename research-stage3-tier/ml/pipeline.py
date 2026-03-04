@@ -192,6 +192,7 @@ def run_pipeline(
             pred_tier=pred_tier_labels,
             tier_proba=tier_proba,
             tier_ev_score=tier_ev,
+            tier_midpoints=config.tier.tier_midpoints,
         )
 
         # Feature importance

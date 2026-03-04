@@ -27,7 +27,7 @@ VERSION_ID=$(jq -r '.version_id // empty' state.json)
 
 # KEY DESIGN: SINGLE MULTI-CLASS MODEL
 
-This pipeline uses a **single XGBoost multi-class classifier** (`objective='multi:softprob'`, `num_class=5`) to predict shadow price tiers. All `TierConfig` parameters are mutable.
+This pipeline uses a **single XGBoost multi-class classifier** (`objective='multi:softprob'`, `num_class=5`) to predict shadow price tiers. `TierConfig` parameters are mutable subject to per-batch constraints in `memory/human_input.md`. **Flag violations** if the worker changed parameters outside the allowed scope.
 
 # GATE SYSTEM -- Understanding Three-Layer Checks
 

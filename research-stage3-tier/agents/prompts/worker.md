@@ -27,9 +27,11 @@ PROJECT_DIR is set in your environment. Use it for reading state and writing han
 
 This pipeline uses a **single XGBoost multi-class classifier** (`objective='multi:softprob'`, `num_class=5`) to predict shadow price tiers directly.
 
-**TierConfig** in `ml/config.py` contains all mutable parameters:
+**TierConfig** in `ml/config.py` contains parameters. **IMPORTANT**: Check `memory/human_input.md` for per-batch constraints — it may restrict which parameters you can change (e.g., "FE only" = only features/monotone_constraints).
+
+Full parameter list (subject to human_input.md constraints):
 - `features` and `monotone_constraints` — which features to use
-- `class_weights` — per-tier sample weights for class imbalance (default: {0: 10, 1: 5, 2: 2, 3: 1, 4: 0.5})
+- `class_weights` — per-tier sample weights for class imbalance
 - XGBoost hyperparams: `n_estimators`, `max_depth`, `learning_rate`, `subsample`, `colsample_bytree`, `reg_alpha`, `reg_lambda`, `min_child_weight`
 - `bins` — tier bin edges (use with caution)
 - `tier_midpoints` — EV score midpoints per tier

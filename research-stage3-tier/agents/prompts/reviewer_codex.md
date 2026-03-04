@@ -23,7 +23,7 @@ Read the following files (in order):
 
 # KEY DESIGN: SINGLE MULTI-CLASS MODEL
 
-This pipeline uses a **single XGBoost multi-class classifier** (`objective='multi:softprob'`, `num_class=5`). All `TierConfig` parameters are mutable.
+This pipeline uses a **single XGBoost multi-class classifier** (`objective='multi:softprob'`, `num_class=5`). `TierConfig` parameters are mutable subject to per-batch constraints in `memory/human_input.md`. **Flag violations** if the worker changed parameters outside the allowed scope.
 
 # GATE SYSTEM -- Three-Layer Checks
 

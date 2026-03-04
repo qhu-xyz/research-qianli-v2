@@ -3,7 +3,7 @@
 HUMAN-WRITE-ONLY — workers MUST NOT modify this file.
 
 Group A (blocking): Tier-VC@100, Tier-VC@500, Tier-NDCG, QWK.
-Group B (monitor): Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0, Tier-Recall@1.
+Group B (monitor): Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0, Tier-Recall@1, Value-QWK.
 
 All ranking metrics use tier_ev_score for ranking and actual_shadow_price
 as relevance — preserving the downstream capital allocation objective.
@@ -119,6 +119,70 @@ def _quadratic_weighted_kappa(
     return float(1.0 - numerator / denominator)
 
 
+def _value_weighted_qwk(
+    actual: np.ndarray,
+    pred: np.ndarray,
+    midpoints: list[float],
+    num_classes: int = 5,
+) -> float:
+    """Value-Weighted Quadratic Weighted Kappa.
+
+    Like standard QWK but each row (actual tier) of the confusion matrix is
+    weighted by the tier's midpoint value.  Tier 0 ($4000) misclassifications
+    are penalized ~80x more than tier 3 ($50) misclassifications, reflecting
+    the capital allocation importance of high-value constraints.
+
+    Parameters
+    ----------
+    actual : np.ndarray
+        Ground-truth tier labels in {0, 1, 2, 3, 4}.
+    pred : np.ndarray
+        Predicted tier labels in {0, 1, 2, 3, 4}.
+    midpoints : list[float]
+        Tier midpoints, e.g. [4000, 2000, 550, 50, 0] for tiers 0-4.
+    num_classes : int
+        Number of ordinal categories.
+
+    Returns
+    -------
+    float
+        Value-weighted QWK score in (-inf, 1].
+    """
+    O = np.zeros((num_classes, num_classes), dtype=np.float64)
+    for a, p in zip(actual, pred):
+        O[int(a), int(p)] += 1
+
+    n = len(actual)
+    if n == 0:
+        return 0.0
+
+    O = O / n
+
+    row_sums = O.sum(axis=1)
+    col_sums = O.sum(axis=0)
+    E = np.outer(row_sums, col_sums)
+
+    # Quadratic distance matrix
+    indices = np.arange(num_classes)
+    W = (indices[:, None] - indices[None, :]) ** 2
+    W = W.astype(np.float64) / (num_classes - 1) ** 2
+
+    # Value weighting: scale each row by tier midpoint
+    mid = np.array(midpoints, dtype=np.float64)
+    total_mid = mid.sum()
+    if total_mid == 0:
+        return 0.0
+    row_weight = mid / total_mid  # normalize so weights sum to 1
+    V = row_weight[:, None] * W  # broadcast: (num_classes, 1) * (num_classes, num_classes)
+
+    numerator = (V * O).sum()
+    denominator = (V * E).sum()
+
+    if denominator == 0:
+        return 1.0 if numerator == 0 else 0.0
+    return float(1.0 - numerator / denominator)
+
+
 def _tier_recall(
     actual_tier: np.ndarray,
     pred_tier: np.ndarray,
@@ -144,6 +208,7 @@ def evaluate_tier_pipeline(
     pred_tier: np.ndarray,
     tier_proba: np.ndarray,
     tier_ev_score: np.ndarray,
+    tier_midpoints: list[float] | None = None,
 ) -> dict:
     """Compute all tier classification metrics.
 
@@ -159,6 +224,8 @@ def evaluate_tier_pipeline(
         Predicted tier probabilities, shape ``(n_samples, 5)``.
     tier_ev_score : np.ndarray
         Probability-weighted expected shadow price for ranking.
+    tier_midpoints : list[float], optional
+        Tier midpoints for Value-QWK. Defaults to [4000, 2000, 550, 50, 0].
 
     Returns
     -------
@@ -185,6 +252,10 @@ def evaluate_tier_pipeline(
     tier_recall_0 = _tier_recall(actual_tier, pred_tier, 0)
     tier_recall_1 = _tier_recall(actual_tier, pred_tier, 1)
 
+    if tier_midpoints is None:
+        tier_midpoints = [4000, 2000, 550, 50, 0]
+    value_qwk = _value_weighted_qwk(actual_tier, pred_tier, tier_midpoints)
+
     return {
         # Group A (blocking)
         "Tier-VC@100": tier_vc_100,
@@ -197,6 +268,7 @@ def evaluate_tier_pipeline(
         "Adjacent-Accuracy": adjacent_accuracy,
         "Tier-Recall@0": tier_recall_0,
         "Tier-Recall@1": tier_recall_1,
+        "Value-QWK": value_qwk,
         # Monitoring
         "n_samples": n,
         "n_binding": int((actual_tier < 4).sum()),

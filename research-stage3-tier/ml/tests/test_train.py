@@ -55,6 +55,21 @@ class TestTrainTierClassifier:
         from xgboost import XGBClassifier
         assert isinstance(model, XGBClassifier)
 
+    def test_early_stopping(self):
+        """train_tier_classifier with val set uses early stopping."""
+        X, y, cfg = _make_tier_data(n=400)
+        cfg.early_stopping_rounds = 10
+        cfg.n_estimators = 500
+        X_train, X_val = X[:300], X[300:]
+        y_train, y_val = y[:300], y[300:]
+        model = train_tier_classifier(
+            X_train, y_train, cfg,
+            X_val=X_val, y_val=y_val,
+        )
+        # Should have stopped early (best_iteration < n_estimators)
+        assert hasattr(model, "best_iteration")
+        assert model.best_iteration < cfg.n_estimators
+
 
 # ---------------------------------------------------------------------------
 # predict_tier_probabilities

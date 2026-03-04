@@ -18,6 +18,9 @@ def train_tier_classifier(
     y_train: np.ndarray,
     cfg: TierConfig,
     sample_weight: np.ndarray | None = None,
+    X_val: np.ndarray | None = None,
+    y_val: np.ndarray | None = None,
+    val_sample_weight: np.ndarray | None = None,
 ) -> XGBClassifier:
     """Train a multi-class XGBClassifier for tier prediction.
 
@@ -31,6 +34,12 @@ def train_tier_classifier(
         Tier configuration (hyperparams + monotone constraints).
     sample_weight : np.ndarray, optional
         Per-sample weights. If None, computed from cfg.class_weights.
+    X_val : np.ndarray, optional
+        Validation feature matrix for early stopping.
+    y_val : np.ndarray, optional
+        Validation tier labels for early stopping.
+    val_sample_weight : np.ndarray, optional
+        Validation sample weights for early stopping eval metric.
 
     Returns
     -------
@@ -45,6 +54,8 @@ def train_tier_classifier(
 
     monotone = tuple(cfg.monotone_constraints)
 
+    use_early_stopping = X_val is not None and y_val is not None
+
     model = XGBClassifier(
         objective="multi:softprob",
         num_class=cfg.num_class,
@@ -58,10 +69,24 @@ def train_tier_classifier(
         min_child_weight=cfg.min_child_weight,
         monotone_constraints=monotone,
         eval_metric="mlogloss",
+        early_stopping_rounds=cfg.early_stopping_rounds if use_early_stopping else None,
         tree_method="hist",
         random_state=42,
     )
-    model.fit(X_train, y_train, sample_weight=sample_weight)
+
+    fit_kwargs: dict = {"sample_weight": sample_weight}
+    if use_early_stopping:
+        eval_set = [(X_val, y_val)]
+        fit_kwargs["eval_set"] = eval_set
+        if val_sample_weight is not None:
+            fit_kwargs["sample_weight_eval_set"] = [val_sample_weight]
+        fit_kwargs["verbose"] = False
+
+    model.fit(X_train, y_train, **fit_kwargs)
+
+    if use_early_stopping:
+        print(f"[train] early stopping: best_iteration={model.best_iteration} "
+              f"of {cfg.n_estimators} (best_score={model.best_score:.6f})")
 
     return model
 

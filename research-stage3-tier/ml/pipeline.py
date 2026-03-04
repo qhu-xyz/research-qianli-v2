@@ -88,6 +88,9 @@ def run_pipeline(
     test_df = None
     X_train = None
     y_train_tier = None
+    X_val = None
+    y_val_tier = None
+    val_weights = None
     model = None
     metrics: dict[str, Any] = {}
 
@@ -109,22 +112,29 @@ def run_pipeline(
         train_df = compute_interaction_features(train_df)
         val_df = compute_interaction_features(val_df)
 
-        # Feature matrix
+        # Feature matrices
         X_train, _ = prepare_features(train_df, config.tier)
+        X_val, _ = prepare_features(val_df, config.tier)
 
         # Tier labels
         actual_sp_train = train_df["actual_shadow_price"].to_numpy().astype(np.float64)
         y_train_tier = compute_tier_labels(actual_sp_train, config.tier)
 
-        tier_counts = {int(t): int((y_train_tier == t).sum()) for t in range(5)}
-        print(f"[phase 2] features={X_train.shape[1]} "
-              f"tier_dist={tier_counts} (mem={mem_mb():.0f} MB)")
+        actual_sp_val = val_df["actual_shadow_price"].to_numpy().astype(np.float64)
+        y_val_tier = compute_tier_labels(actual_sp_val, config.tier)
+        val_weights = compute_sample_weights(y_val_tier, config.tier)
 
-        # Free val early (not needed for training — no threshold optimization)
-        del val_df
+        tier_counts = {int(t): int((y_train_tier == t).sum()) for t in range(5)}
+        val_tier_counts = {int(t): int((y_val_tier == t).sum()) for t in range(5)}
+        print(f"[phase 2] features={X_train.shape[1]} "
+              f"train_tier_dist={tier_counts} val_tier_dist={val_tier_counts} "
+              f"(mem={mem_mb():.0f} MB)")
+
+        # Free dataframes (numpy arrays retained for training)
+        del val_df, train_df
         gc.collect()
 
-    # ── Phase 3: Train multi-class XGBoost ───────────────────────────────
+    # ── Phase 3: Train multi-class XGBoost (early stopping on val) ───────
     if from_phase <= 3:
         assert X_train is not None and y_train_tier is not None, (
             "Phase 3 requires Phase 2 features. Use from_phase <= 2."
@@ -135,11 +145,15 @@ def run_pipeline(
         model = train_tier_classifier(
             X_train, y_train_tier, config.tier,
             sample_weight=sample_weights,
+            X_val=X_val,
+            y_val=y_val_tier,
+            val_sample_weight=val_weights,
         )
         print(f"[phase 3] model trained (mem={mem_mb():.0f} MB)")
 
-        # Free training data
-        del X_train, y_train_tier, sample_weights, train_df
+        # Free training and val data
+        del X_train, y_train_tier, sample_weights
+        del X_val, y_val_tier, val_weights
         gc.collect()
 
     # ── Phase 4: Load target-month test data ─────────────────────────────

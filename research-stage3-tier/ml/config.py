@@ -135,6 +135,7 @@ class TierConfig:
     reg_alpha: float = 1.0
     reg_lambda: float = 1.0
     min_child_weight: int = 25
+    early_stopping_rounds: int = 50
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -152,6 +153,7 @@ class TierConfig:
             "reg_alpha": self.reg_alpha,
             "reg_lambda": self.reg_lambda,
             "min_child_weight": self.min_child_weight,
+            "early_stopping_rounds": self.early_stopping_rounds,
         }
 
     @classmethod
@@ -174,6 +176,7 @@ class TierConfig:
             reg_alpha=d["reg_alpha"],
             reg_lambda=d["reg_lambda"],
             min_child_weight=d["min_child_weight"],
+            early_stopping_rounds=d.get("early_stopping_rounds", 50),
         )
 
 

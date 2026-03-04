@@ -2,17 +2,16 @@
 
 ### Regressor Hyperparameter Findings
 
-1. **mcw=25 (min_child_weight) is the best single lever found** (NEW — updated from batch ralph-v2)
+1. **mcw=25 (min_child_weight) is the best single lever found** (from batch ralph-v2)
    - v0007 (reg_lambda=1.0, mcw=25): EV-VC@500 +6.2%, EV-NDCG +0.5%, Spearman +0.1%
    - **Pure EV-VC lever**: mcw=25 improves value capture without affecting Spearman
    - Mechanism: larger leaves → more conservative predictions → better rank ordering at scale
-   - The prior finding (L2+mcw together) was a compound effect; decomposition in iter 3 proved mcw was the beneficial component
+   - The prior finding (L2+mcw together) was a compound effect; decomposition proved mcw was the beneficial component
 
-2. **reg_lambda (L2) > 1.0 compresses Spearman** (REFINED — decomposed in batch ralph-v2)
+2. **reg_lambda (L2) > 1.0 compresses Spearman** (REFINED)
    - v0005 (λ=5, mcw=25): EV-VC@100 +6.5%, but Spearman -0.0008 — L2 was the culprit
    - v0007 (λ=1, mcw=25): EV-VC@500 +6.2%, Spearman +0.0004 — L2 reversion fixed it
-   - Screen Hyp A (λ=3, mcw=10): Even moderate L2 compresses predictions → hurts weak-month value capture
-   - **L2 regularization compresses the prediction distribution**: helps top-K value capture by reducing noise, but hurts rank correlation by flattening the prediction surface
+   - **L2 regularization compresses the prediction distribution**: helps top-K value capture but hurts rank correlation
    - Optimal: reg_lambda=1.0 (v0 default). Do NOT increase L2 for regressor.
 
 3. **Reducing max_depth trades mean quality for tail safety — depth=4 is NOT a sweet spot**
@@ -37,66 +36,64 @@
    - Spearman recovery came from REVERTING L2, not from any regularization increase
    - Future Spearman improvements must come from non-regularization axes
 
-### Pipeline Findings (from Code Reviews)
-
-8. **Train-inference mismatch in gated mode** (NOT YET FIXED)
-   - Regressor trains on `y_train_binary == 1` but infers on classifier predictions
-   - Structural issue affecting all versions equally
-   - Location: `ml/pipeline.py:195-209` (training) vs `ml/pipeline.py:249-253` (inference)
-
-9. **Feature importance pipeline wired but never populated**
-   - benchmark.py expects `_feature_importance` but nothing emits it
-   - Fix: add `model.get_score()` export to per-month metrics
-
-10. **Config provenance vulnerability** (partially mitigated)
-    - v0006 config bug: benchmark used pre-change defaults
-    - v0007 verified correctly via config.json provenance check
-    - Explicit direction file instructions prevented recurrence
-
-11. **Test suite corrected in iter 3** (was misaligned: 13/24 → 14/34 features)
-    - Frozen-dataclass test was removed — verify ClassifierConfig is still frozen
-
-12. **Temporal leakage concern** (NEW from iter 3 Codex review)
-    - data_loader.py train_end may be inclusive → potential leakage
-    - Structural issue needing audit, not v0007-specific
-
 ### Feature Engineering Findings
 
-13. **Distributional shape features (skewness, kurtosis, CV) carry real signal** (CONFIRMED — batch feat-eng-3)
+8. **Distributional shape features (skewness, kurtosis, CV) carry real signal** (CONFIRMED)
     - Adding density_skewness, density_kurtosis, density_cv → EV-VC@100 +9.0%, C-RMSE -3.1%
-    - These were already used by classifier but missing from regressor — closing this gap improved magnitude estimation
-    - Improvement is concentrated in ~3 months (2020-09, 2020-11, 2021-09 drive most of the +9% mean)
+    - Improvement is concentrated in ~3 months (2020-09, 2020-11, 2021-09 drive most of the +9%)
 
-14. **season_hist_da_3 and prob_below_85 contributed alongside distributional features** (WEAK EVIDENCE)
+9. **season_hist_da_3 and prob_below_85 contributed alongside distributional features** (WEAK EVIDENCE)
     - 39 features beat 37 on screen (+32% EV-VC@100 mean on 2 months)
     - Not independently tested — could be noise or genuine additional signal
-    - Feature importance data unavailable (pipeline doesn't emit it)
 
-15. **5 zero-filled features waste tree capacity** (IDENTIFIED, NOT YET FIXED)
-    - hist_physical_interaction, overload_exceedance_product, band_severity, sf_exceed_interaction, hist_seasonal_band
-    - Data loader doesn't provide these columns → always zero → XGBoost may split on them wastefully
-    - Effective feature count: 34 (not 39 nominal)
-    - Both reviewers recommend pruning
+10. **Pruning 5 dead features improves top-100 precision but trades breadth** (NEW — confirmed in v0011)
+    - Removing zero-filled features (hist_physical_interaction, overload_exceedance_product, band_severity, sf_exceed_interaction, hist_seasonal_band) from 39→34
+    - EV-VC@100 +5.2% (concentrated in few months), EV-VC@500 -2.5% (systematic, 7/12 months)
+    - Mechanism: colsample_bytree=0.8 now samples 27/34 useful features vs 27/34 useful + 4/34 wasted before
+    - **This is a precision-vs-breadth tradeoff, not a free win**
 
-16. **EV-VC@100 improvement is outlier-dependent** (CAUTION)
-    - 7/12 months improved, but top 3 gains (2020-09: +0.043, 2020-11: +0.046, 2021-09: +0.078) exceed total net improvement
-    - Removing best month (2021-09) drops mean improvement to ~+4%
+11. **flow_direction is NOT useful for regression** (NEW — tested and rejected in v0011 screen)
+    - Prune-only beat prune+flow_direction by +6.3% on screen mean EV-VC@100
+    - Binding direction does not correlate with shadow price magnitude
+
+12. **EV-VC@100 improvement is outlier-dependent across batches** (PATTERN — reinforced)
+    - v0009: 3 months drove most of the +9% gain
+    - v0011: 3 months drove most of the +5.2% gain (2021-05 +183%, 2021-11 +168%, 2021-09 +17.6%)
     - The model redistributes value capture rather than uniformly improving
+    - Mean improvement is real but fragile — sensitive to individual month performance
 
-17. **R-REC@500 metric definition mismatch** (NEW from Codex review)
-    - Computed from ev_scores, not regressor-only ranking → doesn't match its label as "regressor recall"
-    - Location: evaluate.py:224
+### Pipeline Findings (from Code Reviews)
+
+13. **Train-inference mismatch in gated mode** (NOT YET FIXED)
+    - Regressor trains on `y_train_binary == 1` but infers on classifier predictions
+    - Structural issue affecting all versions equally
+    - Location: `ml/pipeline.py:195-209` (training) vs `ml/pipeline.py:249-253` (inference)
+
+14. **Feature importance pipeline wired but never populated** (NOT YET FIXED)
+    - benchmark.py expects `_feature_importance` but nothing emits it
+    - Fix: add `model.get_score()` export to per-month metrics
+
+15. **Temporal leakage concern** (NOT YET FIXED)
+    - data_loader.py train_end may be inclusive → potential leakage
+    - Structural issue needing audit, not version-specific
+
+16. **R-REC@500 metric definition mismatch** (NOT YET FIXED)
+    - Computed from ev_scores, not regressor-only ranking → doesn't match its label
+
+17. **Pipeline docstring says classifier overrides supported but code ignores them** (NEW — LOW)
+    - _apply_config_overrides only applies top-level and regressor keys
+    - Correctness debt, not blocking
 
 ### Screening Methodology
-- **Two-month screening works**: 5/5 screens correctly predicted full-benchmark relative winner
+- **Two-month screening works**: 6/6 screens correctly predicted full-benchmark relative winner
 - **Screen month selection**: one weak + one strong for diagnostic coverage
-- **Weak months tested**: 2022-06, 2022-09, 2021-01, 2021-11
-- **Strong months tested**: 2022-12
+- **Screen months used**: 2022-06, 2022-12, 2022-09, 2021-09 (latter two are new this batch)
 
 ### Gate System Issues
-- **Gates v4 (recalibrated to 0.95x champion)**: Major improvement over v0-exact floors. No iterations blocked by calibration artifacts in this batch.
-- **noise_tolerance=0.02 is not scale-aware**: meaningless for C-RMSE, generous for EV-VC@100 — both reviewers flagged again
-- **Spearman is the binding gate constraint**: 4.7% margin for v0009. Future iterations with Spearman degradation could fail L1.
+- **EV-VC@500 is now the binding gate constraint** (replacing Spearman): L1 margin +4.2%, L2 at exact limit (1 fail), L3 margin +0.0023
+- **Gates v4 (calibrated to v0007)**: Do NOT recalibrate downward to v0011 — would loosen EV-VC@500, EV-NDCG, Spearman floors
+- **noise_tolerance=0.02 is not scale-aware**: both reviewers flagged in both batches, still unfixed
+- **EV-VC@100 tail_floor (0.000135) is non-protective**: effectively allows any value > 0
 
 ### Worker Reliability Patterns
 1. **Phantom completion** is dominant failure mode in earlier batches

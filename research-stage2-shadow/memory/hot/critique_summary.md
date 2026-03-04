@@ -1,28 +1,28 @@
 ## Critique Summary
 
-### Iter 1 — feat-eng-3-20260304-102111 (v0009, WORKER SUCCESS, DUPLICATE of v0008)
+### Iter 1 — feat-eng-3-20260304-121042 (v0011, WORKER SUCCESS, PROMOTED)
 
 **Claude Review**:
-- All Group A gates pass all 3 layers. EV-VC@100 +9.0% driven by 3 large wins (2020-09, 2020-11, 2021-09); 5/12 months degraded. Improvement is real but concentrated/fragile.
-- v0009 is byte-identical to v0008 — duplicate registration, no new empirical data. Process issue: worker should detect duplicates.
-- 5 of 39 features are zero-filled (hist_physical_interaction, overload_exceedance_product, band_severity, sf_exceed_interaction, hist_seasonal_band). Effective feature count is 34, not 39.
-- Weak months cluster in late spring/summer and fall. 2021-05 and 2022-06 appear structurally classifier-limited — regressor improvements won't rescue these.
-- Spearman is the binding constraint (4.7% margin to floor). Future iterations with worse Spearman could fail L1.
-- Recommends: (1) Remove zero-filled features, (2) HP tuning for 34 effective features (colsample, mcw, n_estimators), (3) Value-weighted training.
+- All Group A gates pass all 3 layers. EV-VC@100 +5.2% driven by 3 months with large gains (2021-05: +183%, 2021-11: +168%, 2021-09: +17.6%). 5/12 months degraded on EV-VC@100. Improvement is real but concentrated.
+- EV-VC@500 -2.5% is systematic (7/12 months degrade). This is a precision-vs-breadth tradeoff from improved colsample_bytree sampling efficiency.
+- EV-VC@500 L2 at exact limit (1 tail failure, 2022-09=0.0527 < tail_floor 0.0536). L3 margin only +0.0023.
+- EV-VC@1000 barely passing L1 (margin +0.9%). Group B, non-blocking, but signals breadth erosion.
+- Code review: PASS. Clean dead feature removal, no classifier modification, tests updated correctly.
+- Recommends: (1) HP tuning for 34 features (colsample, n_estimators, mcw, lr), (2) Address EV-VC@500 degradation, (3) Feature importance audit. Not recommended: unified mode or new features until HPs settle.
 
 **Codex Review**:
-- Gates pass, frozen-classifier verified. Positive mean deltas are real but non-uniform. EV gains concentrated in few months; monthly direction mixed.
-- **HIGH code finding** (repeated from prior batch): Gated regressor trains on true binding labels, not classifier-predicted positives. Train-inference mismatch at pipeline.py:195-209. Structural issue affecting all versions equally.
-- **MEDIUM**: R-REC@500 computed from ev_scores, not regressor-only ranking — metric definition mismatch.
-- **MEDIUM**: Feature importance pipeline dead code — prevents quantitative FE decisions.
-- **MEDIUM**: Potential data-split leakage risk in data_loader.py:172-214 (train_end inclusive?).
-- noise_tolerance=0.02 not scale-aware: makes L3 trivially easy for EV-VC@100 (bot2~0.007) and meaningless for C-RMSE (~5000).
-- Recommends: (1) Fix gated-mode semantics, (2) Fix R-REC@500 metric, (3) Add anti-leakage assertions, (4) Enable feature importance emission, (5) Scale-aware noise tolerance.
+- Gates pass, frozen-classifier verified. EV-VC@100 gain not broad-based — 6/12 months decline vs champion. Tail behavior is the key risk.
+- Closest L3 margins: EV-VC@500 +0.0023, EV-VC@1000 +0.0015. These are the fragile gates.
+- **MEDIUM code finding**: potential train/test leakage ambiguity for f0 — data_loader.py train_end may be inclusive (repeated from prior batch, still unfixed).
+- **LOW**: pipeline.py docstring claims classifier overrides supported, but _apply_config_overrides silently ignores them.
+- **LOW**: Feature importance pipeline dead — prevents evidence-backed FE decisions (repeated finding).
+- Recommends: (1) Accept as precision-focused tradeoff, (2) Recover EV-VC@500/1000 in next iter — suggests unified-regressor as candidate, (3) Add leakage guard assertion, (4) Implement feature importance export, (5) Keep classifier frozen.
+- Gate calibration: don't tighten floors; switch to scale-aware noise_tolerance; raise EV-VC@100 tail_floor from near-zero.
 
 **Synthesis**:
-1. **Both agree**: v0009 is promotable, improvement is real but concentrated, duplicate version is a process issue
-2. **Both agree**: Zero-filled features should be pruned, feature importance needed for data-driven FE decisions
-3. **Both agree**: Spearman is the binding gate constraint; noise_tolerance needs scale-awareness
-4. **Key divergence**: Codex surfaces train-inference mismatch (HIGH priority) and R-REC@500 definition issue — these are structural pipeline debts. Claude focuses more on next-iteration strategy (HP tuning, value-weighting).
-5. **Neither reviewer** suggests classifier changes (correctly respecting freeze)
-6. **Accumulated code debt**: train-inference mismatch (pipeline.py), dead feature importance, R-REC@500 definition, data-split leakage audit, stale business_context.md
+1. **Both agree**: v0011 is promotable, represents precision-vs-breadth tradeoff, EV-VC@500 tail margins are fragile
+2. **Both agree**: HP tuning is needed for the 34-feature config; feature importance pipeline still dead
+3. **Both agree**: Scale-aware noise_tolerance needed; EV-VC@100 tail_floor is non-protective
+4. **Key divergence**: Claude focuses on HP tuning specifics (colsample, n_est, lr); Codex suggests unified-regressor mode as breadth recovery lever
+5. **Code debt (accumulated, unfixed)**: train-inference mismatch (pipeline.py), dead feature importance, data-split leakage audit, pipeline.py docstring mismatch
+6. **Neither reviewer** suggests classifier changes (correctly respecting freeze)

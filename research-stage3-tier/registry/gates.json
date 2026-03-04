@@ -28,67 +28,67 @@
   ],
   "gates": {
     "Tier-VC@100": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.075047,
+      "tail_floor": 0.0083,
       "direction": "higher",
       "group": "A",
-      "pending_baseline": true
+      "pending_baseline": false
     },
     "Tier-VC@500": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.217402,
+      "tail_floor": 0.046931,
       "direction": "higher",
       "group": "A",
-      "pending_baseline": true
+      "pending_baseline": false
     },
     "Tier-NDCG": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.766866,
+      "tail_floor": 0.6293,
       "direction": "higher",
       "group": "A",
-      "pending_baseline": true
+      "pending_baseline": false
     },
     "QWK": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.358666,
+      "tail_floor": 0.183913,
       "direction": "higher",
       "group": "A",
-      "pending_baseline": true
+      "pending_baseline": false
     },
     "Macro-F1": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.368946,
+      "tail_floor": 0.287588,
       "direction": "higher",
       "group": "B",
-      "pending_baseline": true
+      "pending_baseline": false
     },
     "Tier-Accuracy": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.943147,
+      "tail_floor": 0.931147,
       "direction": "higher",
       "group": "B",
-      "pending_baseline": true
+      "pending_baseline": false
     },
     "Adjacent-Accuracy": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.974789,
+      "tail_floor": 0.961032,
       "direction": "higher",
       "group": "B",
-      "pending_baseline": true
+      "pending_baseline": false
     },
     "Tier-Recall@0": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.374394,
+      "tail_floor": 0.075584,
       "direction": "higher",
       "group": "B",
-      "pending_baseline": true
+      "pending_baseline": false
     },
     "Tier-Recall@1": {
-      "floor": 0.0,
-      "tail_floor": 0.0,
+      "floor": 0.097591,
+      "tail_floor": 0.026071,
       "direction": "higher",
       "group": "B",
-      "pending_baseline": true
+      "pending_baseline": false
     }
   }
 }

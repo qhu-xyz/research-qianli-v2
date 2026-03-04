@@ -1,101 +1,104 @@
-# Direction — Iteration 1 (feat-eng-3-20260304-102111)
+# Direction — Iteration 1 (feat-eng-3-20260304-121042)
+
+## Champion: v0009 (39 features, 34 effective)
+
+Mean EV-VC@100=0.0762, EV-VC@500=0.2329, EV-NDCG=0.7548, Spearman=0.3910
 
 ## Batch Constraint
-**Feature engineering / selection ONLY.** No hyperparameter changes. No training mode changes.
-All regressor HPs must remain at v0007 defaults: n_estimators=400, max_depth=5, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8, reg_alpha=1.0, reg_lambda=1.0, min_child_weight=25.
 
-## Analysis
-
-**Champion v0007** (34 features, mcw=25, reg_lambda=1.0):
-- Mean: EV-VC@100=0.0699, EV-VC@500=0.2294, EV-NDCG=0.7513, Spearman=0.3932
-- Weakest months: 2022-06 (EV-VC@100=0.014, EV-NDCG=0.604, Spearman=0.271), 2021-05 (EV-VC@100≈0)
-- Strongest months: 2022-12 (EV-VC@100=0.192, EV-NDCG=0.815), 2022-03 (EV-NDCG=0.845)
-
-**Key gap**: The classifier uses 14 features including `density_skewness`, `density_kurtosis`, `density_cv` — distributional shape features. The regressor uses 34 features but does NOT include these 3. This is likely an oversight from the original pipeline setup. Additionally, `season_hist_da_3` and `prob_below_85` are available from the data loader but unused.
-
-**Rationale**: Distributional shape features (skewness, kurtosis, CV) capture non-linear flow distribution characteristics that directly relate to shadow price magnitude. A highly skewed or heavy-tailed flow distribution signals different congestion dynamics than a symmetric one. Since these features already proved useful for the classifier's binding prediction, they should help the regressor estimate dollar magnitude.
+**Feature engineering / selection ONLY.** No HP changes. No training mode changes. Only features and monotone_constraints may change.
 
 ---
 
-## Hypothesis A (primary): Add 3 distributional shape features (34 → 37)
+## Hypothesis A (Primary): Prune 5 Zero-Filled Features (39→34)
 
-**What**: Add `density_skewness`, `density_kurtosis`, `density_cv` to the regressor feature set. These are the 3 features used by the classifier but missing from the regressor.
+**What**: Remove 5 features that are always zero because the data loader doesn't provide them: `hist_physical_interaction`, `overload_exceedance_product`, `band_severity`, `sf_exceed_interaction`, `hist_seasonal_band`.
 
-**Why**: High-confidence addition — proven useful in classifier, raw columns from data loader (no FE code needed), captures shape of flow distribution which directly informs shadow price magnitude.
+**Why**: Both Claude and Codex reviewers identified these as dead features. With `colsample_bytree=0.8`, each tree samples ~31 of 39 features — ~5 zero slots waste sampling capacity. After pruning, each tree samples ~27 of 34 features, all carrying real signal. This should improve effective feature utilization per tree without any signal loss.
 
-**Monotone constraints**: All 3 unconstrained (0) — skewness/kurtosis/CV have non-monotonic relationships with shadow price.
-
-Hypothesis A overrides:
+**Hypothesis A overrides**:
 ```json
-{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "hist_physical_interaction", "overload_exceedance_product", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "band_severity", "sf_exceed_interaction", "hist_seasonal_band", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0]}}
+{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1]}}
 ```
 
 ---
 
-## Hypothesis B (alternative): Add all 5 unused raw columns (34 → 39)
+## Hypothesis B (Alternative): Prune 5 Zero-Filled + Add flow_direction (39→35)
 
-**What**: Add `density_skewness`, `density_kurtosis`, `density_cv`, `season_hist_da_3`, `prob_below_85` to the regressor.
+**What**: Same pruning as Hypothesis A, plus add `flow_direction` (integer indicating constraint flow direction). Monotone constraint = 0 (unconstrained — direction is categorical, no monotonic relationship expected).
 
-**Why**: Tests the full set of unused raw columns. `season_hist_da_3` adds a third seasonal harmonic for historical DA prices, capturing more seasonal structure. `prob_below_85` adds a deeper below-threshold probability band. If B outperforms A, the additional 2 features carry signal; if A is better, they add noise.
+**Why**: `flow_direction` is available from MisoDataLoader but never included in the regressor. It could differentiate constraint behavior where the same line binds in opposite directions (forward vs reverse congestion). If forward-binding constraints have systematically different shadow price magnitudes than reverse-binding, this feature provides that signal. Combined with pruning, we get cleaner features + a genuinely new signal axis.
 
-**Monotone constraints**: density_skewness=0, density_kurtosis=0, density_cv=0, season_hist_da_3=+1, prob_below_85=-1.
-
-Hypothesis B overrides:
+**Hypothesis B overrides**:
 ```json
-{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "hist_physical_interaction", "overload_exceedance_product", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "band_severity", "sf_exceed_interaction", "hist_seasonal_band", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1]}}
+{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85", "flow_direction"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1, 0]}}
 ```
 
 ---
 
 ## Screen Months
 
-| Month | Role | Rationale |
-|-------|------|-----------|
-| **2022-06** | Weak | Worst EV-VC@100 (0.014), worst EV-NDCG (0.604), 2nd worst Spearman (0.271). Distributional features should help most here — likely unusual flow distributions the regressor currently misses. |
-| **2022-12** | Strong | Best EV-VC@100 (0.192), 2nd best EV-NDCG (0.815). Must confirm new features don't regress performance on months the model already handles well. |
+- **Weak month: 2022-09** — Worst EV-VC@500 (0.062), low EV-VC@100 (0.030), low EV-NDCG (0.682), Spearman (0.330). Tests whether pruning/new signal helps the worst value-capture month. Not screened in previous batch.
+- **Strong month: 2021-09** — Best EV-VC@100 (0.200), best EV-VC@500 (0.400), strong NDCG (0.804). Tests that we don't regress on our best performing month. Not screened in previous batch.
+
+**Rationale**: Both months are fresh (not used in prior batch screening). The weak month (2022-09) is poor across ALL Group A metrics, making it diagnostic for general improvement. The strong month (2021-09) has the highest EV-VC values, making it the regression sentinel.
 
 ---
 
 ## Winner Criteria
 
-1. **Primary**: Higher mean EV-VC@100 across the 2 screen months
-2. **Safety check**: Spearman must not drop > 0.03 on either screen month vs champion
-3. **Tiebreaker**: Higher mean EV-NDCG across screen months
-4. **If both degrade vs champion**: Pick the one with smallest EV-VC@100 degradation. If both are substantially worse (> 10% mean EV-VC@100 drop), STOP and escalate — the feature additions are harmful.
+Pick the hypothesis with **higher mean EV-VC@100 across the 2 screen months**, with these tiebreakers/vetos:
+1. If both are within ±5% of each other on EV-VC@100, prefer the one with higher EV-VC@500.
+2. **Veto**: If a hypothesis drops Spearman > 0.02 on either screen month vs champion, disqualify it (Spearman is the binding gate constraint at 4.7% margin).
+3. If both pass or both fail the Spearman check, use EV-VC@100 as the primary selector.
 
 ---
 
 ## Code Changes for Winner
 
-After screening picks a winner, the worker should make these code changes:
+### If Hypothesis A wins (prune only):
 
-1. **No code changes needed** — both hypotheses use raw columns already available in the data loader and already defined in `_ALL_REGRESSOR_FEATURES` in `ml/config.py`.
+**File: `ml/config.py`**
+- In `_ADDITIONAL_FEATURES`: Remove `"hist_physical_interaction"`, `"overload_exceedance_product"`, `"band_severity"`, `"sf_exceed_interaction"`, `"hist_seasonal_band"` from the list.
+- In `_ADDITIONAL_MONOTONE`: Remove the corresponding monotone constraint values (positions matching the removed features — they are all `0`).
+- `_REGRESSOR_FEATURES` and `_REGRESSOR_MONOTONE` are derived from classifier + additional, so they will auto-update.
 
-2. The winner's feature list and monotone_constraints become the new version's config. The worker should register the version with the winning overrides applied.
+**File: `ml/tests/`**
+- Update any test that asserts feature count (e.g., `len(REGRESSOR_FEATURES) == 39` → `== 34`).
 
-3. **Verification**: After the full 12-month benchmark, confirm the registered `config.json` has the correct feature count (37 for Hyp A winner, 39 for Hyp B winner) and matching monotone_constraints length.
+### If Hypothesis B wins (prune + flow_direction):
+
+All changes from Hypothesis A, PLUS:
+
+**File: `ml/config.py`**
+- In `_ADDITIONAL_FEATURES`: Add `"flow_direction"` to the list.
+- In `_ADDITIONAL_MONOTONE`: Add `0` at the corresponding position.
+
+**File: `ml/features.py`**
+- Verify `flow_direction` is passed through from the data loader to the feature matrix. If not, add it as a passthrough feature (no computation needed — it's a raw column).
+
+**File: `ml/tests/`**
+- Update feature count assertion to `== 35`.
 
 ---
 
 ## Expected Impact
 
-| Gate | Expected Change | Reasoning |
-|------|----------------|-----------|
-| EV-VC@100 | +2-5% mean | Distributional shape → better magnitude estimates for extreme constraints |
-| EV-VC@500 | +1-3% mean | Broader ranking benefit from richer feature set |
-| EV-NDCG | +0.5-1.5% mean | Better ranking from more informative features |
-| Spearman | ±0.5% | Feature additions should be neutral or slightly positive for rank correlation |
-| C-RMSE | -1-3% | Better magnitude prediction from distributional features |
+| Metric | Hyp A (prune) | Hyp B (prune + flow_direction) |
+|--------|---------------|-------------------------------|
+| EV-VC@100 | +0-2% (cleaner sampling) | +1-4% (new signal + cleaner) |
+| EV-VC@500 | +0-1% | +1-3% |
+| EV-NDCG | Neutral | +0-1% |
+| Spearman | Neutral (no signal change) | +0-1% (if directional) |
+| C-RMSE | Neutral to slight improvement | Neutral to slight improvement |
 
-**Tail improvement**: Weak months (2022-06, 2021-05) should see largest gains — these months likely have unusual flow distributions that the 3 shape features can capture.
+Conservative estimates. The pruning itself may have minimal impact since XGBoost doesn't split on constant features, but the colsample_bytree sampling improvement is real. flow_direction's impact depends on whether binding direction correlates with shadow price magnitude.
 
 ---
 
 ## Risk Assessment
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| New features add noise, degrading weak months | Low | Skewness/kurtosis proven in classifier; unconstrained monotone gives XGBoost freedom to use or ignore |
-| Overfitting with 37-39 features (from 34) | Low | mcw=25 provides strong leaf regularization; 3-5 extra features is modest |
-| Data loader missing these columns for some months | Very low | These are base columns from MisoDataLoader used by the classifier |
-| Feature order mismatch in overrides vs data | Low | Worker must verify config.json feature count matches after benchmark |
+1. **Low risk (both)**: Pruning zero-filled features cannot hurt model quality — these features carry zero information. Worst case is neutral.
+2. **Medium risk (Hyp B)**: `flow_direction` might not be populated in all eval months or might be a constant. If so, it's equivalent to Hyp A. Worker should verify non-null, non-constant values for flow_direction before proceeding.
+3. **Spearman sensitivity**: Any feature change could shift Spearman slightly. With 4.7% margin to floor, even a -1% change is safe. But monitor closely on screen.
+4. **Data loader compatibility**: Confirm that removing features from config doesn't break the data loader pipeline. The loader provides columns regardless; config just selects which ones to use.

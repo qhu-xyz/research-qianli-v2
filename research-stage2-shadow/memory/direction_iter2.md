@@ -1,97 +1,112 @@
 # Direction — Iteration 2 (feat-eng-3-20260304-102111)
 
 ## Batch Constraint
-**Feature cleanup + value-weighted training experiment.** HPs remain at v0009 defaults EXCEPT `value_weighted` may change.
-All regressor HPs must remain: n_estimators=400, max_depth=5, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8, reg_alpha=1.0, reg_lambda=1.0, min_child_weight=25.
+**Feature engineering / selection ONLY.** No hyperparameter changes. No training mode changes.
+All regressor HPs must remain at v0009 defaults: n_estimators=400, max_depth=5, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8, reg_alpha=1.0, reg_lambda=1.0, min_child_weight=25.
+`unified_regressor=false`, `value_weighted=false` — UNCHANGED.
 
 ## Analysis
 
 **Champion v0009** (39 nominal / 34 effective features, mcw=25, reg_lambda=1.0):
 - Mean: EV-VC@100=0.0762, EV-VC@500=0.2329, EV-NDCG=0.7548, Spearman=0.3910
-- Weakest months: 2021-05 (EV-VC@100=0.0012), 2021-11 (EV-VC@100=0.0118, Spearman=0.267), 2022-06 (EV-NDCG=0.607, Spearman=0.274)
-- Strongest months: 2021-09 (EV-VC@100=0.200), 2020-11 (EV-VC@100=0.149), 2022-12 (EV-VC@100=0.174)
-- **5 zero-filled features**: hist_physical_interaction, overload_exceedance_product, band_severity, sf_exceed_interaction, hist_seasonal_band — data loader doesn't provide these, always zero
-- **Improvement concentration**: v0009's +9% EV-VC@100 gain is driven by 3 months; 5/12 months degraded vs v0007
+- Weakest months: 2021-05 (EV-VC@100=0.0012, classifier-limited), 2021-11 (EV-VC@100=0.0118, Spearman=0.267), 2022-06 (EV-NDCG=0.607, Spearman=0.274)
+- Strongest months: 2021-09 (EV-VC@100=0.200), 2022-12 (EV-VC@100=0.174), 2020-11 (EV-VC@100=0.149, Spearman=0.519)
+- **5 zero-filled features**: hist_physical_interaction, overload_exceedance_product, band_severity, sf_exceed_interaction, hist_seasonal_band — computed by `features.py:compute_interaction_features()` but always produce zeros
+- **Gate margins**: EV-VC@100 +14.8%, EV-VC@500 +6.9%, EV-NDCG +5.8%, **Spearman +4.7% (binding constraint)**
 
-**Key opportunity**: Both reviewers recommend removing zero-filled features (reduces noise, saves tree splits). Additionally, `value_weighted=True` is untested and directly targets the business objective — weighting training by shadow price magnitude should improve the model's ability to rank high-value constraints.
+**Key findings from codebase investigation**:
+1. Zero-filled features are interaction features computed in `ml/features.py` that produce zeros because underlying column combinations don't exist. They waste ~13% of tree split budget.
+2. Remaining unused data loader columns: `flow_direction` (±1, genuinely new signal), `prob_below_105/110/80` (mathematically redundant — they're `1 - prob_exceed_*`, which XGBoost can learn from the exceed versions).
+3. `flow_direction` differentiates import vs export constraints. Import and export constraints have different shadow price distributions — direction could help the regressor estimate magnitude more accurately.
 
-**Rationale**: Feature cleanup is a necessary hygiene step. Value weighting is a training mode change that aligns loss function with business objective (maximize value capture at top of ranking). Since EV-VC@100 improvement was concentrated in few months, value weighting may spread the benefit more uniformly by emphasizing high-$ constraints.
+**Rationale**: Pruning zero-filled features is a consensus recommendation from both reviewers. Adding `flow_direction` is the only available axis for genuinely new signal from the data loader within the FE-only constraint. Testing pruning alone vs pruning+flow_direction tells us whether the new feature carries signal.
 
 ---
 
-## Hypothesis A (control): Feature cleanup only (39 → 34)
+## Hypothesis A (control): Prune zero-filled features only (39 → 34)
 
-**What**: Remove the 5 zero-filled features. Keep all HPs and `value_weighted=False`.
+**What**: Remove the 5 zero-filled interaction features. No new features added.
 
-**Why**: Establishes the isolated effect of removing noise features. Expected to be neutral or slightly positive — XGBoost should already be mostly ignoring constant columns, but removing them guarantees no wasted splits and provides a clean baseline.
+**Why**: Establishes the isolated effect of removing noise features. Frees 13% of tree split budget. XGBoost should already mostly ignore constant columns, but removing them guarantees no wasted splits. Both reviewers recommend unanimously. This is the conservative, hygienic bet.
 
-**Feature list** (34 features):
+Hypothesis A overrides:
 ```json
-{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1], "value_weighted": false}}
+{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1]}}
 ```
 
 ---
 
-## Hypothesis B (experiment): Feature cleanup + value weighting (39 → 34, value_weighted=True)
+## Hypothesis B (experiment): Prune zero-filled + add flow_direction (39 → 35)
 
-**What**: Same 34-feature cleanup as Hypothesis A, but with `value_weighted=True`.
+**What**: Remove 5 zero-filled features AND add `flow_direction` (±1 integer from data loader). Net: 34 effective → 35 features.
 
-**Why**: Value weighting emphasizes high-shadow-price rows during training. Since the business objective is ranking by expected value (EV = P(binding) × predicted_$), the regressor should be most accurate on the constraints that matter most — the high-$ ones. This directly targets EV-VC@100 improvement.
+**Why**: `flow_direction` is the only remaining data loader column that provides genuinely independent information (not a linear transform of existing features). Import vs export constraints have structurally different shadow price distributions — the direction indicator should help the regressor differentiate them. If B beats A, flow_direction carries real signal; if A is better or tied, the feature is noise for this task.
 
-**Feature list** (34 features, same as A):
+**Monotone constraint for flow_direction**: 0 (unconstrained) — the relationship between flow direction and shadow price magnitude is not monotonic.
+
+Hypothesis B overrides:
 ```json
-{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1], "value_weighted": true}}
+{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85", "flow_direction"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1, 0]}}
 ```
 
 ---
 
 ## Screen Months
 
-| Month | Role | Rationale |
-|-------|------|-----------|
-| **2021-11** | Weak | Worst Spearman (0.267), degraded EV-VC@100 from v0007→v0009 (0.039→0.012). Value weighting may help here if high-$ constraints are being misranked. |
-| **2021-09** | Strong | Best EV-VC@100 (0.200), largest single improvement from v0007→v0009. Must confirm cleanup doesn't regress and value weighting doesn't redistribute away from this month. |
+| Month | Role | v0009 Metrics | Rationale |
+|-------|------|---------------|-----------|
+| **2021-11** | Weak | EV-VC@100=0.0118, Spearman=0.267 (worst), C-RMSE=4776 | Worst Spearman month — since Spearman is the binding gate (4.7% margin), changes must not degrade here. Also tests if pruning/flow_direction helps on high-error months. |
+| **2020-11** | Strong | EV-VC@100=0.149, Spearman=0.519 (best), EV-NDCG=0.803 | Best Spearman month with strong EV metrics. "Do no harm" diagnostic — any regression here signals damage to the model's best behavior. |
+
+**Note**: Iter 1 used 2022-06/2022-12. Using different months provides broader diagnostic coverage across the eval set.
 
 ---
 
 ## Winner Criteria
 
-1. **Primary**: Higher mean EV-VC@100 across the 2 screen months
-2. **Safety check**: Spearman must not drop > 0.03 on either screen month vs champion v0009
+1. **Primary**: Higher mean EV-VC@100 across the 2 screen months wins
+2. **Safety check**: Spearman must not drop > 0.02 on either screen month vs champion v0009 (tighter threshold than iter 1 because Spearman margin is only 4.7%)
 3. **Tiebreaker**: Higher mean EV-NDCG across screen months
 4. **If both degrade vs champion**: Pick the one with smallest EV-VC@100 degradation. If both are substantially worse (> 10% mean EV-VC@100 drop), STOP and escalate.
-5. **If A and B are within noise** (<2% mean EV-VC@100 difference): Prefer A (simpler, no value weighting) — avoids adding training mode complexity without clear benefit.
+5. **If A and B are within noise** (<2% mean EV-VC@100 difference): Prefer A (parsimony — fewer features, simpler model)
 
 ---
 
 ## Code Changes for Winner
 
-1. **For both hypotheses**: The worker must create a new config.json with the 34-feature list (removing the 5 zero-filled features) and corresponding monotone_constraints (length 34).
+1. **For Hypothesis A winner**: No code changes to `ml/features.py` needed. The worker creates a new version config.json with the 34-feature list, removing the 5 zero-filled features and their monotone_constraints entries.
 
-2. **For Hypothesis B winner**: Additionally set `"value_weighted": true` in the regressor config.
+2. **For Hypothesis B winner**: The worker must:
+   - Verify `flow_direction` is already available as a raw column from the data loader (it should be — `data_loader.py` computes it as ±1)
+   - Add `"flow_direction"` to `_ADDITIONAL_FEATURES` in `ml/config.py` (if needed for the pipeline to include it)
+   - Ensure `flow_direction` is included in the feature preparation step in `ml/features.py` (may already be passthrough from data loader)
+   - Create config.json with 35 features and 35 monotone_constraints
 
-3. **Verification**: After the full 12-month benchmark, confirm:
-   - config.json has exactly 34 features and 34 monotone_constraints
+3. **For both winners**: Remove the 5 zero-filled features from `_REGRESSOR_FEATURES` in `ml/config.py`:
+   - Delete: `hist_physical_interaction`, `overload_exceedance_product`, `band_severity`, `sf_exceed_interaction`, `hist_seasonal_band`
+   - Also remove the `compute_interaction_features()` function from `ml/features.py` if it only produces these 5 features
+   - Update `_REGRESSOR_MONOTONE` to match the new feature list length
+
+4. **Verification** (CRITICAL): After the full 12-month benchmark, confirm:
+   - config.json has exactly 34 features (A) or 35 features (B) and matching monotone_constraints length
    - The 5 zero-filled features are NOT in the feature list
-   - `value_weighted` matches the winning hypothesis (false for A, true for B)
+   - `value_weighted=false` and `unified_regressor=false` (batch constraint)
+   - All regressor HPs match v0009 exactly (n_estimators=400, max_depth=5, lr=0.05, subsample=0.8, colsample=0.8, reg_alpha=1.0, reg_lambda=1.0, mcw=25)
    - Classifier config is UNCHANGED from v0009 (14 features, frozen)
-   - All other regressor HPs match v0009 exactly
-
-4. **IMPORTANT**: Do NOT modify `ml/config.py` or any ML code. The config.json override is sufficient.
 
 ---
 
 ## Expected Impact
 
-| Gate | Hyp A (cleanup) | Hyp B (cleanup + value wt) |
-|------|-----------------|---------------------------|
-| EV-VC@100 | ±0-2% (neutral) | +3-8% (value weighting targets this) |
-| EV-VC@500 | ±0-1% | +1-5% |
-| EV-NDCG | ±0-0.5% | +0.5-2% |
-| Spearman | ±0% | ±1-2% (could go either way) |
-| C-RMSE | ±0-1% | +2-5% worse on low-$ constraints (acceptable) |
+| Gate | Hyp A (prune only) | Hyp B (prune + flow_direction) |
+|------|--------------------|---------------------------------|
+| EV-VC@100 | ±0-2% (neutral to slight positive) | +1-4% (if direction differentiates constraint pricing) |
+| EV-VC@500 | ±0-1% | +0-3% |
+| EV-NDCG | ±0-0.5% | +0-1% |
+| Spearman | ±0% (cleanup should be transparent) | ±0-1% (direction adds information, not noise) |
+| C-RMSE | ±0-1% | -1-3% (direction may reduce residuals on directional constraints) |
 
-**Key uncertainty for B**: Value weighting could hurt Spearman if it makes the model less accurate on low-$ constraints that still contribute to rank correlation. Watch for Spearman degradation > 1%.
+**Realistic expectations**: Pruning zero-filled features is primarily hygienic — XGBoost already mostly ignores constant columns, so the effect should be small. The real test is whether `flow_direction` provides meaningful signal. Given that import/export constraints have different economics, there's a reasonable prior that direction matters for magnitude estimation.
 
 ---
 
@@ -99,8 +114,9 @@ All regressor HPs must remain: n_estimators=400, max_depth=5, learning_rate=0.05
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
-| Feature cleanup changes results unexpectedly | Very low | XGBoost should already ignore constant features; removing them is cleanup only |
-| Value weighting hurts Spearman significantly | Medium | Screen months include 2021-11 (worst Spearman) for diagnostic. Safety check at ±0.03. |
-| Value weighting causes C-RMSE/C-MAE regression | Medium | These are Group B (monitor), not blocking. Acceptable if EV ranking improves. |
-| Worker uses wrong feature list (includes zero-filled features) | Low | Explicit verification step in instructions. Feature count 34 is hard constraint. |
-| Duplicate version (like v0009=v0008) | Medium | Worker should check if proposed config matches any existing version before running full benchmark. |
+| Feature cleanup changes results unexpectedly | Very low | XGBoost ignores constant features; removing them is transparent cleanup |
+| flow_direction doesn't exist in processed data | Low | Confirmed in data_loader.py:362 as ±1 parameter; used as raw column |
+| flow_direction adds noise, degrading weak months | Low | Unconstrained monotone gives XGBoost freedom to ignore it. Screen on 2021-11 catches regression. |
+| Spearman regression from feature changes | Low | Tighter safety check (0.02 threshold) protects the binding gate |
+| Worker uses wrong feature list | Low | Explicit feature counts (34 or 35) and verification checklist |
+| flow_direction is correlated with is_interface | Medium | Both capture constraint structure. If highly correlated, B adds no value over A — that's fine, we pick A. |

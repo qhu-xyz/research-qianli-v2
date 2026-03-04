@@ -84,7 +84,7 @@ export PYTHONPATH="${PROJECT_DIR}"
 source "$VENV_ACTIVATE"
 
 # Check gates populated
-PENDING=$(jq '[.gates | to_entries[] | select(.value.pending_v0 == true)] | length' "${PROJECT_DIR}/registry/gates.json")
+PENDING=$(jq '[.gates | to_entries[] | select(.value.pending_baseline == true)] | length' "${PROJECT_DIR}/registry/gates.json")
 if (( PENDING > 0 )); then
   echo "Running populate_v0_gates.py..."
   python ml/populate_v0_gates.py

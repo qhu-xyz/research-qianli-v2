@@ -26,8 +26,6 @@ VERSION_ID=$(jq -r '.version_id // empty' state.json)
 10. `registry/gates.json` -- promotion gate definitions
 11. Champion metrics: if `registry/champion.json` has a version, read its `registry/{version}/metrics.json`. If champion is null, read `registry/v0/metrics.json` instead.
 12. `memory/human_input.md` -- per-batch human input (if exists)
-13. `human-input/requirement.md` -- static requirements
-14. `human-input/reference.md` -- reference architecture
 
 # KEY CONSTRAINT: FROZEN CLASSIFIER
 

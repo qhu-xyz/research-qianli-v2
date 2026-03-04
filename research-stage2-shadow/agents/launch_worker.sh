@@ -39,7 +39,7 @@ cd "$PROJECT_DIR"
 git worktree add "$WT_DIR" -b "$WT_BRANCH" 2>/dev/null || git worktree add "$WT_DIR" "$WT_BRANCH" 2>/dev/null || true
 
 # RT-8: Compute worktree project subdir (monorepo: git root != PROJECT_DIR)
-REPO_PREFIX=$(git rev-parse --show-prefix)  # e.g. "research-stage1-shadow/"
+REPO_PREFIX=$(git rev-parse --show-prefix)  # e.g. "research-stage2-shadow/"
 WT_PROJECT="${WT_DIR}/${REPO_PREFIX%/}"      # worktree's project subdirectory
 
 # Worker runs in worktree's project subdir, needs PROJECT_DIR for absolute path access

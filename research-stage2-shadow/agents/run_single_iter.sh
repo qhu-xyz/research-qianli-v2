@@ -247,7 +247,10 @@ import json
 with open('${PROJECT_DIR}/registry/${PROMOTE}/metrics.json') as f:
     m = json.load(f)
 agg = m.get('aggregate', {}).get('mean', m)
-print(f'AUC={agg.get(\"S1-AUC\", \"?\"):.4f}, AP={agg.get(\"S1-AP\", \"?\"):.4f}, NDCG={agg.get(\"S1-NDCG\", \"?\"):.4f}, BRIER={agg.get(\"S1-BRIER\", \"?\"):.4f}')
+def g(k):
+    v = agg.get(k, '?')
+    return f'{v:.4f}' if isinstance(v, (int,float)) else str(v)
+print(f'EV-VC@100={g(\"EV-VC@100\")}, EV-VC@500={g(\"EV-VC@500\")}, EV-NDCG={g(\"EV-NDCG\")}, Spearman={g(\"Spearman\")}')
 " 2>/dev/null || echo "metrics unavailable")
   cat > "${PROJECT_DIR}/memory/hot/champion.md" << CHAMPEOF
 # Champion

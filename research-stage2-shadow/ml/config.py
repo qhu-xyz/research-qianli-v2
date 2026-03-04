@@ -90,8 +90,29 @@ _V1_CLF_MONOTONE: list[int] = [
 ]
 
 # ── Regressor features: ALL available (34) ────────────────────────────────
+# Built from V1 classifier features MINUS 5 zero-filled features that the
+# data loader never populates (hist_physical_interaction,
+# overload_exceedance_product, band_severity, sf_exceed_interaction,
+# hist_seasonal_band), plus the additional regressor-only features.
 
-_ALL_REGRESSOR_FEATURES: list[str] = _V1_CLF_FEATURES + [
+_DEAD_FEATURES: set[str] = {
+    "hist_physical_interaction",
+    "overload_exceedance_product",
+    "band_severity",
+    "sf_exceed_interaction",
+    "hist_seasonal_band",
+}
+
+# Filter V1 classifier features to remove dead (always-zero) columns
+_V1_CLF_FOR_REGRESSOR: list[str] = [
+    f for f in _V1_CLF_FEATURES if f not in _DEAD_FEATURES
+]
+_V1_CLF_MONO_FOR_REGRESSOR: list[int] = [
+    m for f, m in zip(_V1_CLF_FEATURES, _V1_CLF_MONOTONE)
+    if f not in _DEAD_FEATURES
+]
+
+_ALL_REGRESSOR_FEATURES: list[str] = _V1_CLF_FOR_REGRESSOR + [
     "prob_exceed_85",
     "prob_exceed_80",
     "recent_hist_da",
@@ -104,7 +125,7 @@ _ALL_REGRESSOR_FEATURES: list[str] = _V1_CLF_FEATURES + [
     "prob_below_85",
 ]
 
-_ALL_REGRESSOR_MONOTONE: list[int] = _V1_CLF_MONOTONE + [
+_ALL_REGRESSOR_MONOTONE: list[int] = _V1_CLF_MONO_FOR_REGRESSOR + [
     1, 1,     # prob_exceed_85, prob_exceed_80
     1,        # recent_hist_da
     1, 1,     # season_hist_da_1, season_hist_da_2

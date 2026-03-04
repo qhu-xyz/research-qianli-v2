@@ -38,7 +38,7 @@ class TestLoadSmokeData:
         """All 24 regressor features must be present in both DataFrames."""
         train_df, val_df = load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
         expected_features = cfg.regressor.features
-        assert len(expected_features) == 39
+        assert len(expected_features) == 34
 
         for col in expected_features:
             assert col in train_df.columns, f"Missing column {col} in train_df"

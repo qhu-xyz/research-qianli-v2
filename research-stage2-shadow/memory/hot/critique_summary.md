@@ -25,3 +25,29 @@
 3. **Codex's Spearman pattern observation** (degraded 9/12 months) is sharper than Claude's (only noted the mean shift). The L2-compresses-predictions → helps-value-capture → hurts-rank-correlation mechanism is a real tradeoff. Future directions should monitor this.
 4. **Neither reviewer** suggests classifier changes (correctly respecting the freeze)
 5. **Action items for code**: Feature importance export, classifier freeze guardrails, train-inference mismatch fix — all are pipeline improvements for future batches, not this iteration
+
+---
+
+### Iter 2 — ralph-v2-20260304-031811 (v0006, WORKER SUCCESS but CONFIG BUG)
+
+**Claude Review**:
+- **CRITICAL**: Identified that v0006 full benchmark ran with wrong config (reg_alpha=0.1 instead of 1.0). Evidence: config.json records 0.1; per-month values exactly match v0005 across all metrics. The "L1=1.0 had zero impact" conclusion from changes_summary is wrong — the benchmark simply re-ran v0005.
+- Screen data IS valid (overrides applied correctly). Neither hypothesis recovered Spearman meaningfully. Both degraded EV-VC@100 on weak month.
+- Seasonal analysis: 2022-06 uniquely bad on both Spearman and EV-VC. 2021-05 has excellent Spearman (0.468) but near-zero EV-VC@100 — classifier failure, not regressor.
+- Recommends: (1) Fix config bug, (2) Value-weighted training or lr reduction as orthogonal axes, (3) Escalate gate calibration urgently. Do NOT pursue unified regressor or feature engineering.
+
+**Codex Review**:
+- Independently confirmed provenance inconsistency: config.json shows reg_alpha=0.1, metrics identical to v0005. Cannot attribute results to stated hypothesis.
+- **MEDIUM**: Feature importance pipeline dead — cannot validate regressor-specific feature contribution.
+- **MEDIUM**: Test suite misaligned — expects 13 clf features / 24 regressor features vs actual 14/34. Weak guardrails likely enabled the config bug.
+- Suggests artifact-level integrity checks (fail run if claimed overrides don't match saved config.json).
+- Recommends: unified_regressor as next exploration, max_depth=4 or mcw/reg_lambda relaxation.
+
+**Synthesis**:
+1. **Both agree**: v0006 full benchmark is invalid (config bug). Provenance mismatch is the headline finding.
+2. **Both agree**: Regularization axis is near-exhausted for Spearman recovery.
+3. **Both agree**: Gate calibration remains dysfunctional and needs HUMAN_SYNC.
+4. **Key divergence**: Codex suggests unified_regressor; Claude explicitly warns against it. Claude's reasoning is stronger — gated mode correctly conditions on P(binding), which aligns with the business objective (predict magnitude conditional on binding). Unified mode would train on non-binders, diluting signal.
+5. **Claude's orthogonal-axis analysis is more actionable**: value-weighted training directly aligns the loss function with EV ranking quality, while unified regressor changes the training distribution in a way that's misaligned with the objective.
+6. **Process improvement needed**: Both reviewers flagged weak test guardrails and missing integrity checks. Worker compliance relied on manual config.py change + benchmark — no automated verification that overrides were applied.
+7. **Accumulated code debt** (for future batches, not this iteration): train-inference mismatch, dead feature importance, test assertions out of date, no config.json provenance verification.

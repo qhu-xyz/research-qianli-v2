@@ -19,3 +19,18 @@
 - **Rationale**: depth=4 is untested middle ground between depth=5 (v0005, good mean, slight Spearman slip) and depth=3 (v0004 in prior batch, doubled bot-2 but hurt mean). reg_alpha=1.0 (L1) is an untested regularization axis that could improve Spearman by zeroing out noisy features. Both are complementary to L2 rather than competing.
 - **Alternatives considered**: lr+trees — rejected, prior batch confirmed lr+trees COMPETES with L2 (worse when stacked). Moderate subsampling (0.7) — viable but deferred; aggressive 0.6 failed this iteration, unclear if 0.7 is different enough. Value-weighted — high potential but requires pipeline.py understanding, better for iter 3.
 - **Screen months**: 2021-11 (worst Spearman for v0005, 0.2635) + 2022-12 (strongest EV-VC, regression canary)
+
+### D4: Iter 2 promotion decision
+- **Decision**: Do NOT promote v0006
+- **Rationale**: v0006 full benchmark is invalid — config bug caused it to run with reg_alpha=0.1 instead of 1.0, producing metrics identical to v0005. Both reviewers independently confirmed this via config.json provenance check and per-month metric comparison. Since v0006 = v0005 in practice, the same Spearman L1 failure (0.3920 < 0.3928) applies. No new information from full benchmark.
+- **Config bug diagnosis**: The benchmark script likely snapshots config from RegressorConfig() defaults BEFORE the code change was applied, or the benchmark ran against the pre-commit state. The registry artifact (config.json) correctly records what was actually used (reg_alpha=0.1), contradicting the changes_summary.
+- **Valid signal from screen**: Screening DID correctly apply overrides. L1=1.0 had negligible Spearman impact (+0.001 strong month, +0.0 weak month) and slightly degraded EV-VC@100 (-23% weak, -2.8% strong). Depth=4 also failed: negligible Spearman change with catastrophic EV-VC@100 loss on weak month (-42%).
+- **Gate change request (reiterated)**: Spearman floor at v0 exact mean has now blocked 2 iterations. v0005's EV-VC improvements (+6.5% / +5.9%) remain stranded. HUMAN_SYNC urgently needed.
+
+### D5: Iter 3 direction selection
+- **Decision**: Test value_weighted=True vs moderate L2 relaxation (reg_lambda=2.0, mcw=15), both on current base
+- **Rationale**: Regularization axis is exhausted — L2, L1, depth, subsampling all tested without recovering Spearman. Two new directions:
+  - **value_weighted**: Orthogonal lever (training loss weighting). Weights high-shadow-price samples more heavily, directly aligning the loss function with what drives Spearman and EV-VC. Untested, high potential.
+  - **L2 relaxation**: Interpolates between v0 (good Spearman) and v0005 (good EV-VC). At reg_lambda=2.0/mcw=15, model is more regularized than v0 but less than v0005 — should partially recover Spearman while retaining some EV-VC gain.
+- **Alternatives considered**: unified_regressor — Codex suggested this, but it changes training distribution (includes non-binders) in a way that's misaligned with the business objective (predict magnitude conditional on binding). Lower lr + more trees — already tested in prior batch stacked on L2, performed WORSE. Moderate subsampling (0.7) — possibly viable but we only have one shot and the 0.6→0.7 distinction may not be meaningful enough.
+- **Screen months**: 2021-11 (worst Spearman, consistent across iters) + 2022-12 (best EV-VC, regression canary, cross-iter comparable)

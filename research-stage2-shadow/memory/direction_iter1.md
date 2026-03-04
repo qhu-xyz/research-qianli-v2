@@ -1,105 +1,111 @@
-# Direction — Iteration 1 (batch ralph-v2-20260304-031811)
+# Direction — Iteration 1 (batch feat-eng-3-20260304-091135)
 
-## Context
+## Batch Constraint: FEATURE ENGINEERING ONLY
+No hyperparameter changes. Only `features`, `monotone_constraints`, and feature computation in `ml/features.py` may be modified.
 
-Champion is **v0** (baseline, 6/2 train/val, 34 features, default regressor hyperparams).
+## Analysis
 
-Previous batch (ralph-v1) found L2 regularization (reg_lambda=5, mcw=25) to be the single best lever (+11% EV-VC@100 mean in 10/2/24feat config). That finding was never promoted to main due to infrastructure issues. This iteration re-validates L2 in the current 6/2/34feat pipeline config and tests whether row/column subsampling provides additional benefit.
+**Champion**: v0007 (34 features, reg_lambda=1.0, mcw=25)
+- Mean: EV-VC@100=0.0699, EV-VC@500=0.2294, EV-NDCG=0.7513, Spearman=0.3932
+- Key weakness: 3 distributional features (density_skewness, density_kurtosis, density_cv) are used by the v0 classifier (14 features) but were **dropped** when the regressor inherited the v1 classifier feature set (29 features). These features measure flow distribution shape — directly relevant to predicting shadow price magnitude.
 
-### v0 Baseline (current champion)
-
-| Metric | Mean | Std | Min | Bottom-2 |
-|--------|------|-----|-----|----------|
-| EV-VC@100 | 0.0690 | 0.056 | 0.00011 | 0.0068 |
-| EV-VC@500 | 0.2160 | 0.111 | 0.0407 | 0.0558 |
-| EV-NDCG | 0.7472 | 0.060 | 0.6045 | 0.6476 |
-| Spearman | 0.3928 | 0.071 | 0.2649 | 0.2689 |
-
----
-
-## Hypothesis A (primary) — L2 Regularization
-
-**What**: Increase L2 penalty and minimum leaf weight to constrain overfitting on small binding subsets.
-
-**Rationale**: L2 regularization was the strongest lever found in the previous batch (reg_lambda 1.0→5.0, mcw 10→25). With 34 features and only 6 months of training data (~10k binding samples/month), overfitting is the primary quality limiter. L2 shrinkage constrains extreme leaf weights that cause mis-ranking on out-of-sample months.
-
-**Overrides**:
-```json
-{"regressor": {"reg_lambda": 5.0, "min_child_weight": 25}}
-```
-
-**Expected impact**: +5-15% EV-VC@100 mean, improved tail safety (bottom-2). Previous batch saw +11% mean and +37% bottom-2 in a 10/2/24feat config; effect should be similar or stronger with 34 features (more overfitting surface for L2 to control).
-
-**Risk**: Low — confirmed across 12 months in previous batch (different config but same mechanism).
-
----
-
-## Hypothesis B (alternative) — L2 + Subsampling Reduction
-
-**What**: Combine L2 regularization with reduced row and column sampling to force tree diversity.
-
-**Rationale**: With 34 features, colsample_bytree=0.6 means each tree sees ~20 features — reducing co-adapted feature splits. With 6 months of training data, subsample=0.6 forces each tree to learn from a different 60% of the binding sample, improving generalization. This is a DIFFERENT regularization mechanism from L2 (diversity via randomization vs shrinkage via penalty). Unlike the ensemble smoothing approach (lr/trees) tested in the previous batch — which COMPETED with L2 — subsampling should COMPLEMENT L2 because they operate on different axes.
-
-**Overrides**:
-```json
-{"regressor": {"reg_lambda": 5.0, "min_child_weight": 25, "subsample": 0.6, "colsample_bytree": 0.6}}
-```
-
-**Expected impact**: Could add 3-8% on top of L2 alone, especially on weak months where the model overfits to idiosyncratic training patterns. If it works, this is strictly better than A.
-
-**Risk**: Medium — too aggressive subsampling (0.6 is 25% less data per tree) could starve trees of signal on already-small binding subsets. Could hurt strong months if the model needs full feature/sample access to capture the signal.
-
----
+**Opportunity**: The v0→v1 classifier transition reorganized features but the 3 distributional shape features were lost in translation. The regressor has `density_mean`, `density_variance`, `density_entropy` but NOT `density_skewness`, `density_kurtosis`, `density_cv`. Skewness and kurtosis capture tail behavior of the flow distribution, which is critical for predicting how large a shadow price will be (heavy-tailed overloads → larger shadow prices).
 
 ## Screen Months
 
-**Weak month: 2022-06**
-- Consistently worst across ALL Group A gates: EV-NDCG=0.6045 (lowest), Spearman=0.2728 (2nd lowest), EV-VC@100=0.0136 (2nd lowest), EV-VC@500=0.0756 (2nd lowest)
-- Systemic weakness (not just one metric), making it ideal for detecting overall improvements
-- Also used as diagnostic month in previous batch — enables comparison
+- **Weak**: `2022-06` — worst EV-NDCG (0.604), 2nd worst EV-VC@100 (0.014), 2nd worst Spearman (0.271). This month likely has unusual flow distributions where distributional shape features should help most.
+- **Strong**: `2022-12` — best EV-VC@100 (0.192), strong EV-NDCG (0.815). Should not regress with additional features.
 
-**Strong month: 2022-12**
-- Strongest EV-VC@100 (0.1942), strong EV-NDCG (0.8153)
-- Regression canary: if a config hurts this month, the regularization is too aggressive
-- Also used in previous batch — enables comparison
+**Rationale**: 2022-06 is the most informative weak month (bad across all metrics without being catastrophically zero like 2021-05's EV-VC@100=0.0002). 2022-12 is a strong month that tests for regression from feature noise.
+
+---
+
+## Hypothesis A (primary): Add 3 Distributional Shape Features
+
+**What**: Add `density_skewness`, `density_kurtosis`, `density_cv` to the regressor feature set (34 → 37 features).
+
+**Why**: These features describe the shape of the flow probability distribution:
+- **density_skewness**: Right-skewed distributions indicate more extreme overloads → larger shadow prices. Directly informative for regression magnitude.
+- **density_kurtosis**: Heavy-tailed distributions have more extreme events → captures the "how bad can it get" signal.
+- **density_cv**: Coefficient of variation normalizes variability by mean — high CV means volatile flows relative to average, often associated with larger shadow prices.
+
+These are raw MisoDataLoader columns (no feature engineering needed). They're proven useful in the v0 classifier and their omission from the regressor appears to be an oversight from the v1 feature set migration.
+
+**Monotone constraints**: All 0 (unconstrained) — same as in the classifier. The relationship between distribution shape and shadow price magnitude isn't necessarily monotonic (e.g., very negative skewness could mean flow is concentrated well below the limit → low shadow price, but the sign of skewness relative to the binding threshold is ambiguous).
+
+Hypothesis A overrides:
+```json
+{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "hist_physical_interaction", "overload_exceedance_product", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "band_severity", "sf_exceed_interaction", "hist_seasonal_band", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0]}}
+```
+
+---
+
+## Hypothesis B (alternative): Add 3 Distributional + 2 Additional Raw Features
+
+**What**: Add `density_skewness`, `density_kurtosis`, `density_cv` PLUS `season_hist_da_3` and `prob_below_85` to the regressor (34 → 39 features).
+
+**Why**: Same distributional shape rationale as Hypothesis A, plus:
+- **season_hist_da_3**: Third seasonal DA component. The regressor already uses `season_hist_da_1` and `season_hist_da_2` — adding the 3rd component captures finer seasonal patterns. Available from MisoDataLoader.
+- **prob_below_85**: Probability flow is below 85% of limit. Complements `prob_below_90/95/100` — provides a deeper "how far from binding" signal at the bottom of the distribution. Available from MisoDataLoader.
+
+This tests whether broader feature expansion helps or whether additional features dilute signal (colsample_bytree=0.8 means each tree samples 80% of features; more features = each tree sees proportionally less of each signal).
+
+**Monotone constraints**: density_skewness=0, density_kurtosis=0, density_cv=0, season_hist_da_3=+1 (higher seasonal component → higher shadow price), prob_below_85=-1 (higher probability of being far below limit → lower shadow price).
+
+Hypothesis B overrides:
+```json
+{"regressor": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "hist_physical_interaction", "overload_exceedance_product", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "band_severity", "sf_exceed_interaction", "hist_seasonal_band", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1]}}
+```
 
 ---
 
 ## Winner Criteria
 
-1. **Primary**: Higher mean EV-VC@100 across the 2 screen months (2022-06 and 2022-12)
-2. **Tiebreak** (if EV-VC@100 difference < 0.002): Higher mean EV-NDCG across screen months
-3. **Override**: If the winner has Spearman drop > 0.05 below v0 on either screen month, pick the other hypothesis instead (rank correlation collapse is unacceptable)
-4. **Default**: If both are within noise of each other, prefer A (simpler config, lower risk)
+Pick the hypothesis with **higher mean EV-VC@100 across the 2 screen months**, unless:
+1. Spearman drops > 0.02 vs champion on either screen month → disqualify
+2. EV-NDCG drops > 0.03 vs champion on either screen month → disqualify
+3. If both pass safety checks and EV-VC@100 is within 0.005, prefer the one with better EV-VC@500
+
+If both hypotheses fail safety checks, fall back to Hypothesis A (smaller change, lower risk).
 
 ---
 
 ## Code Changes for Winner
 
-### If Hypothesis A wins
+The winning hypothesis requires **NO code changes to `ml/features.py`** — all added features are raw MisoDataLoader columns that are already available in the DataFrame. The override mechanism handles feature/monotone list changes.
 
-Update `ml/config.py` — `RegressorConfig` class defaults:
-- `reg_lambda: float = 1.0` → `reg_lambda: float = 5.0`
-- `min_child_weight: int = 10` → `min_child_weight: int = 25`
+For the **full 12-month benchmark**, the worker should:
+1. Update `ml/config.py` to make the winning feature set the new default:
+   - Modify `_ALL_REGRESSOR_FEATURES` to append the new features after the existing 5 extras
+   - Modify `_ALL_REGRESSOR_MONOTONE` to append the corresponding monotone constraints
+2. Verify the column count matches: `len(features) == len(monotone_constraints)`
+3. Update `ml/tests/test_config.py` to reflect the new feature count
 
-Update `tests/test_config.py` — adjust any assertions on default values.
+**If Hypothesis A wins** (37 features):
+- In `ml/config.py`, change `_ALL_REGRESSOR_FEATURES` from `_V1_CLF_FEATURES + [5 extras]` to `_V1_CLF_FEATURES + [5 extras] + ["density_skewness", "density_kurtosis", "density_cv"]`
+- Append `0, 0, 0` to `_ALL_REGRESSOR_MONOTONE`
 
-### If Hypothesis B wins
-
-Update `ml/config.py` — `RegressorConfig` class defaults:
-- `reg_lambda: float = 1.0` → `reg_lambda: float = 5.0`
-- `min_child_weight: int = 10` → `min_child_weight: int = 25`
-- `subsample: float = 0.8` → `subsample: float = 0.6`
-- `colsample_bytree: float = 0.8` → `colsample_bytree: float = 0.6`
-
-Update `tests/test_config.py` — adjust any assertions on default values.
+**If Hypothesis B wins** (39 features):
+- Same as A, plus append `"season_hist_da_3", "prob_below_85"` to features
+- Append `1, -1` to monotone constraints
 
 ---
 
-## DO NOT MODIFY
+## Expected Impact
 
-- Any file in `ml/` other than `config.py` (and `tests/test_config.py` for test assertions)
-- `registry/gates.json`
-- `ml/evaluate.py`
-- Any classifier configuration (ClassifierConfig is FROZEN)
-- `state.json` (orchestrator manages this)
+| Gate | Expected Change | Reasoning |
+|------|----------------|-----------|
+| EV-VC@100 | +2-5% | Distributional shape features help identify high-value constraints on weak months |
+| EV-VC@500 | +1-3% | Broader ranking improvement from better prediction of magnitude |
+| EV-NDCG | +0.5-1% | Ranking quality improvement from more informative features |
+| Spearman | neutral to +0.5% | More features → better regression fit → better rank correlation, but risk of overfitting |
+| C-RMSE | -1-3% improvement | Better prediction of shadow price magnitude |
+
+**Primary target**: Improve weak-month EV-VC@100 (currently 0.014 on 2022-06) by providing more signal about distribution shape.
+
+## Risk Assessment
+
+1. **Feature dilution**: Adding 3-5 features to 34 may dilute per-feature signal with colsample_bytree=0.8. Mitigated by the features being demonstrably useful in the classifier.
+2. **Overfitting on distributional features**: density_skewness/kurtosis can be noisy on small samples. min_child_weight=25 provides protection.
+3. **Column availability**: These are raw MisoDataLoader columns — the main risk is they're missing from the DataFrame for some months. The screen will catch this immediately (crash or NaN explosion).
+4. **Monotone constraint mismatch**: All 3 distributional features are unconstrained (0), which is correct — their effect on shadow price magnitude is non-monotonic.

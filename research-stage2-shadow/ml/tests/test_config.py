@@ -112,8 +112,8 @@ class TestRegressorConfig:
         assert cfg.subsample == 0.8
         assert cfg.colsample_bytree == 0.8
         assert cfg.reg_alpha == 0.1
-        assert cfg.reg_lambda == 1.0
-        assert cfg.min_child_weight == 10
+        assert cfg.reg_lambda == 5.0
+        assert cfg.min_child_weight == 25
 
         # gated mode defaults
         assert cfg.unified_regressor is False

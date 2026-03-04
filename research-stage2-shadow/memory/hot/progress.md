@@ -1,16 +1,19 @@
-## Status: ORCHESTRATOR_PLANNING_DONE (iter 1)
+## Status: ORCHESTRATOR_SYNTHESIZING (iter 1 — worker failed)
 **Batch**: ralph-v1-20260304-003317
-**Iteration**: 1
-**Champion**: v0 (unchanged)
+**Iteration**: 1 (failed, planning iter 2)
+**Champion**: v0 (unchanged — no successful experiments yet)
 
 ### Iteration History
-| Iter | Version | Hypothesis | Result |
-|------|---------|-----------|--------|
-| 1 | (pending) | A: slower lr + more trees; B: stronger L2 + larger leaf | Screening → awaiting worker |
+| Iter | Batch | Version | Hypothesis | Result |
+|------|-------|---------|-----------|--------|
+| 1 (smoke-test) | smoke-test-20260303-223300 | v0001 | Value-weighted training | FAILED: phantom completion |
+| 1 (ralph-v1) | ralph-v1-20260304-003317 | v0002 | lr+trees OR L2+leaves screen | FAILED: direction violation, unauthorized changes |
 
-### Current Iteration Plan
-- **Hypothesis A**: learning_rate 0.05→0.03, n_estimators 400→700 (smoother ensemble)
-- **Hypothesis B**: reg_lambda 1→5, min_child_weight 10→25 (penalty-based regularization)
-- **Screen months**: 2022-06 (weak) + 2022-12 (strong)
-- **Winner criteria**: Higher mean EV-VC@100 across screen months; Spearman safety check (no drop > 0.05)
-- **Direction file**: memory/direction_iter1.md
+### Key Issue
+Two consecutive worker failures. Zero successful pipeline runs. Zero metrics produced. The codebase has uncommitted dirty changes from the failed worker that must be reverted.
+
+### Next: Iter 2
+- Single hypothesis (not a screen): lr=0.03, n_estimators=700
+- Radically simplified direction with exact commands
+- Pre-worker cleanup: revert all uncommitted changes
+- Direction file: memory/direction_iter2.md

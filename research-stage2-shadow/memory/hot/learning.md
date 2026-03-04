@@ -60,16 +60,43 @@
     - data_loader.py train_end may be inclusive → potential leakage
     - Structural issue needing audit, not v0007-specific
 
+### Feature Engineering Findings
+
+13. **Distributional shape features (skewness, kurtosis, CV) carry real signal** (CONFIRMED — batch feat-eng-3)
+    - Adding density_skewness, density_kurtosis, density_cv → EV-VC@100 +9.0%, C-RMSE -3.1%
+    - These were already used by classifier but missing from regressor — closing this gap improved magnitude estimation
+    - Improvement is concentrated in ~3 months (2020-09, 2020-11, 2021-09 drive most of the +9% mean)
+
+14. **season_hist_da_3 and prob_below_85 contributed alongside distributional features** (WEAK EVIDENCE)
+    - 39 features beat 37 on screen (+32% EV-VC@100 mean on 2 months)
+    - Not independently tested — could be noise or genuine additional signal
+    - Feature importance data unavailable (pipeline doesn't emit it)
+
+15. **5 zero-filled features waste tree capacity** (IDENTIFIED, NOT YET FIXED)
+    - hist_physical_interaction, overload_exceedance_product, band_severity, sf_exceed_interaction, hist_seasonal_band
+    - Data loader doesn't provide these columns → always zero → XGBoost may split on them wastefully
+    - Effective feature count: 34 (not 39 nominal)
+    - Both reviewers recommend pruning
+
+16. **EV-VC@100 improvement is outlier-dependent** (CAUTION)
+    - 7/12 months improved, but top 3 gains (2020-09: +0.043, 2020-11: +0.046, 2021-09: +0.078) exceed total net improvement
+    - Removing best month (2021-09) drops mean improvement to ~+4%
+    - The model redistributes value capture rather than uniformly improving
+
+17. **R-REC@500 metric definition mismatch** (NEW from Codex review)
+    - Computed from ev_scores, not regressor-only ranking → doesn't match its label as "regressor recall"
+    - Location: evaluate.py:224
+
 ### Screening Methodology
-- **Two-month screening works**: 4/4 screens correctly predicted full-benchmark relative winner
+- **Two-month screening works**: 5/5 screens correctly predicted full-benchmark relative winner
 - **Screen month selection**: one weak + one strong for diagnostic coverage
 - **Weak months tested**: 2022-06, 2022-09, 2021-01, 2021-11
 - **Strong months tested**: 2022-12
 
 ### Gate System Issues
-- **Floors at v0 exact mean**: blocked 2 of 3 iterations despite clear EV-VC improvements
-- **noise_tolerance=0.02 is not scale-aware**: meaningless for C-RMSE, generous for EV-VC@100
-- **HUMAN_SYNC requested 3x** across this batch — still pending
+- **Gates v4 (recalibrated to 0.95x champion)**: Major improvement over v0-exact floors. No iterations blocked by calibration artifacts in this batch.
+- **noise_tolerance=0.02 is not scale-aware**: meaningless for C-RMSE, generous for EV-VC@100 — both reviewers flagged again
+- **Spearman is the binding gate constraint**: 4.7% margin for v0009. Future iterations with Spearman degradation could fail L1.
 
 ### Worker Reliability Patterns
 1. **Phantom completion** is dominant failure mode in earlier batches

@@ -1,71 +1,28 @@
 ## Critique Summary
 
-### Iter 1 — ralph-v2-20260304-031811 (v0005, WORKER SUCCESS)
+### Iter 1 — feat-eng-3-20260304-102111 (v0009, WORKER SUCCESS, DUPLICATE of v0008)
 
 **Claude Review**:
-- v0005 is a genuine, consistent improvement: EV-VC@100 +6.5%, EV-VC@500 +5.9%, C-RMSE -7.2%
-- 9/12 months improved on EV-VC@100; gains largest on weak months (consistent with L2 hypothesis)
-- Spearman -0.0008 is noise (t-stat ≈ -0.5, all per-month deltas within ±0.003)
-- Gate calibration is dysfunctional: floors at v0 exact mean, v0 fails its own gates on EV-VC@100 and EV-NDCG
-- Hypothesis B diagnosis: 0.6 subsampling starved trees of signal. Moderate 0.7 could be retested later.
-- Recommends: gate recalibration (priority 1), then lr/trees interaction with L2, moderate subsampling, value-weighted
-- Clean code review: 2 files, 4 lines, no bugs, no scope violations
+- All Group A gates pass all 3 layers. EV-VC@100 +9.0% driven by 3 large wins (2020-09, 2020-11, 2021-09); 5/12 months degraded. Improvement is real but concentrated/fragile.
+- v0009 is byte-identical to v0008 — duplicate registration, no new empirical data. Process issue: worker should detect duplicates.
+- 5 of 39 features are zero-filled (hist_physical_interaction, overload_exceedance_product, band_severity, sf_exceed_interaction, hist_seasonal_band). Effective feature count is 34, not 39.
+- Weak months cluster in late spring/summer and fall. 2021-05 and 2022-06 appear structurally classifier-limited — regressor improvements won't rescue these.
+- Spearman is the binding constraint (4.7% margin to floor). Future iterations with worse Spearman could fail L1.
+- Recommends: (1) Remove zero-filled features, (2) HP tuning for 34 effective features (colsample, mcw, n_estimators), (3) Value-weighted training.
 
 **Codex Review**:
-- Similar assessment: EV-VC gates improved, Spearman L1 blocks by 0.0008
-- **HIGH code finding**: Train-inference mismatch in gated mode — regressor trains on true binding labels (`y_train_binary == 1`) but inferences on classifier predictions. Selection leakage that could bias fitting.
-- **MEDIUM code findings**: Feature importance pipeline wired but never populated; frozen-classifier guardrails are weak in code/tests
-- Spearman degraded in 9/12 months (opposite pattern to EV-VC improving in 9/12) — L2 compresses predictions, helping value capture but slightly hurting rank correlation
-- Recommends: narrow reg_lambda/mcw sweep, fix gated training leakage, explicit feature importance export
-- Gate calibration: noise_tolerance=0.02 is not scale-aware (C-RMSE at ~3000 scale makes 0.02 meaningless)
+- Gates pass, frozen-classifier verified. Positive mean deltas are real but non-uniform. EV gains concentrated in few months; monthly direction mixed.
+- **HIGH code finding** (repeated from prior batch): Gated regressor trains on true binding labels, not classifier-predicted positives. Train-inference mismatch at pipeline.py:195-209. Structural issue affecting all versions equally.
+- **MEDIUM**: R-REC@500 computed from ev_scores, not regressor-only ranking — metric definition mismatch.
+- **MEDIUM**: Feature importance pipeline dead code — prevents quantitative FE decisions.
+- **MEDIUM**: Potential data-split leakage risk in data_loader.py:172-214 (train_end inclusive?).
+- noise_tolerance=0.02 not scale-aware: makes L3 trivially easy for EV-VC@100 (bot2~0.007) and meaningless for C-RMSE (~5000).
+- Recommends: (1) Fix gated-mode semantics, (2) Fix R-REC@500 metric, (3) Add anti-leakage assertions, (4) Enable feature importance emission, (5) Scale-aware noise tolerance.
 
 **Synthesis**:
-1. **Both agree**: v0005 is a clear improvement, Spearman failure is a calibration artifact, gates need recalibration
-2. **Key divergence**: Codex surfaces a pipeline-level train-inference mismatch (gated mode trains on true labels, infers on classifier predictions). Real issue but affects v0 equally — structural, not a regression.
-3. **Codex's Spearman pattern observation** (degraded 9/12 months) is sharper than Claude's. The L2-compresses-predictions → helps-value-capture → hurts-rank-correlation mechanism is a real tradeoff.
-4. **Neither reviewer** suggests classifier changes (correctly respecting the freeze)
-
----
-
-### Iter 2 — ralph-v2-20260304-031811 (v0006, WORKER SUCCESS but CONFIG BUG)
-
-**Claude Review**:
-- **CRITICAL**: Identified v0006 full benchmark ran with wrong config (reg_alpha=0.1 instead of 1.0). Evidence: config.json records 0.1; per-month values exactly match v0005.
-- Screen data IS valid. Neither hypothesis recovered Spearman meaningfully. Both degraded EV-VC@100 on weak month.
-- Recommends: Fix config bug, value-weighted training, escalate gate calibration urgently.
-
-**Codex Review**:
-- Independently confirmed provenance inconsistency. Suggests artifact-level integrity checks.
-- **MEDIUM**: Test suite misaligned (13/24 vs actual 14/34).
-- Recommends: unified_regressor, max_depth=4 or mcw/reg_lambda relaxation.
-
-**Synthesis**:
-1. **Both agree**: v0006 invalid (config bug), regularization axis exhausted, gates dysfunctional
-2. **Key divergence**: Codex suggests unified_regressor; Claude warns against it. Claude's reasoning stronger — gated mode aligns with business objective.
-
----
-
-### Iter 3 — ralph-v2-20260304-031811 (v0007, FIRST PROMOTABLE VERSION)
-
-**Claude Review**:
-- v0007 is the first promotable version. Spearman margin razor-thin (+0.0004).
-- EV-VC@500 is the standout metric (+6.2%, 9/12 months improved, robust).
-- Per-month Spearman: 5 improved, 7 degraded — mean improvement driven by early months.
-- Decomposition confirmed: reg_lambda compresses predictions → hurts Spearman; mcw is orthogonal.
-- Code: clean. Flagged stale business_context.md (14 clf/34 reg vs documented 13/24), removed frozen-dataclass test needs verification.
-- Recommends: promote, recalibrate gates, then value-weighting / mcw sweep / feature pruning.
-
-**Codex Review**:
-- v0007 promotable but "narrow-pass" — Spearman and EV-NDCG each at tail-failure limit (1 bad month).
-- **HIGH**: Potential temporal leakage in data_loader.py (train_end inclusive?) — structural, not v0007-specific.
-- **MEDIUM**: Feature importance still dead; value_weighted still unwired.
-- Classifier freeze: **PASS** (config.json verified).
-- Next should prioritize tail robustness, not mean chasing.
-
-**Synthesis**:
-1. **Both agree**: v0007 promotable, Spearman margin is noise-level, EV-VC@500 is the real improvement
-2. **Both agree**: Gate calibration urgently needs HUMAN_SYNC (3rd iteration flagging this)
-3. **Both agree**: Classifier freeze respected, no code bugs in this iteration
-4. **Key divergence**: Codex raises temporal leakage concern (data_loader.py train_end inclusive?). Valid audit point but structural — affects all versions equally.
-5. **Claude more emphatic on gate recalibration**, Codex more focused on tail robustness as next priority. Both valid — recalibrate gates AND focus on tail months.
-6. **Accumulated code debt** (for future batches): train-inference mismatch, dead feature importance, stale business_context.md, test assertions corrected but frozen-dataclass test removed, temporal leakage audit needed.
+1. **Both agree**: v0009 is promotable, improvement is real but concentrated, duplicate version is a process issue
+2. **Both agree**: Zero-filled features should be pruned, feature importance needed for data-driven FE decisions
+3. **Both agree**: Spearman is the binding gate constraint; noise_tolerance needs scale-awareness
+4. **Key divergence**: Codex surfaces train-inference mismatch (HIGH priority) and R-REC@500 definition issue — these are structural pipeline debts. Claude focuses more on next-iteration strategy (HP tuning, value-weighting).
+5. **Neither reviewer** suggests classifier changes (correctly respecting freeze)
+6. **Accumulated code debt**: train-inference mismatch (pipeline.py), dead feature importance, R-REC@500 definition, data-split leakage audit, stale business_context.md

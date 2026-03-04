@@ -220,9 +220,9 @@ class RegressorConfig:
     )
 
     # XGBoost hyperparams
-    n_estimators: int = 400
+    n_estimators: int = 600
     max_depth: int = 5
-    learning_rate: float = 0.05
+    learning_rate: float = 0.03
     subsample: float = 0.8
     colsample_bytree: float = 0.8
     reg_alpha: float = 1.0

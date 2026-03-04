@@ -90,9 +90,9 @@ class TestRegressorConfig:
         assert len(cfg.monotone_constraints) == len(cfg.features)
 
         # hyperparams
-        assert cfg.n_estimators == 400
+        assert cfg.n_estimators == 600
         assert cfg.max_depth == 5
-        assert cfg.learning_rate == 0.05
+        assert cfg.learning_rate == 0.03
         assert cfg.subsample == 0.8
         assert cfg.colsample_bytree == 0.8
         assert cfg.reg_alpha == 1.0

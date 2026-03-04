@@ -69,7 +69,7 @@ WORKER_SESSION="worker-${BATCH_ID}-iter${N}"
 bash "${SCRIPT_DIR}/launch_worker.sh" --session "$WORKER_SESSION"
 
 set +e
-poll_for_handoff "$HANDOFF_DIR" "worker_done.json" 3300 30
+poll_for_handoff "$HANDOFF_DIR" "worker_done.json" 5100 30
 POLL_RC=$?
 set -e
 if (( POLL_RC != 0 )); then
@@ -237,6 +237,11 @@ fi
 
 # Step 17: read synthesis decisions
 PROMOTE=$(jq -r '.decisions.promote_version // empty' "${HANDOFF_DIR}/orchestrator_synth_done.json" 2>/dev/null || echo "")
+# RT-15: Block promotion if worker failed (merge was blocked, version dir doesn't exist on main)
+if [[ -n "$PROMOTE" ]] && (( WORKER_FAILED != 0 )); then
+  echo "[iter${N}] WARNING: synthesis recommended promoting $PROMOTE but worker failed — skipping promotion"
+  PROMOTE=""
+fi
 if [[ -n "$PROMOTE" ]]; then
   echo "[iter${N}] Promoting version: $PROMOTE"
   cd "$PROJECT_DIR" && source "$VENV_ACTIVATE"

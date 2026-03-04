@@ -69,8 +69,12 @@ def train_tier_classifier(
 def predict_tier_probabilities(
     model: XGBClassifier,
     X: np.ndarray,
+    num_class: int = 5,
 ) -> np.ndarray:
     """Return tier probability matrix.
+
+    Always returns ``(n_samples, num_class)`` even if some classes had zero
+    training samples (XGBoost drops unseen classes from ``predict_proba``).
 
     Parameters
     ----------
@@ -78,13 +82,24 @@ def predict_tier_probabilities(
         Trained multi-class classifier.
     X : np.ndarray
         Feature matrix of shape ``(n_samples, n_features)``.
+    num_class : int
+        Expected number of classes (default 5).
 
     Returns
     -------
     np.ndarray
-        Probability matrix of shape ``(n_samples, 5)``, columns = tiers 0-4.
+        Probability matrix of shape ``(n_samples, num_class)``, columns = tiers 0..num_class-1.
     """
-    return model.predict_proba(X)
+    raw_proba = model.predict_proba(X)
+    if raw_proba.shape[1] == num_class:
+        return raw_proba
+    # Pad missing classes with zero probability
+    n_samples = raw_proba.shape[0]
+    full_proba = np.zeros((n_samples, num_class), dtype=np.float64)
+    learned_classes = model.classes_.astype(int)
+    for i, cls in enumerate(learned_classes):
+        full_proba[:, cls] = raw_proba[:, i]
+    return full_proba
 
 
 def predict_tier(model: XGBClassifier, X: np.ndarray) -> np.ndarray:

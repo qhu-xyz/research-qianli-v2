@@ -32,7 +32,8 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 # RT-12: timeout wrapper = OS-level hard kill if agent loops forever
-TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_REVIEWER_CLAUDE} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+# RT-16: unset CLAUDECODE to avoid "nested session" detection
+TMUX_CMD="cd '${PROJECT_DIR}' && unset CLAUDECODE && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_REVIEWER_CLAUDE} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"
 echo "[launch_reviewer_claude] Started session: $SESSION (log=$LOG)"

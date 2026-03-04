@@ -53,7 +53,8 @@ echo "$PROMPT_TEXT" > "$PROMPT_FILE"
 # RT-12: timeout wrapper = OS-level hard kill if agent loops forever
 # Source venv so any Python commands Codex runs have correct environment
 # Codex needs the prompt as a positional argument; use the file content
-TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_REVIEWER_CODEX} codex exec --model '${CODEX_MODEL}' --full-auto \"\$(cat '${PROMPT_FILE}')\" > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+# RT-16: unset CLAUDECODE to avoid "nested session" detection
+TMUX_CMD="cd '${PROJECT_DIR}' && unset CLAUDECODE && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_REVIEWER_CODEX} codex exec --model '${CODEX_MODEL}' --full-auto \"\$(cat '${PROMPT_FILE}')\" > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"
 echo "[launch_reviewer_codex] Started session: $SESSION (log=$LOG)"

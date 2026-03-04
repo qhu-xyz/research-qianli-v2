@@ -1,14 +1,16 @@
-## Status: ORCHESTRATOR_SYNTHESIZING (iter 1 failed)
-**Batch**: smoke-test-20260303-223300
-**Iteration**: 1 (failed) → planning iteration 2
-**Champion**: v0 (unchanged — no promotion)
+## Status: ORCHESTRATOR_PLANNING_DONE (iter 1)
+**Batch**: screen-test-20260304-000123
+**Iteration**: 1
+**Champion**: v0 (unchanged)
 
 ### Iteration History
 | Iter | Version | Hypothesis | Result |
 |------|---------|-----------|--------|
-| 1 | v0001 | Value-weighted regressor training | WORKER FAILED — phantom completion, no artifacts |
+| 1 | (pending) | A: slower lr + more trees; B: stronger L2 + larger leaf | Screening → awaiting worker |
 
-### Iteration 2 Plan
-- **Hypothesis**: Retry value-weighted training with simplified instructions
-- **Key change from iter 1**: Isolate the value_weighted flag as the ONLY change. Keep all hyperparams at v0 defaults. Provide exact code diff for pipeline.py.
-- **Risk**: Worker failure recurrence — include explicit verification steps
+### Current Iteration Plan
+- **Hypothesis A**: learning_rate 0.05→0.03, n_estimators 400→700 (smoother ensemble)
+- **Hypothesis B**: reg_lambda 1→5, min_child_weight 10→20 (penalty-based regularization)
+- **Screen months**: 2022-06 (weak) + 2022-12 (strong)
+- **Winner criteria**: Higher mean EV-VC@100 across screen months; Spearman safety check (no drop > 0.05)
+- **Direction file**: memory/direction_iter1.md

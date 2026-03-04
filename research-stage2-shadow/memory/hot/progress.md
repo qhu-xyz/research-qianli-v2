@@ -1,12 +1,14 @@
-## Status: ORCHESTRATOR_PLANNING
+## Status: ORCHESTRATOR_SYNTHESIZING (iter 1 failed)
 **Batch**: smoke-test-20260303-223300
-**Iteration**: 1
-**State**: Direction written, awaiting worker execution
+**Iteration**: 1 (failed) → planning iteration 2
+**Champion**: v0 (unchanged — no promotion)
 
-### Iteration 1 Plan
-- **Hypothesis**: Value-weighted regressor training improves EV ranking quality
-- **Key changes**: value_weighted=True, n_estimators 400→600, learning_rate 0.05→0.03, reg_lambda 1.0→3.0, min_child_weight 10→15
-- **Pipeline code change needed**: Wire up sample_weight computation in pipeline.py Phase 4
-- **Direction file**: `memory/direction_iter1.md`
-- **Primary target**: EV-VC@100, EV-VC@500 improvement
-- **Key risk**: Spearman regression from over-weighting the tail
+### Iteration History
+| Iter | Version | Hypothesis | Result |
+|------|---------|-----------|--------|
+| 1 | v0001 | Value-weighted regressor training | WORKER FAILED — phantom completion, no artifacts |
+
+### Iteration 2 Plan
+- **Hypothesis**: Retry value-weighted training with simplified instructions
+- **Key change from iter 1**: Isolate the value_weighted flag as the ONLY change. Keep all hyperparams at v0 defaults. Provide exact code diff for pipeline.py.
+- **Risk**: Worker failure recurrence — include explicit verification steps

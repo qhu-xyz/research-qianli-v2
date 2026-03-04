@@ -92,6 +92,7 @@ The two should complement rather than compete.
 2. **Override**: If the Spearman winner has EV-VC@100 drop > 0.01 below v0005 on either screen month, pick the other hypothesis instead (value capture regression is unacceptable)
 3. **Tiebreak** (if Spearman difference < 0.002): Higher mean EV-VC@100 across screen months
 4. **Default**: If both are within noise of each other, prefer A (simpler config, lower risk)
+5. **Reject both**: If BOTH hypotheses degrade EV-VC@100 on 2022-12 by >10% vs v0005 screen AND fail to improve Spearman on 2021-11 by at least +0.003, flag for orchestrator — both changes harm value capture without meaningful Spearman recovery
 
 ---
 
@@ -123,47 +124,14 @@ Update `tests/test_config.py` — adjust any assertions on default values.
 
 ---
 
-## Step-by-Step Execution
+## v0005 Screen Baselines (from iter 1)
 
-### Step 1: Screen Hypothesis A (depth=4)
-```bash
-cd /home/xyz/workspace/research-qianli-v2/research-stage2-shadow
-source /home/xyz/workspace/pmodel/.venv/bin/activate
-python scripts/run_benchmark.py --months 2021-11,2022-12 \
-  --overrides '{"regressor": {"max_depth": 4}}' \
-  --output-dir /tmp/screen_A
-```
-Record EV-VC@100, EV-VC@500, EV-NDCG, Spearman for both months.
+For comparison, v0005's values on the screen months:
 
-### Step 2: Screen Hypothesis B (reg_alpha=1.0)
-```bash
-python scripts/run_benchmark.py --months 2021-11,2022-12 \
-  --overrides '{"regressor": {"reg_alpha": 1.0}}' \
-  --output-dir /tmp/screen_B
-```
-Record same metrics.
-
-### Step 3: Pick Winner
-Apply winner criteria above. Document screen results in changes_summary.md.
-
-### Step 4: Apply Code Changes
-Update `ml/config.py` and `tests/test_config.py` as specified above for the winning hypothesis.
-
-### Step 5: Run Tests
-```bash
-python -m pytest ml/tests/ -v
-```
-If tests fail, fix and retry (up to 3 attempts). On 3rd failure: write failed handoff.
-
-### Step 6: Full 12-Month Benchmark
-```bash
-VERSION_ID=$(jq -r '.version_id' state.json)
-python scripts/run_benchmark.py --all-months --output-dir "registry/${VERSION_ID}"
-python scripts/validate.py "registry/${VERSION_ID}"
-python scripts/compare.py "registry/${VERSION_ID}" --champion v0
-```
-
-### Step 7: Write Artifacts
-1. Write `registry/${VERSION_ID}/changes_summary.md` with screen results, winner rationale, code changes, full benchmark results
-2. Commit changes: `git add ml/ registry/${VERSION_ID}/ && git commit -m "iter2: {description}"`
-3. Write handoff JSON
+| Metric | 2021-11 | 2022-12 |
+|--------|---------|---------|
+| EV-VC@100 | 0.0487 | 0.1988 |
+| EV-VC@500 | 0.1903 | 0.3552 |
+| EV-NDCG | 0.7545 | 0.8226 |
+| Spearman | 0.2635 | 0.3857 |
+| C-RMSE | 4738 | 3015 |

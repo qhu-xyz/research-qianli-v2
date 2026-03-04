@@ -1,10 +1,5 @@
-"""Tests for ml.compare — gate checking with stage-2 regression metrics."""
+"""Tests for ml.compare — gate checking with tier classification metrics."""
 from __future__ import annotations
-
-import json
-from pathlib import Path
-
-import pytest
 
 from ml.compare import (
     check_gates,
@@ -14,16 +9,17 @@ from ml.compare import (
 )
 
 
-# Stage 2 gates fixture (Group A: higher is better; Group B: mixed)
+# Tier gates fixture (all higher-is-better)
 _GATES = {
-    "EV-VC@100": {"floor": 0.50, "tail_floor": 0.40, "direction": "higher", "group": "A"},
-    "EV-VC@500": {"floor": 0.70, "tail_floor": 0.60, "direction": "higher", "group": "A"},
-    "EV-NDCG": {"floor": 0.80, "tail_floor": 0.70, "direction": "higher", "group": "A"},
-    "Spearman": {"floor": 0.40, "tail_floor": 0.30, "direction": "higher", "group": "A"},
-    "C-RMSE": {"floor": 150.0, "tail_floor": 200.0, "direction": "lower", "group": "B"},
-    "C-MAE": {"floor": 100.0, "tail_floor": 130.0, "direction": "lower", "group": "B"},
-    "EV-VC@1000": {"floor": 0.85, "tail_floor": 0.75, "direction": "higher", "group": "B"},
-    "R-REC@500": {"floor": 0.60, "tail_floor": 0.50, "direction": "higher", "group": "B"},
+    "Tier-VC@100": {"floor": 0.05, "tail_floor": 0.01, "direction": "higher", "group": "A"},
+    "Tier-VC@500": {"floor": 0.20, "tail_floor": 0.05, "direction": "higher", "group": "A"},
+    "Tier-NDCG": {"floor": 0.70, "tail_floor": 0.60, "direction": "higher", "group": "A"},
+    "QWK": {"floor": 0.30, "tail_floor": 0.15, "direction": "higher", "group": "A"},
+    "Macro-F1": {"floor": 0.30, "tail_floor": 0.25, "direction": "higher", "group": "B"},
+    "Tier-Accuracy": {"floor": 0.93, "tail_floor": 0.92, "direction": "higher", "group": "B"},
+    "Adjacent-Accuracy": {"floor": 0.96, "tail_floor": 0.95, "direction": "higher", "group": "B"},
+    "Tier-Recall@0": {"floor": 0.30, "tail_floor": 0.05, "direction": "higher", "group": "B"},
+    "Tier-Recall@1": {"floor": 0.08, "tail_floor": 0.02, "direction": "higher", "group": "B"},
 }
 
 
@@ -31,88 +27,76 @@ class TestCheckGatesPassing:
     def test_all_gates_pass(self):
         """Version that exceeds all floors passes."""
         metrics = {
-            "EV-VC@100": 0.65,
-            "EV-VC@500": 0.80,
-            "EV-NDCG": 0.90,
-            "Spearman": 0.55,
-            "C-RMSE": 120.0,
-            "C-MAE": 80.0,
-            "EV-VC@1000": 0.92,
-            "R-REC@500": 0.70,
+            "Tier-VC@100": 0.10,
+            "Tier-VC@500": 0.25,
+            "Tier-NDCG": 0.80,
+            "QWK": 0.40,
+            "Macro-F1": 0.40,
+            "Tier-Accuracy": 0.95,
+            "Adjacent-Accuracy": 0.98,
+            "Tier-Recall@0": 0.40,
+            "Tier-Recall@1": 0.12,
         }
         results = check_gates(metrics, _GATES)
         ga, gb = evaluate_overall_pass(results)
         assert ga is True
         assert gb is True
 
-    def test_lower_is_better_pass(self):
-        """C-RMSE and C-MAE pass when below floor (lower is better)."""
-        metrics = {
-            "EV-VC@100": 0.65,
-            "EV-VC@500": 0.80,
-            "EV-NDCG": 0.90,
-            "Spearman": 0.55,
-            "C-RMSE": 140.0,   # below 150 floor -> pass
-            "C-MAE": 95.0,     # below 100 floor -> pass
-            "EV-VC@1000": 0.90,
-            "R-REC@500": 0.65,
-        }
-        results = check_gates(metrics, _GATES)
-        assert results["C-RMSE"]["passed"] is True
-        assert results["C-MAE"]["passed"] is True
-
 
 class TestCheckGatesFailing:
     def test_below_floor_fails(self):
         """Version below Group A floor returns overall fail."""
         metrics = {
-            "EV-VC@100": 0.30,   # below 0.50 floor
-            "EV-VC@500": 0.80,
-            "EV-NDCG": 0.90,
-            "Spearman": 0.55,
-            "C-RMSE": 120.0,
-            "C-MAE": 80.0,
-            "EV-VC@1000": 0.92,
-            "R-REC@500": 0.70,
+            "Tier-VC@100": 0.02,   # below 0.05 floor
+            "Tier-VC@500": 0.25,
+            "Tier-NDCG": 0.80,
+            "QWK": 0.40,
+            "Macro-F1": 0.40,
+            "Tier-Accuracy": 0.95,
+            "Adjacent-Accuracy": 0.98,
+            "Tier-Recall@0": 0.40,
+            "Tier-Recall@1": 0.12,
         }
         results = check_gates(metrics, _GATES)
-        assert results["EV-VC@100"]["passed"] is False
+        assert results["Tier-VC@100"]["passed"] is False
         ga, gb = evaluate_overall_pass(results)
         assert ga is False
         assert gb is True  # Group B still passes
 
-    def test_lower_is_better_above_floor_fails(self):
-        """C-RMSE above floor (lower is better) fails."""
+    def test_group_b_fail_doesnt_block_a(self):
+        """Group B failure doesn't block Group A."""
         metrics = {
-            "EV-VC@100": 0.65,
-            "EV-VC@500": 0.80,
-            "EV-NDCG": 0.90,
-            "Spearman": 0.55,
-            "C-RMSE": 160.0,   # above 150 floor -> fail
-            "C-MAE": 80.0,
-            "EV-VC@1000": 0.92,
-            "R-REC@500": 0.70,
+            "Tier-VC@100": 0.10,
+            "Tier-VC@500": 0.25,
+            "Tier-NDCG": 0.80,
+            "QWK": 0.40,
+            "Macro-F1": 0.20,   # below 0.30 floor -> fail
+            "Tier-Accuracy": 0.95,
+            "Adjacent-Accuracy": 0.98,
+            "Tier-Recall@0": 0.40,
+            "Tier-Recall@1": 0.12,
         }
         results = check_gates(metrics, _GATES)
-        assert results["C-RMSE"]["passed"] is False
+        assert results["Macro-F1"]["passed"] is False
         ga, gb = evaluate_overall_pass(results)
-        assert ga is True   # Group A still passes (C-RMSE is Group B)
+        assert ga is True   # Group A still passes
         assert gb is False
 
     def test_nan_metric_fails(self):
         """NaN metric value causes gate failure."""
         metrics = {
-            "EV-VC@100": float("nan"),
-            "EV-VC@500": 0.80,
-            "EV-NDCG": 0.90,
-            "Spearman": 0.55,
-            "C-RMSE": 120.0,
-            "C-MAE": 80.0,
-            "EV-VC@1000": 0.92,
-            "R-REC@500": 0.70,
+            "Tier-VC@100": float("nan"),
+            "Tier-VC@500": 0.25,
+            "Tier-NDCG": 0.80,
+            "QWK": 0.40,
+            "Macro-F1": 0.40,
+            "Tier-Accuracy": 0.95,
+            "Adjacent-Accuracy": 0.98,
+            "Tier-Recall@0": 0.40,
+            "Tier-Recall@1": 0.12,
         }
         results = check_gates(metrics, _GATES)
-        assert results["EV-VC@100"]["passed"] is False
+        assert results["Tier-VC@100"]["passed"] is False
 
 
 class TestMultiMonthGates:
@@ -120,19 +104,19 @@ class TestMultiMonthGates:
         """All gates pass with multi-month data."""
         per_month = {
             "2024-01": {
-                "EV-VC@100": 0.60, "EV-VC@500": 0.75, "EV-NDCG": 0.85,
-                "Spearman": 0.50, "C-RMSE": 130.0, "C-MAE": 90.0,
-                "EV-VC@1000": 0.90, "R-REC@500": 0.65,
+                "Tier-VC@100": 0.08, "Tier-VC@500": 0.22, "Tier-NDCG": 0.75,
+                "QWK": 0.35, "Macro-F1": 0.35, "Tier-Accuracy": 0.94,
+                "Adjacent-Accuracy": 0.97, "Tier-Recall@0": 0.35, "Tier-Recall@1": 0.10,
             },
             "2024-02": {
-                "EV-VC@100": 0.70, "EV-VC@500": 0.82, "EV-NDCG": 0.92,
-                "Spearman": 0.60, "C-RMSE": 110.0, "C-MAE": 70.0,
-                "EV-VC@1000": 0.95, "R-REC@500": 0.75,
+                "Tier-VC@100": 0.12, "Tier-VC@500": 0.28, "Tier-NDCG": 0.82,
+                "QWK": 0.42, "Macro-F1": 0.42, "Tier-Accuracy": 0.95,
+                "Adjacent-Accuracy": 0.98, "Tier-Recall@0": 0.45, "Tier-Recall@1": 0.15,
             },
             "2024-03": {
-                "EV-VC@100": 0.65, "EV-VC@500": 0.78, "EV-NDCG": 0.88,
-                "Spearman": 0.55, "C-RMSE": 125.0, "C-MAE": 85.0,
-                "EV-VC@1000": 0.91, "R-REC@500": 0.68,
+                "Tier-VC@100": 0.10, "Tier-VC@500": 0.25, "Tier-NDCG": 0.78,
+                "QWK": 0.38, "Macro-F1": 0.38, "Tier-Accuracy": 0.94,
+                "Adjacent-Accuracy": 0.97, "Tier-Recall@0": 0.40, "Tier-Recall@1": 0.12,
             },
         }
         results = check_gates_multi_month(per_month, _GATES)
@@ -144,19 +128,19 @@ class TestMultiMonthGates:
         """Mean below floor causes gate failure."""
         per_month = {
             "2024-01": {
-                "EV-VC@100": 0.30, "EV-VC@500": 0.75, "EV-NDCG": 0.85,
-                "Spearman": 0.50, "C-RMSE": 130.0, "C-MAE": 90.0,
-                "EV-VC@1000": 0.90, "R-REC@500": 0.65,
+                "Tier-VC@100": 0.02, "Tier-VC@500": 0.22, "Tier-NDCG": 0.75,
+                "QWK": 0.35, "Macro-F1": 0.35, "Tier-Accuracy": 0.94,
+                "Adjacent-Accuracy": 0.97, "Tier-Recall@0": 0.35, "Tier-Recall@1": 0.10,
             },
             "2024-02": {
-                "EV-VC@100": 0.40, "EV-VC@500": 0.82, "EV-NDCG": 0.92,
-                "Spearman": 0.60, "C-RMSE": 110.0, "C-MAE": 70.0,
-                "EV-VC@1000": 0.95, "R-REC@500": 0.75,
+                "Tier-VC@100": 0.04, "Tier-VC@500": 0.28, "Tier-NDCG": 0.82,
+                "QWK": 0.42, "Macro-F1": 0.42, "Tier-Accuracy": 0.95,
+                "Adjacent-Accuracy": 0.98, "Tier-Recall@0": 0.45, "Tier-Recall@1": 0.15,
             },
         }
         results = check_gates_multi_month(per_month, _GATES)
-        # Mean of EV-VC@100 = (0.30 + 0.40) / 2 = 0.35, below 0.50 floor
-        assert results["EV-VC@100"]["mean_passed"] is False
-        assert results["EV-VC@100"]["overall_passed"] is False
+        # Mean of Tier-VC@100 = (0.02 + 0.04) / 2 = 0.03, below 0.05 floor
+        assert results["Tier-VC@100"]["mean_passed"] is False
+        assert results["Tier-VC@100"]["overall_passed"] is False
         ga, _ = evaluate_overall_pass_multi_month(results)
         assert ga is False

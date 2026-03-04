@@ -41,8 +41,8 @@ class TestRegisterVersion:
         registry_dir = tmp_path / "registry"
         registry_dir.mkdir()
 
-        config = {"regressor": {"n_estimators": 400}}
-        metrics = {"EV-VC@100": 0.85, "EV-NDCG": 0.90}
+        config = {"tier": {"n_estimators": 400}}
+        metrics = {"Tier-VC@100": 0.85, "Tier-NDCG": 0.90}
         meta = {"version_id": "v0001"}
 
         version_dir = register_version(
@@ -60,10 +60,10 @@ class TestRegisterVersion:
 
         # Verify content
         loaded_config = json.loads((version_dir / "config.json").read_text())
-        assert loaded_config["regressor"]["n_estimators"] == 400
+        assert loaded_config["tier"]["n_estimators"] == 400
 
         loaded_metrics = json.loads((version_dir / "metrics.json").read_text())
-        assert loaded_metrics["EV-VC@100"] == 0.85
+        assert loaded_metrics["Tier-VC@100"] == 0.85
 
         loaded_meta = json.loads((version_dir / "meta.json").read_text())
         assert "registered_at" in loaded_meta

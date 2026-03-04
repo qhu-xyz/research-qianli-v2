@@ -255,7 +255,7 @@ agg = m.get('aggregate', {}).get('mean', m)
 def g(k):
     v = agg.get(k, '?')
     return f'{v:.4f}' if isinstance(v, (int,float)) else str(v)
-print(f'EV-VC@100={g(\"EV-VC@100\")}, EV-VC@500={g(\"EV-VC@500\")}, EV-NDCG={g(\"EV-NDCG\")}, Spearman={g(\"Spearman\")}')
+print(f'Tier-VC@100={g(\"Tier-VC@100\")}, Tier-VC@500={g(\"Tier-VC@500\")}, Tier-NDCG={g(\"Tier-NDCG\")}, QWK={g(\"QWK\")}, Tier-Recall@1={g(\"Tier-Recall@1\")}')
 " 2>/dev/null || echo "metrics unavailable")
   cat > "${PROJECT_DIR}/memory/hot/champion.md" << CHAMPEOF
 # Champion

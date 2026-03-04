@@ -192,12 +192,12 @@ Models are evaluated across **12 primary eval months** using a rolling window (1
 | **2. Tail Safety** | Catastrophic month protection | `count(months below tail_floor) <= 1` | No single-month disasters |
 | **3. Tail Non-Regression** | Worst-case improvement | `bottom_2_mean(new) >= bottom_2_mean(champ) - 0.02` | Worst months must not regress |
 
-### Gate Groups (Stage 2 Metrics)
+### Gate Groups (Tier Metrics)
 
 | Group | Gates | Role |
 |---|---|---|
-| **A (hard)** | EV-VC@100, EV-VC@500, EV-NDCG, Spearman | Must pass all 3 layers to promote |
-| **B (monitor)** | C-RMSE, C-MAE, EV-VC@1000, R-REC@500 | Tracked, don't block promotion |
+| **A (hard)** | Tier-VC@100, Tier-VC@500, Tier-NDCG, QWK | Must pass all 3 layers to promote |
+| **B (monitor)** | Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0, Tier-Recall@1 | Tracked, don't block promotion |
 
 ### Cascade Stages
 
@@ -209,13 +209,13 @@ Evaluation follows a strict cascade: **f0 -> f1 -> f2+**
 
 ```json
 {
-  "per_month": {"2020-09": {"EV-VC@100": 0.12, ...}, "2020-11": {...}, ...},
+  "per_month": {"2020-09": {"Tier-VC@100": 0.10, ...}, "2020-11": {...}, ...},
   "aggregate": {
-    "mean": {"EV-VC@100": 0.10, ...},
-    "std": {"EV-VC@100": 0.03, ...},
-    "min": {"EV-VC@100": 0.04, ...},
-    "max": {"EV-VC@100": 0.18, ...},
-    "bottom_2_mean": {"EV-VC@100": 0.05, ...}
+    "mean": {"Tier-VC@100": 0.075, ...},
+    "std": {"Tier-VC@100": 0.065, ...},
+    "min": {"Tier-VC@100": 0.008, ...},
+    "max": {"Tier-VC@100": 0.246, ...},
+    "bottom_2_mean": {"Tier-VC@100": 0.012, ...}
   },
   "n_months": 12,
   "eval_config": {"eval_months": [...], "class_type": "onpeak", "ptype": "f0", ...}
@@ -235,9 +235,9 @@ python ml/benchmark.py --version-id v0 --ptype f0 --class-type onpeak
 python ml/populate_v0_gates.py
 ```
 
-### Lower-is-Better Metrics
+### All Metrics Higher-is-Better
 
-C-RMSE and C-MAE have inverted directions: `floor` is a ceiling, `tail_floor` is a ceiling, and `bottom_2_mean` picks the highest (worst) 2 values.
+Unlike stage 2 (which had lower-is-better C-RMSE and C-MAE), all tier metrics are higher-is-better. No direction inversions needed.
 
 ---
 

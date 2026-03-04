@@ -89,12 +89,12 @@ audit_iter() {
 
     if [[ "$BRIEF" == "true" ]]; then
       # One-line gate summary: pull key metrics
-      local EVVC100 EVVC500 EVNDCG SPEARMAN
-      EVVC100=$(jq -r ".versions[\"${VERSION_ID}\"][\"EV-VC@100\"].mean_value // \"?\"" "$COMP_JSON" 2>/dev/null)
-      EVVC500=$(jq -r ".versions[\"${VERSION_ID}\"][\"EV-VC@500\"].mean_value // \"?\"" "$COMP_JSON" 2>/dev/null)
-      EVNDCG=$(jq -r ".versions[\"${VERSION_ID}\"][\"EV-NDCG\"].mean_value // \"?\"" "$COMP_JSON" 2>/dev/null)
-      SPEARMAN=$(jq -r ".versions[\"${VERSION_ID}\"][\"Spearman\"].mean_value // \"?\"" "$COMP_JSON" 2>/dev/null)
-      echo "  Gates: A=${GA} B=${GB} | EV-VC@100=${EVVC100} EV-VC@500=${EVVC500} EV-NDCG=${EVNDCG} Spearman=${SPEARMAN}"
+      local TVC100 TVC500 TNDCG QWK
+      TVC100=$(jq -r ".versions[\"${VERSION_ID}\"][\"Tier-VC@100\"].mean_value // \"?\"" "$COMP_JSON" 2>/dev/null)
+      TVC500=$(jq -r ".versions[\"${VERSION_ID}\"][\"Tier-VC@500\"].mean_value // \"?\"" "$COMP_JSON" 2>/dev/null)
+      TNDCG=$(jq -r ".versions[\"${VERSION_ID}\"][\"Tier-NDCG\"].mean_value // \"?\"" "$COMP_JSON" 2>/dev/null)
+      QWK=$(jq -r ".versions[\"${VERSION_ID}\"][\"QWK\"].mean_value // \"?\"" "$COMP_JSON" 2>/dev/null)
+      echo "  Gates: A=${GA} B=${GB} | Tier-VC@100=${TVC100} Tier-VC@500=${TVC500} Tier-NDCG=${TNDCG} QWK=${QWK}"
     else
       echo ""
       echo "2. GATES: Group A=${GA}  Group B=${GB}"
@@ -102,7 +102,7 @@ audit_iter() {
       # Detailed per-gate table
       echo "   | Gate | Mean | Floor | L1 | Tail F | L2 | Bot2 | L3 | Overall |"
       echo "   |------|------|-------|----|--------|----|------|----|---------|"
-      for GATE in EV-VC@100 EV-VC@500 EV-NDCG Spearman C-RMSE C-MAE EV-VC@1000 R-REC@500; do
+      for GATE in Tier-VC@100 Tier-VC@500 Tier-NDCG QWK Macro-F1 Tier-Accuracy Adjacent-Accuracy Tier-Recall@0 Tier-Recall@1; do
         local MV MP TF TP B2 TR OP
         MV=$(jq -r ".versions[\"${VERSION_ID}\"][\"${GATE}\"].mean_value // \"--\"" "$COMP_JSON" 2>/dev/null)
         MP=$(jq -r ".versions[\"${VERSION_ID}\"][\"${GATE}\"].mean_passed // \"?\"" "$COMP_JSON" 2>/dev/null)
@@ -252,18 +252,18 @@ audit_batch() {
   echo ""
   echo "=== Metric Progression ==="
   echo ""
-  printf "  %-8s | %-8s | %-10s | %-10s | %-10s | %-10s\n" "Iter" "Version" "EV-VC@100" "EV-VC@500" "EV-NDCG" "Spearman"
-  printf "  %-8s-+-%-8s-+-%-10s-+-%-10s-+-%-10s-+-%-10s\n" "--------" "--------" "----------" "----------" "----------" "----------"
+  printf "  %-8s | %-8s | %-12s | %-12s | %-10s | %-6s\n" "Iter" "Version" "Tier-VC@100" "Tier-VC@500" "Tier-NDCG" "QWK"
+  printf "  %-8s-+-%-8s-+-%-12s-+-%-12s-+-%-10s-+-%-6s\n" "--------" "--------" "------------" "------------" "----------" "------"
 
   # v0 baseline row
   local V0_JSON="${PROJECT_DIR}/registry/comparisons/${BATCH_ID}_iter1.json"
   if [[ -f "$V0_JSON" ]]; then
-    local V0_EVVC100 V0_EVVC500 V0_EVNDCG V0_SPEARMAN
-    V0_EVVC100=$(jq -r '.versions["v0"]["EV-VC@100"].mean_value // "?"' "$V0_JSON" 2>/dev/null)
-    V0_EVVC500=$(jq -r '.versions["v0"]["EV-VC@500"].mean_value // "?"' "$V0_JSON" 2>/dev/null)
-    V0_EVNDCG=$(jq -r '.versions["v0"]["EV-NDCG"].mean_value // "?"' "$V0_JSON" 2>/dev/null)
-    V0_SPEARMAN=$(jq -r '.versions["v0"]["Spearman"].mean_value // "?"' "$V0_JSON" 2>/dev/null)
-    printf "  %-8s | %-8s | %-10s | %-10s | %-10s | %-10s\n" "base" "v0" "$V0_EVVC100" "$V0_EVVC500" "$V0_EVNDCG" "$V0_SPEARMAN"
+    local V0_TVC100 V0_TVC500 V0_TNDCG V0_QWK
+    V0_TVC100=$(jq -r '.versions["v0"]["Tier-VC@100"].mean_value // "?"' "$V0_JSON" 2>/dev/null)
+    V0_TVC500=$(jq -r '.versions["v0"]["Tier-VC@500"].mean_value // "?"' "$V0_JSON" 2>/dev/null)
+    V0_TNDCG=$(jq -r '.versions["v0"]["Tier-NDCG"].mean_value // "?"' "$V0_JSON" 2>/dev/null)
+    V0_QWK=$(jq -r '.versions["v0"]["QWK"].mean_value // "?"' "$V0_JSON" 2>/dev/null)
+    printf "  %-8s | %-8s | %-12s | %-12s | %-10s | %-6s\n" "base" "v0" "$V0_TVC100" "$V0_TVC500" "$V0_TNDCG" "$V0_QWK"
   fi
 
   for I in $(seq 1 "$MAX_N"); do
@@ -273,12 +273,12 @@ audit_batch() {
       local VID
       VID=$(jq -r ".versions | keys | map(select(startswith(\"v0\") | not)) | last // \"?\"" "$CJ" 2>/dev/null)
       if [[ "$VID" != "?" && "$VID" != "null" ]]; then
-        local I_EVVC100 I_EVVC500 I_EVNDCG I_SPEARMAN
-        I_EVVC100=$(jq -r ".versions[\"${VID}\"][\"EV-VC@100\"].mean_value // \"?\"" "$CJ" 2>/dev/null)
-        I_EVVC500=$(jq -r ".versions[\"${VID}\"][\"EV-VC@500\"].mean_value // \"?\"" "$CJ" 2>/dev/null)
-        I_EVNDCG=$(jq -r ".versions[\"${VID}\"][\"EV-NDCG\"].mean_value // \"?\"" "$CJ" 2>/dev/null)
-        I_SPEARMAN=$(jq -r ".versions[\"${VID}\"][\"Spearman\"].mean_value // \"?\"" "$CJ" 2>/dev/null)
-        printf "  %-8s | %-8s | %-10s | %-10s | %-10s | %-10s\n" "iter${I}" "$VID" "$I_EVVC100" "$I_EVVC500" "$I_EVNDCG" "$I_SPEARMAN"
+        local I_TVC100 I_TVC500 I_TNDCG I_QWK
+        I_TVC100=$(jq -r ".versions[\"${VID}\"][\"Tier-VC@100\"].mean_value // \"?\"" "$CJ" 2>/dev/null)
+        I_TVC500=$(jq -r ".versions[\"${VID}\"][\"Tier-VC@500\"].mean_value // \"?\"" "$CJ" 2>/dev/null)
+        I_TNDCG=$(jq -r ".versions[\"${VID}\"][\"Tier-NDCG\"].mean_value // \"?\"" "$CJ" 2>/dev/null)
+        I_QWK=$(jq -r ".versions[\"${VID}\"][\"QWK\"].mean_value // \"?\"" "$CJ" 2>/dev/null)
+        printf "  %-8s | %-8s | %-12s | %-12s | %-10s | %-6s\n" "iter${I}" "$VID" "$I_TVC100" "$I_TVC500" "$I_TNDCG" "$I_QWK"
       fi
     fi
   done

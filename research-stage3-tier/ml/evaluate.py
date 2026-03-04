@@ -1,19 +1,20 @@
-"""Evaluation harness for shadow-price prediction pipeline.
+"""Evaluation harness for tier classification pipeline.
 
-Stage 1 metrics: classifier quality (AUC, AP, Brier, S1-VCAP@K, S1-NDCG).
-Stage 2 metrics: EV-based ranking (EV-VC@K, EV-NDCG, Spearman, C-RMSE/MAE).
+HUMAN-WRITE-ONLY — workers MUST NOT modify this file.
 
-All metrics are threshold-independent.
+Group A (blocking): Tier-VC@100, Tier-VC@500, Tier-NDCG, QWK.
+Group B (monitor): Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0, Tier-Recall@1.
+
+All ranking metrics use tier_ev_score for ranking and actual_shadow_price
+as relevance — preserving the downstream capital allocation objective.
 """
-
 from __future__ import annotations
 
 import numpy as np
-from scipy.stats import spearmanr
-from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
+from sklearn.metrics import f1_score
 
-# Metrics where lower values are better (worst month = highest value).
-_LOWER_IS_BETTER = {"C-RMSE", "C-MAE"}
+# No lower-is-better metrics in tier pipeline.
+_LOWER_IS_BETTER: set[str] = set()
 
 
 def _value_capture_at_k(
@@ -28,7 +29,7 @@ def _value_capture_at_k(
     actual : np.ndarray
         Ground-truth shadow prices.
     ev_scores : np.ndarray
-        EV scores used for ranking.
+        Ranking scores (tier_ev_score).
     k : int
         Number of top positions to consider.
 
@@ -40,7 +41,6 @@ def _value_capture_at_k(
     total_value = actual.sum()
     if total_value <= 0:
         return 0.0
-    # If fewer than k samples, use all available
     k = min(k, len(ev_scores))
     top_k_idx = np.argsort(ev_scores)[::-1][:k]
     return float(actual[top_k_idx].sum() / total_value)
@@ -51,27 +51,13 @@ def _ndcg(actual: np.ndarray, ev_scores: np.ndarray) -> float:
 
     DCG  = sum(relevance_i / log2(i + 2))  for i = 0, 1, ...
     NDCG = DCG / ideal_DCG
-
-    Parameters
-    ----------
-    actual : np.ndarray
-        Ground-truth shadow prices used as relevance scores.
-    ev_scores : np.ndarray
-        EV scores used for ranking.
-
-    Returns
-    -------
-    float
-        NDCG in [0, 1]. Returns 0 if ideal DCG is 0.
     """
     n = len(actual)
-    discounts = np.log2(np.arange(2, n + 2))  # log2(i+2) for i = 0..n-1
+    discounts = np.log2(np.arange(2, n + 2))
 
-    # DCG with ranking from ev_scores
     ranked_idx = np.argsort(ev_scores)[::-1]
     dcg = float((actual[ranked_idx] / discounts).sum())
 
-    # Ideal DCG with perfect ranking by actual
     ideal_idx = np.argsort(actual)[::-1]
     ideal_dcg = float((actual[ideal_idx] / discounts).sum())
 
@@ -80,166 +66,141 @@ def _ndcg(actual: np.ndarray, ev_scores: np.ndarray) -> float:
     return dcg / ideal_dcg
 
 
-def _recall_at_k(
+def _quadratic_weighted_kappa(
     actual: np.ndarray,
-    ev_scores: np.ndarray,
-    k: int,
+    pred: np.ndarray,
+    num_classes: int = 5,
 ) -> float:
-    """Fraction of true binding constraints in top-k by EV score.
+    """Cohen's Quadratic Weighted Kappa for ordinal classification.
+
+    Penalizes large tier mismatches quadratically. A perfect agreement
+    returns 1.0; random agreement returns ~0; systematic disagreement < 0.
 
     Parameters
     ----------
     actual : np.ndarray
-        Ground-truth shadow prices.
-    ev_scores : np.ndarray
-        EV scores used for ranking.
-    k : int
-        Number of top positions to consider.
+        Ground-truth tier labels in {0, 1, 2, 3, 4}.
+    pred : np.ndarray
+        Predicted tier labels in {0, 1, 2, 3, 4}.
+    num_classes : int
+        Number of ordinal categories.
 
     Returns
     -------
     float
-        Recall in [0, 1]. Returns 0 if no binding samples.
+        QWK score in (-inf, 1].
     """
-    binding_mask = actual > 0
-    n_binding = binding_mask.sum()
-    if n_binding == 0:
+    # Confusion matrix
+    O = np.zeros((num_classes, num_classes), dtype=np.float64)
+    for a, p in zip(actual, pred):
+        O[int(a), int(p)] += 1
+
+    n = len(actual)
+    if n == 0:
         return 0.0
-    k = min(k, len(ev_scores))
-    top_k_idx = np.argsort(ev_scores)[::-1][:k]
-    top_k_set = set(top_k_idx)
-    binding_in_top_k = sum(1 for i in np.where(binding_mask)[0] if i in top_k_set)
-    return float(binding_in_top_k / n_binding)
+
+    O = O / n
+
+    # Expected (outer product of marginals)
+    row_sums = O.sum(axis=1)
+    col_sums = O.sum(axis=0)
+    E = np.outer(row_sums, col_sums)
+
+    # Quadratic weight matrix: w[i,j] = (i-j)^2 / (num_classes-1)^2
+    indices = np.arange(num_classes)
+    W = (indices[:, None] - indices[None, :]) ** 2
+    W = W.astype(np.float64) / (num_classes - 1) ** 2
+
+    numerator = (W * O).sum()
+    denominator = (W * E).sum()
+
+    if denominator == 0:
+        return 1.0 if numerator == 0 else 0.0
+    return float(1.0 - numerator / denominator)
 
 
-def evaluate_classifier(
+def _tier_recall(
+    actual_tier: np.ndarray,
+    pred_tier: np.ndarray,
+    target_tier: int,
+) -> float:
+    """Recall for a specific tier.
+
+    Returns
+    -------
+    float
+        Recall in [0, 1]. Returns 0 if no samples of the target tier exist.
+    """
+    mask = actual_tier == target_tier
+    n_actual = mask.sum()
+    if n_actual == 0:
+        return 0.0
+    return float((pred_tier[mask] == target_tier).sum() / n_actual)
+
+
+def evaluate_tier_pipeline(
     actual_shadow_price: np.ndarray,
-    pred_proba: np.ndarray,
+    actual_tier: np.ndarray,
+    pred_tier: np.ndarray,
+    tier_proba: np.ndarray,
+    tier_ev_score: np.ndarray,
 ) -> dict:
-    """Compute stage-1 classifier quality metrics (threshold-independent).
+    """Compute all tier classification metrics.
 
     Parameters
     ----------
     actual_shadow_price : np.ndarray
-        Ground-truth shadow prices.
-    pred_proba : np.ndarray
-        Predicted binding probabilities from classifier.
+        Ground-truth shadow prices (continuous, for ranking evaluation).
+    actual_tier : np.ndarray
+        Ground-truth tier labels in {0, 1, 2, 3, 4}.
+    pred_tier : np.ndarray
+        Predicted tier labels in {0, 1, 2, 3, 4}.
+    tier_proba : np.ndarray
+        Predicted tier probabilities, shape ``(n_samples, 5)``.
+    tier_ev_score : np.ndarray
+        Probability-weighted expected shadow price for ranking.
 
     Returns
     -------
     dict
-        Stage-1 metrics: AUC, AP, Brier, S1-VCAP@100, S1-VCAP@500, S1-NDCG.
+        All tier metrics: Group A (blocking) + Group B (monitor) + monitoring.
     """
-    binary = (actual_shadow_price > 0).astype(int)
-    n_pos = int(binary.sum())
+    n = len(actual_tier)
 
-    if n_pos == 0 or n_pos == len(binary):
-        # Degenerate: all one class
-        return {
-            "AUC": 0.0, "AP": 0.0, "Brier": 1.0,
-            "S1-VCAP@100": 0.0, "S1-VCAP@500": 0.0, "S1-NDCG": 0.0,
-        }
+    # --- Group A: blocking gates ---
+    tier_vc_100 = _value_capture_at_k(actual_shadow_price, tier_ev_score, 100)
+    tier_vc_500 = _value_capture_at_k(actual_shadow_price, tier_ev_score, 500)
+    tier_ndcg = _ndcg(actual_shadow_price, tier_ev_score)
+    qwk = _quadratic_weighted_kappa(actual_tier, pred_tier)
 
-    auc = float(roc_auc_score(binary, pred_proba))
-    ap = float(average_precision_score(binary, pred_proba))
-    brier = float(brier_score_loss(binary, pred_proba))
-
-    # S1-VCAP@K: value capture using probability ranking (not EV)
-    s1_vcap_100 = _value_capture_at_k(actual_shadow_price, pred_proba, 100)
-    s1_vcap_500 = _value_capture_at_k(actual_shadow_price, pred_proba, 500)
-
-    # S1-NDCG: NDCG using probability ranking
-    s1_ndcg = _ndcg(actual_shadow_price, pred_proba)
+    # --- Group B: monitor ---
+    macro_f1 = float(f1_score(
+        actual_tier, pred_tier, average="macro", zero_division=0,
+    ))
+    tier_accuracy = float(np.mean(actual_tier == pred_tier)) if n > 0 else 0.0
+    adjacent_accuracy = (
+        float(np.mean(np.abs(actual_tier.astype(int) - pred_tier.astype(int)) <= 1))
+        if n > 0 else 0.0
+    )
+    tier_recall_0 = _tier_recall(actual_tier, pred_tier, 0)
+    tier_recall_1 = _tier_recall(actual_tier, pred_tier, 1)
 
     return {
-        "AUC": auc,
-        "AP": ap,
-        "Brier": brier,
-        "S1-VCAP@100": s1_vcap_100,
-        "S1-VCAP@500": s1_vcap_500,
-        "S1-NDCG": s1_ndcg,
-    }
-
-
-def evaluate_pipeline(
-    actual_shadow_price: np.ndarray,
-    pred_proba: np.ndarray,
-    pred_shadow_price: np.ndarray,
-    ev_scores: np.ndarray,
-) -> dict:
-    """Compute all evaluation metrics (stage-1 + stage-2).
-
-    Parameters
-    ----------
-    actual_shadow_price : np.ndarray
-        Ground-truth shadow prices.
-    pred_proba : np.ndarray
-        Predicted binding probabilities from classifier.
-    pred_shadow_price : np.ndarray
-        Predicted shadow prices from regressor.
-    ev_scores : np.ndarray
-        Expected-value scores (prob × shadow_price) for ranking.
-
-    Returns
-    -------
-    dict
-        Combined stage-1 classifier metrics + stage-2 EV-based metrics +
-        monitoring metrics.
-    """
-    n = len(actual_shadow_price)
-    binding_mask = actual_shadow_price > 0
-    n_binding = int(binding_mask.sum())
-
-    # --- Stage 1: classifier quality ---
-    s1_metrics = evaluate_classifier(actual_shadow_price, pred_proba)
-
-    # --- Monitoring ---
-    binding_rate = float(n_binding / n) if n > 0 else 0.0
-
-    # --- Stage 2 Group A: EV-based, threshold-independent ---
-    ev_vc_100 = _value_capture_at_k(actual_shadow_price, ev_scores, 100)
-    ev_vc_500 = _value_capture_at_k(actual_shadow_price, ev_scores, 500)
-    ev_ndcg = _ndcg(actual_shadow_price, ev_scores)
-
-    if n_binding == 0:
-        spearman_val = 0.0
-    else:
-        binding_actual = actual_shadow_price[binding_mask]
-        binding_pred = pred_shadow_price[binding_mask]
-        corr, _ = spearmanr(binding_actual, binding_pred)
-        spearman_val = float(corr) if not np.isnan(corr) else 0.0
-
-    # --- Stage 2 Group B: monitor ---
-    if n_binding == 0:
-        c_rmse = 0.0
-        c_mae = 0.0
-    else:
-        binding_actual = actual_shadow_price[binding_mask]
-        binding_pred = pred_shadow_price[binding_mask]
-        residuals = binding_actual - binding_pred
-        c_rmse = float(np.sqrt(np.mean(residuals ** 2)))
-        c_mae = float(np.mean(np.abs(residuals)))
-
-    ev_vc_1000 = _value_capture_at_k(actual_shadow_price, ev_scores, 1000)
-    r_rec_500 = _recall_at_k(actual_shadow_price, ev_scores, 500)
-
-    return {
-        # Stage 1 (classifier quality)
-        **s1_metrics,
-        # Stage 2 Group A (blocking)
-        "EV-VC@100": ev_vc_100,
-        "EV-VC@500": ev_vc_500,
-        "EV-NDCG": ev_ndcg,
-        "Spearman": spearman_val,
-        # Stage 2 Group B (monitor)
-        "C-RMSE": c_rmse,
-        "C-MAE": c_mae,
-        "EV-VC@1000": ev_vc_1000,
-        "R-REC@500": r_rec_500,
+        # Group A (blocking)
+        "Tier-VC@100": tier_vc_100,
+        "Tier-VC@500": tier_vc_500,
+        "Tier-NDCG": tier_ndcg,
+        "QWK": qwk,
+        # Group B (monitor)
+        "Macro-F1": macro_f1,
+        "Tier-Accuracy": tier_accuracy,
+        "Adjacent-Accuracy": adjacent_accuracy,
+        "Tier-Recall@0": tier_recall_0,
+        "Tier-Recall@1": tier_recall_1,
         # Monitoring
-        "binding_rate": binding_rate,
         "n_samples": n,
-        "n_binding": n_binding,
+        "n_binding": int((actual_tier < 4).sum()),
+        "binding_rate": float((actual_tier < 4).sum() / n) if n > 0 else 0.0,
     }
 
 
@@ -249,23 +210,19 @@ def aggregate_months(per_month: dict[str, dict]) -> dict:
     Parameters
     ----------
     per_month : dict[str, dict]
-        Mapping of month strings (e.g. "2025-01") to metric dicts.
+        Mapping of month strings to metric dicts.
 
     Returns
     -------
     dict
         Dictionary with keys "mean", "std", "min", "max", "bottom_2_mean".
-
-        For "lower is better" metrics (C-RMSE, C-MAE), bottom_2_mean
-        uses the 2 *highest* values (worst months).
-        For all other metrics, bottom_2_mean uses the 2 *lowest* values
-        (worst months).
+        For all tier metrics, bottom_2_mean uses the 2 lowest values
+        (worst months) since all are higher-is-better.
     """
     months = list(per_month.keys())
     if not months:
         return {"mean": {}, "std": {}, "min": {}, "max": {}, "bottom_2_mean": {}}
 
-    # Collect all metric names from first month
     metric_names = list(per_month[months[0]].keys())
 
     result: dict[str, dict] = {
@@ -277,19 +234,22 @@ def aggregate_months(per_month: dict[str, dict]) -> dict:
     }
 
     for metric in metric_names:
-        values = np.array([per_month[m][metric] for m in months])
-        result["mean"][metric] = float(np.mean(values))
-        result["std"][metric] = float(np.std(values, ddof=0))
-        result["min"][metric] = float(np.min(values))
-        result["max"][metric] = float(np.max(values))
+        values = [per_month[m][metric] for m in months]
 
-        # bottom_2_mean: worst 2 months
-        sorted_values = np.sort(values)
+        # Skip non-numeric metrics
+        if not all(isinstance(v, (int, float)) for v in values):
+            continue
+
+        arr = np.array(values)
+        result["mean"][metric] = float(np.mean(arr))
+        result["std"][metric] = float(np.std(arr, ddof=0))
+        result["min"][metric] = float(np.min(arr))
+        result["max"][metric] = float(np.max(arr))
+
+        sorted_values = np.sort(arr)
         if metric in _LOWER_IS_BETTER:
-            # Lower is better -> worst = highest values
             worst_2 = sorted_values[-2:] if len(sorted_values) >= 2 else sorted_values
         else:
-            # Higher is better -> worst = lowest values
             worst_2 = sorted_values[:2] if len(sorted_values) >= 2 else sorted_values
         result["bottom_2_mean"][metric] = float(np.mean(worst_2))
 

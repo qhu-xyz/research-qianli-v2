@@ -35,9 +35,9 @@ class TestLoadSmokeData:
         assert val_df.shape[0] == 20
 
     def test_feature_columns_present(self, cfg: PipelineConfig, smoke_env: None) -> None:
-        """All 24 regressor features must be present in both DataFrames."""
+        """All 34 tier features must be present in both DataFrames."""
         train_df, val_df = load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
-        expected_features = cfg.regressor.features
+        expected_features = cfg.tier.features
         assert len(expected_features) == 34
 
         for col in expected_features:
@@ -53,30 +53,35 @@ class TestLoadSmokeData:
     def test_feature_dtypes_numeric(self, cfg: PipelineConfig, smoke_env: None) -> None:
         """All feature columns must be numeric (Float64)."""
         train_df, _ = load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
-        for col in cfg.regressor.features:
+        for col in cfg.tier.features:
             assert train_df[col].dtype == pl.Float64, f"Column {col} has dtype {train_df[col].dtype}, expected Float64"
 
 
 # ---------------------------------------------------------------------------
-# Binding (non-zero shadow prices)
+# Tier distribution
 # ---------------------------------------------------------------------------
 
-class TestSmokeDataHasBinding:
+class TestSmokeDataHasTiers:
     def test_some_positive_shadow_price(self, cfg: PipelineConfig, smoke_env: None) -> None:
         """At least some rows should have actual_shadow_price > 0 (binding constraints)."""
         train_df, val_df = load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
         all_prices = pl.concat([train_df, val_df])["actual_shadow_price"]
         n_positive = (all_prices > 0).sum()
-        # ~10% of 100 = ~10, allow some variance
         assert n_positive >= 3, f"Expected at least 3 positive prices, got {n_positive}"
 
-    def test_majority_zeros(self, cfg: PipelineConfig, smoke_env: None) -> None:
-        """~90% of rows should have zero shadow price (non-binding)."""
+    def test_some_negative_shadow_price(self, cfg: PipelineConfig, smoke_env: None) -> None:
+        """At least some rows should have actual_shadow_price < 0 (tier 4)."""
         train_df, val_df = load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
         all_prices = pl.concat([train_df, val_df])["actual_shadow_price"]
-        n_zero = (all_prices == 0.0).sum()
-        # ~90% of 100 = ~90, allow some variance
-        assert n_zero >= 70, f"Expected at least 70 zero prices, got {n_zero}"
+        n_negative = (all_prices < 0).sum()
+        assert n_negative >= 3, f"Expected at least 3 negative prices, got {n_negative}"
+
+    def test_has_high_value_constraints(self, cfg: PipelineConfig, smoke_env: None) -> None:
+        """At least some rows should have high shadow prices (tier 0/1)."""
+        train_df, val_df = load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
+        all_prices = pl.concat([train_df, val_df])["actual_shadow_price"]
+        n_high = (all_prices >= 1000).sum()
+        assert n_high >= 3, f"Expected at least 3 high-value prices, got {n_high}"
 
 
 # ---------------------------------------------------------------------------
@@ -111,8 +116,6 @@ class TestLoadRealRequiresInfra:
     def test_real_mode_dispatches_to_real_loader(self, cfg: PipelineConfig) -> None:
         """Without SMOKE_TEST, load_data dispatches to _load_real which needs pbase."""
         os.environ.pop("SMOKE_TEST", None)
-        # _load_real tries to import source repo + connect to Ray.
-        # In a test environment either import or connection will fail.
         with pytest.raises(Exception):
             load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
 

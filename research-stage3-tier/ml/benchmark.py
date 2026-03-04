@@ -1,8 +1,7 @@
-"""Multi-month benchmark evaluation for stage-2 shadow price regression.
+"""Multi-month benchmark evaluation for tier classification pipeline.
 
-Runs the full pipeline (load -> clf -> reg -> EV-score -> evaluate) for each
-evaluation month independently. In real mode, uses Ray to parallelize
-across months.
+Runs the full pipeline (load -> train tier model -> evaluate) for each
+evaluation month independently.
 
 CLI: python ml/benchmark.py --version-id v0 --ptype f0 --class-type onpeak
 """
@@ -29,7 +28,7 @@ def _eval_single_month(
     period_type: str,
     config: PipelineConfig,
 ) -> dict | None:
-    """Run stage-2 pipeline on a single auction month. Returns metrics dict or None if skipped."""
+    """Run tier pipeline on a single auction month. Returns metrics dict or None if skipped."""
     print(f"[benchmark] Evaluating {auction_month} (period_type={period_type}), mem: {mem_mb():.0f} MB")
 
     result = run_pipeline(
@@ -45,16 +44,13 @@ def _eval_single_month(
         print(f"[benchmark]   SKIP {auction_month}: empty metrics")
         return None
 
-    # Store threshold alongside metrics for per-month tracking
-    metrics["threshold"] = result.get("threshold", 0.5)
-
     gc.collect()
 
-    ev_vc100 = metrics.get("EV-VC@100", "N/A")
-    ev_ndcg = metrics.get("EV-NDCG", "N/A")
-    spearman = metrics.get("Spearman", "N/A")
-    print(f"[benchmark]   EV-VC@100={ev_vc100}, EV-NDCG={ev_ndcg}, "
-          f"Spearman={spearman}, mem: {mem_mb():.0f} MB")
+    tier_vc100 = metrics.get("Tier-VC@100", "N/A")
+    tier_ndcg = metrics.get("Tier-NDCG", "N/A")
+    qwk = metrics.get("QWK", "N/A")
+    print(f"[benchmark]   Tier-VC@100={tier_vc100}, Tier-NDCG={tier_ndcg}, "
+          f"QWK={qwk}, mem: {mem_mb():.0f} MB")
     return metrics
 
 
@@ -74,7 +70,7 @@ def run_benchmark(
     version_id : str
         Version ID to register results under (e.g. "v0").
     eval_months : list[str]
-        List of auction months to evaluate (e.g. ["2020-09", "2020-11"]).
+        List of auction months to evaluate.
     class_type : str
         "onpeak" or "offpeak".
     period_type : str
@@ -84,7 +80,7 @@ def run_benchmark(
     config : PipelineConfig or None
         Pipeline config. Uses default if None.
     overrides : dict or None
-        Config overrides applied to regressor + pipeline.
+        Config overrides applied to tier config + pipeline.
 
     Returns
     -------
@@ -100,11 +96,6 @@ def run_benchmark(
 
     smoke = os.environ.get("SMOKE_TEST", "false").lower() == "true"
 
-    # Init Ray once for all months (data_loader uses Ray internally for loading;
-    # we keep it alive across months to avoid 12 init/shutdown cycles).
-    # NOTE: Ray-parallel dispatch of entire eval months doesn't work because
-    # Ray cluster workers lack polars/sklearn. Instead we run months sequentially,
-    # each using Ray only for data loading via MisoDataLoader.
     we_inited_ray = False
     if not smoke:
         import ray
@@ -112,8 +103,8 @@ def run_benchmark(
             os.environ.setdefault("RAY_ADDRESS", "ray://10.8.0.36:10001")
             from pbase.config.ray import init_ray
             import pmodel
-            import ml as shadow_ml
-            init_ray(extra_modules=[pmodel, shadow_ml])
+            import ml as tier_ml
+            init_ray(extra_modules=[pmodel, tier_ml])
             we_inited_ray = True
 
     per_month = {}
@@ -133,17 +124,11 @@ def run_benchmark(
         ray.shutdown()
 
     # Extract feature importance before aggregation (not a numeric metric).
-    # In stage 2, feature importance is from the REGRESSOR model.
     importance_per_month = {}
     for month in list(per_month.keys()):
         imp = per_month[month].pop("_feature_importance", None)
         if imp:
             importance_per_month[month] = imp
-
-    # Extract threshold before aggregation (not a gate metric)
-    threshold_per_month = {}
-    for month in list(per_month.keys()):
-        threshold_per_month[month] = per_month[month].pop("threshold", None)
 
     # Aggregate
     agg = aggregate_months(per_month)
@@ -155,14 +140,12 @@ def run_benchmark(
             "period_type": period_type,
             "train_months": config.train_months,
             "val_months": config.val_months,
-            "ev_scoring": config.ev_scoring,
         },
         "per_month": per_month,
         "aggregate": agg,
         "n_months": len(per_month),
         "n_months_requested": len(eval_months),
         "skipped_months": skipped,
-        "threshold_per_month": threshold_per_month,
     }
 
     # Register in registry
@@ -186,7 +169,7 @@ def run_benchmark(
 
         fi_data = {
             "importance_type": "gain",
-            "model": "regressor",
+            "model": "tier_classifier",
             "n_months": len(importance_per_month),
             "per_month": importance_per_month,
             "aggregate": {
@@ -200,12 +183,10 @@ def run_benchmark(
         print(f"[benchmark] Wrote feature importance to {version_dir / 'feature_importance.json'}")
 
     config_out = {
-        "classifier": config.classifier.to_dict(),
-        "regressor": config.regressor.to_dict(),
+        "tier": config.tier.to_dict(),
         "pipeline": {
             "train_months": config.train_months,
             "val_months": config.val_months,
-            "ev_scoring": config.ev_scoring,
         },
         "eval_config": result["eval_config"],
     }
@@ -222,7 +203,7 @@ def run_benchmark(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run multi-month benchmark evaluation (stage 2)")
+    parser = argparse.ArgumentParser(description="Run multi-month benchmark evaluation (tier classification)")
     parser.add_argument("--version-id", required=True, help="Version ID (e.g. v0)")
     parser.add_argument("--ptype", default="f0", help="Period type")
     parser.add_argument("--class-type", default="onpeak", help="Class type")

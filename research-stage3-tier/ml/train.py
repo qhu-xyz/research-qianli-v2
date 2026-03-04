@@ -1,127 +1,53 @@
-"""Model training for classifier and regressor pipelines.
+"""Model training for tier classification pipeline.
 
-train_classifier  -- XGBClassifier with config + optional threshold tuning.
-predict_proba     -- positive-class probability extraction.
-train_regressor   -- XGBRegressor with config + optional sample weights.
-predict_shadow_price -- inverse log1p transform with non-negativity clamp.
+train_tier_classifier       -- XGBClassifier multi:softprob for 5 tiers.
+predict_tier_probabilities  -- (n_samples, 5) probability matrix.
+predict_tier                -- argmax tier labels.
+compute_tier_ev_score       -- probability-weighted expected shadow price.
 """
 from __future__ import annotations
 
 import numpy as np
-from xgboost import XGBClassifier, XGBRegressor
+from xgboost import XGBClassifier
 
-from ml.config import ClassifierConfig, RegressorConfig
-from ml.features import compute_scale_pos_weight
-from ml.threshold import find_optimal_threshold
+from ml.config import TierConfig
 
 
-def train_classifier(
+def train_tier_classifier(
     X_train: np.ndarray,
     y_train: np.ndarray,
-    cfg: ClassifierConfig,
-    X_val: np.ndarray | None = None,
-    y_val: np.ndarray | None = None,
-) -> tuple[XGBClassifier, float]:
-    """Train an XGBClassifier.
+    cfg: TierConfig,
+    sample_weight: np.ndarray | None = None,
+) -> XGBClassifier:
+    """Train a multi-class XGBClassifier for tier prediction.
 
     Parameters
     ----------
     X_train : np.ndarray
         Training feature matrix of shape ``(n_samples, n_features)``.
     y_train : np.ndarray
-        Binary labels of shape ``(n_samples,)`` with values in {0, 1}.
-    cfg : ClassifierConfig
-        Classifier configuration (hyperparams + monotone constraints).
-    X_val : np.ndarray, optional
-        Validation feature matrix for threshold optimization.
-    y_val : np.ndarray, optional
-        Validation labels for threshold optimization.
+        Tier labels of shape ``(n_samples,)`` with values in {0, 1, 2, 3, 4}.
+    cfg : TierConfig
+        Tier configuration (hyperparams + monotone constraints).
+    sample_weight : np.ndarray, optional
+        Per-sample weights. If None, computed from cfg.class_weights.
 
     Returns
     -------
-    model : XGBClassifier
-        Trained classifier.
-    threshold : float
-        Decision threshold. Optimized via F-beta if validation data is
-        provided, otherwise 0.5.
+    XGBClassifier
+        Trained multi-class classifier.
     """
-    scale_pos_weight = compute_scale_pos_weight(y_train)
+    if sample_weight is None:
+        sample_weight = np.array(
+            [cfg.class_weights.get(int(label), 1.0) for label in y_train],
+            dtype=np.float64,
+        )
+
     monotone = tuple(cfg.monotone_constraints)
 
     model = XGBClassifier(
-        n_estimators=cfg.n_estimators,
-        max_depth=cfg.max_depth,
-        learning_rate=cfg.learning_rate,
-        subsample=cfg.subsample,
-        colsample_bytree=cfg.colsample_bytree,
-        reg_alpha=cfg.reg_alpha,
-        reg_lambda=cfg.reg_lambda,
-        min_child_weight=cfg.min_child_weight,
-        scale_pos_weight=scale_pos_weight,
-        monotone_constraints=monotone,
-        eval_metric="logloss",
-        random_state=42,
-    )
-    model.fit(X_train, y_train)
-
-    # Threshold optimization
-    if X_val is not None and y_val is not None:
-        val_proba = predict_proba(model, X_val)
-        threshold = find_optimal_threshold(
-            y_val, val_proba, beta=cfg.threshold_beta,
-        )
-    else:
-        threshold = 0.5
-
-    return model, threshold
-
-
-def predict_proba(model: XGBClassifier, X: np.ndarray) -> np.ndarray:
-    """Return positive-class probabilities.
-
-    Parameters
-    ----------
-    model : XGBClassifier
-        Trained classifier.
-    X : np.ndarray
-        Feature matrix of shape ``(n_samples, n_features)``.
-
-    Returns
-    -------
-    np.ndarray
-        Probability of positive class, shape ``(n_samples,)``.
-    """
-    return model.predict_proba(X)[:, 1]
-
-
-def train_regressor(
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    cfg: RegressorConfig,
-    sample_weight: np.ndarray | None = None,
-) -> XGBRegressor:
-    """Train an XGBRegressor.
-
-    Parameters
-    ----------
-    X_train : np.ndarray
-        Training feature matrix of shape ``(n_samples, n_features)``.
-    y_train : np.ndarray
-        Regression targets of shape ``(n_samples,)``, typically
-        ``log1p(max(0, shadow_price))``.
-    cfg : RegressorConfig
-        Regressor configuration (hyperparams + monotone constraints).
-    sample_weight : np.ndarray, optional
-        Per-sample weights of shape ``(n_samples,)``.
-
-    Returns
-    -------
-    XGBRegressor
-        Trained regressor model.
-    """
-    monotone = tuple(cfg.monotone_constraints)
-
-    model = XGBRegressor(
+        objective="multi:softprob",
+        num_class=cfg.num_class,
         n_estimators=cfg.n_estimators,
         max_depth=cfg.max_depth,
         learning_rate=cfg.learning_rate,
@@ -131,6 +57,8 @@ def train_regressor(
         reg_lambda=cfg.reg_lambda,
         min_child_weight=cfg.min_child_weight,
         monotone_constraints=monotone,
+        eval_metric="mlogloss",
+        tree_method="hist",
         random_state=42,
     )
     model.fit(X_train, y_train, sample_weight=sample_weight)
@@ -138,24 +66,58 @@ def train_regressor(
     return model
 
 
-def predict_shadow_price(model: XGBRegressor, X: np.ndarray) -> np.ndarray:
-    """Predict shadow prices with inverse log1p transform.
-
-    Computes ``expm1(max(0, raw_prediction))`` to invert the
-    ``log1p(max(0, price))`` target transform and guarantee non-negative
-    outputs.
+def predict_tier_probabilities(
+    model: XGBClassifier,
+    X: np.ndarray,
+) -> np.ndarray:
+    """Return tier probability matrix.
 
     Parameters
     ----------
-    model : XGBRegressor
-        Trained regressor.
+    model : XGBClassifier
+        Trained multi-class classifier.
     X : np.ndarray
         Feature matrix of shape ``(n_samples, n_features)``.
 
     Returns
     -------
     np.ndarray
-        Predicted shadow prices, shape ``(n_samples,)``, all >= 0.
+        Probability matrix of shape ``(n_samples, 5)``, columns = tiers 0-4.
     """
-    raw = model.predict(X)
-    return np.expm1(np.maximum(0.0, raw))
+    return model.predict_proba(X)
+
+
+def predict_tier(model: XGBClassifier, X: np.ndarray) -> np.ndarray:
+    """Return predicted tier labels (argmax of probabilities).
+
+    Returns
+    -------
+    np.ndarray
+        Integer tier labels of shape ``(n_samples,)``.
+    """
+    return model.predict(X).astype(int)
+
+
+def compute_tier_ev_score(
+    proba: np.ndarray,
+    midpoints: list[float],
+) -> np.ndarray:
+    """Compute probability-weighted expected shadow price from tier probabilities.
+
+    tier_ev = sum(P(tier=t) * midpoint[t]) for t in [0, 1, 2, 3, 4]
+
+    This serves as the continuous ranking signal for capital allocation.
+
+    Parameters
+    ----------
+    proba : np.ndarray
+        Probability matrix of shape ``(n_samples, 5)``.
+    midpoints : list[float]
+        Tier midpoints, e.g. [4000, 2000, 550, 50, 0] for tiers 0-4.
+
+    Returns
+    -------
+    np.ndarray
+        Expected shadow price of shape ``(n_samples,)``.
+    """
+    return proba @ np.array(midpoints, dtype=np.float64)

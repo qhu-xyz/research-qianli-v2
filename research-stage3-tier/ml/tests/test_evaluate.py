@@ -1,144 +1,98 @@
-"""Tests for EV-based evaluation harness."""
+"""Tests for tier evaluation harness."""
 
 import numpy as np
 import pytest
 
-from ml.evaluate import aggregate_months, evaluate_pipeline
+from ml.config import TierConfig
+from ml.evaluate import aggregate_months, evaluate_tier_pipeline
+from ml.features import compute_tier_labels
 
 
-class TestEvaluatePipelineBasic:
+class TestEvaluateTierPipelineBasic:
     """Basic smoke test: all keys present and types correct."""
 
-    def test_evaluate_pipeline_basic(self):
-        """Create random data with ~10% binding, verify all keys exist."""
+    def test_evaluate_tier_pipeline_basic(self):
+        """Create random data, verify all keys exist."""
         rng = np.random.RandomState(42)
         n = 2000
-        actual = np.zeros(n)
-        binding_idx = rng.choice(n, size=int(n * 0.1), replace=False)
-        actual[binding_idx] = rng.uniform(1, 100, size=len(binding_idx))
+        cfg = TierConfig()
+        actual_sp = rng.choice([5000.0, 1500.0, 200.0, 10.0, -5.0], size=n)
+        actual_tier = compute_tier_labels(actual_sp, cfg)
 
-        pred_proba = rng.rand(n)
-        pred_shadow = rng.uniform(0, 50, size=n)
-        ev_scores = rng.rand(n)
+        pred_tier = rng.randint(0, 5, size=n)
+        tier_proba = rng.dirichlet([1, 1, 1, 1, 1], size=n)
+        tier_ev_score = rng.rand(n) * 4000
 
-        result = evaluate_pipeline(actual, pred_proba, pred_shadow, ev_scores)
+        result = evaluate_tier_pipeline(actual_sp, actual_tier, pred_tier, tier_proba, tier_ev_score)
 
         # Group A keys
-        assert "EV-VC@100" in result
-        assert "EV-VC@500" in result
-        assert "EV-NDCG" in result
-        assert "Spearman" in result
+        assert "Tier-VC@100" in result
+        assert "Tier-VC@500" in result
+        assert "Tier-NDCG" in result
+        assert "QWK" in result
 
         # Group B keys
-        assert "C-RMSE" in result
-        assert "C-MAE" in result
-        assert "EV-VC@1000" in result
-        assert "R-REC@500" in result
+        assert "Macro-F1" in result
+        assert "Tier-Accuracy" in result
+        assert "Adjacent-Accuracy" in result
+        assert "Tier-Recall@0" in result
+        assert "Tier-Recall@1" in result
 
         # Monitoring keys
-        assert "binding_rate" in result
         assert "n_samples" in result
-        assert "n_binding" in result
 
         # Value types
         assert result["n_samples"] == n
-        assert result["n_binding"] == len(binding_idx)
-        assert 0.0 < result["binding_rate"] < 1.0
 
 
-class TestValueCapture:
-    """Tests for EV-based value capture metrics."""
+class TestTierValueCapture:
+    """Tests for tier-based value capture metrics."""
 
     def test_value_capture_perfect(self):
-        """When ev_scores perfectly rank by actual, VC should be high."""
+        """When tier_ev_score perfectly ranks by actual, VC should be high."""
         rng = np.random.RandomState(123)
+        cfg = TierConfig()
         n = 2000
-        actual = np.zeros(n)
+        actual_sp = np.zeros(n)
         # Top 200 have high actual values
-        actual[:200] = rng.uniform(50, 100, size=200)
-        # ev_scores perfectly correlated with actual
-        ev_scores = actual.copy() + rng.uniform(0, 0.01, size=n)
+        actual_sp[:200] = rng.uniform(50, 5000, size=200)
+        actual_tier = compute_tier_labels(actual_sp, cfg)
 
-        pred_proba = rng.rand(n)
-        pred_shadow = rng.uniform(0, 50, size=n)
+        # tier_ev_score perfectly correlated with actual
+        tier_ev_score = actual_sp.copy() + rng.uniform(0, 0.01, size=n)
 
-        result = evaluate_pipeline(actual, pred_proba, pred_shadow, ev_scores)
+        tier_proba = rng.dirichlet([1, 1, 1, 1, 1], size=n)
+        pred_tier = rng.randint(0, 5, size=n)
 
-        # Perfect ranking: top-100 by EV should capture a large fraction
-        # of value since all value is in top 200
-        assert result["EV-VC@100"] > 0.4, (
-            f"Expected VC@100 > 0.4 with perfect ranking, got {result['EV-VC@100']}"
-        )
-        assert result["EV-VC@500"] > 0.95, (
-            f"Expected VC@500 > 0.95 with perfect ranking, got {result['EV-VC@500']}"
+        result = evaluate_tier_pipeline(actual_sp, actual_tier, pred_tier, tier_proba, tier_ev_score)
+
+        assert result["Tier-VC@100"] > 0.4, (
+            f"Expected VC@100 > 0.4 with perfect ranking, got {result['Tier-VC@100']}"
         )
 
-    def test_value_capture_random(self):
-        """Random ranking should give moderate VC."""
-        rng = np.random.RandomState(456)
-        n = 2000
-        actual = np.zeros(n)
-        binding_idx = rng.choice(n, size=200, replace=False)
-        actual[binding_idx] = rng.uniform(1, 100, size=200)
 
-        # Random ev_scores — uncorrelated with actual
-        ev_scores = rng.rand(n)
-        pred_proba = rng.rand(n)
-        pred_shadow = rng.uniform(0, 50, size=n)
+class TestQWK:
+    """Tests for Quadratic Weighted Kappa."""
 
-        result = evaluate_pipeline(actual, pred_proba, pred_shadow, ev_scores)
-
-        # Random: VC@100 should be modest (around 100/2000 = 5% of samples)
-        # With 200 binding out of 2000, random top-100 captures ~10 binding
-        assert result["EV-VC@100"] < 0.5, (
-            f"Random ranking shouldn't capture >50% value at top-100, got {result['EV-VC@100']}"
-        )
-        # VC values should be non-negative
-        assert result["EV-VC@100"] >= 0.0
-        assert result["EV-VC@500"] >= 0.0
-
-
-class TestSpearman:
-    """Tests for Spearman rank correlation."""
-
-    def test_spearman_perfect(self):
-        """Perfect prediction gives Spearman ~1.0."""
+    def test_qwk_perfect(self):
+        """Perfect predictions give QWK close to 1.0."""
         rng = np.random.RandomState(789)
+        cfg = TierConfig()
         n = 500
-        actual = np.zeros(n)
-        binding_idx = rng.choice(n, size=100, replace=False)
-        actual[binding_idx] = rng.uniform(1, 100, size=100)
+        actual_sp = rng.choice([5000.0, 1500.0, 200.0, 10.0, -5.0], size=n)
+        actual_tier = compute_tier_labels(actual_sp, cfg)
 
-        # pred_shadow = actual (perfect)
-        pred_shadow = actual.copy()
-        pred_proba = rng.rand(n)
-        ev_scores = rng.rand(n)
+        # Perfect tier prediction
+        pred_tier = actual_tier.copy()
 
-        result = evaluate_pipeline(actual, pred_proba, pred_shadow, ev_scores)
+        tier_proba = rng.dirichlet([1, 1, 1, 1, 1], size=n)
+        tier_ev_score = rng.rand(n) * 4000
 
-        assert result["Spearman"] > 0.99, (
-            f"Expected Spearman ~1.0 for perfect prediction, got {result['Spearman']}"
+        result = evaluate_tier_pipeline(actual_sp, actual_tier, pred_tier, tier_proba, tier_ev_score)
+
+        assert result["QWK"] > 0.99, (
+            f"Expected QWK ~1.0 for perfect prediction, got {result['QWK']}"
         )
-
-
-class TestEdgeCases:
-    """Edge case handling."""
-
-    def test_edge_case_no_binding(self):
-        """All zeros: Spearman=0, RMSE=0, MAE=0."""
-        n = 500
-        actual = np.zeros(n)
-        pred_proba = np.random.rand(n)
-        pred_shadow = np.random.rand(n) * 10
-        ev_scores = np.random.rand(n)
-
-        result = evaluate_pipeline(actual, pred_proba, pred_shadow, ev_scores)
-
-        assert result["Spearman"] == 0.0
-        assert result["C-RMSE"] == 0.0
-        assert result["C-MAE"] == 0.0
-        assert result["n_binding"] == 0
-        assert result["binding_rate"] == 0.0
 
 
 class TestAggregateMonths:
@@ -147,9 +101,9 @@ class TestAggregateMonths:
     def test_aggregate_months(self):
         """Verify mean, std, min, max, bottom_2_mean for 3 months."""
         per_month = {
-            "2025-01": {"EV-VC@100": 0.6, "C-RMSE": 10.0},
-            "2025-02": {"EV-VC@100": 0.8, "C-RMSE": 20.0},
-            "2025-03": {"EV-VC@100": 0.7, "C-RMSE": 15.0},
+            "2025-01": {"Tier-VC@100": 0.6, "QWK": 0.7},
+            "2025-02": {"Tier-VC@100": 0.8, "QWK": 0.9},
+            "2025-03": {"Tier-VC@100": 0.7, "QWK": 0.8},
         }
 
         agg = aggregate_months(per_month)
@@ -162,27 +116,12 @@ class TestAggregateMonths:
         assert "bottom_2_mean" in agg
 
         # Mean
-        assert agg["mean"]["EV-VC@100"] == pytest.approx(0.7, abs=1e-6)
-        assert agg["mean"]["C-RMSE"] == pytest.approx(15.0, abs=1e-6)
+        assert agg["mean"]["Tier-VC@100"] == pytest.approx(0.7, abs=1e-6)
+        assert agg["mean"]["QWK"] == pytest.approx(0.8, abs=1e-6)
 
         # Min/Max
-        assert agg["min"]["EV-VC@100"] == pytest.approx(0.6, abs=1e-6)
-        assert agg["max"]["EV-VC@100"] == pytest.approx(0.8, abs=1e-6)
+        assert agg["min"]["Tier-VC@100"] == pytest.approx(0.6, abs=1e-6)
+        assert agg["max"]["Tier-VC@100"] == pytest.approx(0.8, abs=1e-6)
 
-        # bottom_2_mean for EV-VC@100 (higher is better) -> 2 lowest: 0.6, 0.7
-        assert agg["bottom_2_mean"]["EV-VC@100"] == pytest.approx(0.65, abs=1e-6)
-
-    def test_aggregate_lower_is_better(self):
-        """Verify C-RMSE bottom_2_mean uses highest 2 values (worst months)."""
-        per_month = {
-            "2025-01": {"C-RMSE": 10.0, "C-MAE": 5.0},
-            "2025-02": {"C-RMSE": 20.0, "C-MAE": 12.0},
-            "2025-03": {"C-RMSE": 15.0, "C-MAE": 8.0},
-        }
-
-        agg = aggregate_months(per_month)
-
-        # For C-RMSE (lower is better), bottom_2_mean = worst 2 = highest 2: 20, 15
-        assert agg["bottom_2_mean"]["C-RMSE"] == pytest.approx(17.5, abs=1e-6)
-        # For C-MAE (lower is better), bottom_2_mean = worst 2 = highest 2: 12, 8
-        assert agg["bottom_2_mean"]["C-MAE"] == pytest.approx(10.0, abs=1e-6)
+        # bottom_2_mean for Tier-VC@100 (higher is better) -> 2 lowest: 0.6, 0.7
+        assert agg["bottom_2_mean"]["Tier-VC@100"] == pytest.approx(0.65, abs=1e-6)

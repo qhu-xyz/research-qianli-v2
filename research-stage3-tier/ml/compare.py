@@ -1,13 +1,13 @@
-"""Gate comparison system for stage-2 shadow price regression pipeline.
+"""Gate comparison system for tier classification pipeline.
 
 Loads all registered versions, checks each metric against gate floors,
 produces a Markdown comparison table and JSON summary.
 
-Stage-2 gate metrics:
-  Group A (blocking): EV-VC@100, EV-VC@500, EV-NDCG, Spearman
-  Group B (monitor):  C-RMSE, C-MAE, EV-VC@1000, R-REC@500
+Tier gate metrics:
+  Group A (blocking): Tier-VC@100, Tier-VC@500, Tier-NDCG, QWK
+  Group B (monitor):  Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0/1
 
-Lower-is-better metrics: C-RMSE, C-MAE
+All metrics are higher-is-better.
 
 CLI: python ml/compare.py --batch-id X --iteration N --output path
 """

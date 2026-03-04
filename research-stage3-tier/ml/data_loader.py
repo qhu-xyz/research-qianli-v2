@@ -1,8 +1,8 @@
-"""Data loading for stage-2 shadow pipeline.
+"""Data loading for tier classification pipeline.
 
 Dispatches between synthetic smoke data (SMOKE_TEST=true) and real data.
 
-load_data       — train/val split for model training + threshold optimization.
+load_data       — train/val split for model training.
 load_test_data  — target month test data for evaluation.
 """
 from __future__ import annotations
@@ -32,7 +32,7 @@ def load_data(
     Parameters
     ----------
     cfg : PipelineConfig
-        Pipeline configuration (features are read from cfg.regressor.features).
+        Pipeline configuration (features are read from cfg.tier.features).
     auction_month : str
         Auction month in YYYY-MM format.
     class_type : str
@@ -54,29 +54,35 @@ def _load_smoke(cfg: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Generate synthetic data for testing.
 
     Returns 80-row train and 20-row val DataFrames with:
-    - All feature columns from classifier AND regressor (Float64)
-    - actual_shadow_price: ~90% zeros, ~10% positive (exponential, scale=200)
+    - All tier feature columns (Float64)
+    - actual_shadow_price: mix of tiers including negatives
     - constraint_id, branch_name: string metadata columns
     """
     rng = np.random.RandomState(42)
     n_total = 100
     n_train = 80
-    # Union of all features (classifier may have features not in regressor set)
-    all_features = set(cfg.regressor.features) | set(cfg.classifier.features)
-    features = sorted(all_features)
+    # All tier features
+    features = sorted(set(cfg.tier.features))
 
     # Feature data: uniform [0, 1) for all features
     feature_data: dict[str, np.ndarray] = {}
     for feat in features:
         feature_data[feat] = rng.uniform(0.0, 1.0, size=n_total)
 
-    # Target: ~90% zeros, ~10% positive from exponential(scale=200)
-    is_binding = rng.random(n_total) < 0.10
-    shadow_prices = np.where(
-        is_binding,
-        rng.exponential(scale=200.0, size=n_total),
-        0.0,
-    )
+    # Target: mix of tiers — some negative, some zero-100, some 100-1000, some 1000-3000, some 3000+
+    tier_draws = rng.choice(5, size=n_total, p=[0.05, 0.10, 0.15, 0.30, 0.40])
+    shadow_prices = np.zeros(n_total)
+    for i, tier in enumerate(tier_draws):
+        if tier == 0:  # [3000, inf)
+            shadow_prices[i] = rng.uniform(3000, 8000)
+        elif tier == 1:  # [1000, 3000)
+            shadow_prices[i] = rng.uniform(1000, 3000)
+        elif tier == 2:  # [100, 1000)
+            shadow_prices[i] = rng.uniform(100, 1000)
+        elif tier == 3:  # [0, 100)
+            shadow_prices[i] = rng.uniform(0, 100)
+        else:  # (-inf, 0)
+            shadow_prices[i] = rng.uniform(-100, 0)
 
     # Metadata
     constraint_ids = [f"constraint_{i:04d}" for i in range(n_total)]
@@ -186,13 +192,13 @@ def _load_real(
     if "label" in train_data_pd.columns and "actual_shadow_price" not in train_data_pd.columns:
         train_data_pd = train_data_pd.rename(columns={"label": "actual_shadow_price"})
 
-    # Diagnostic: verify regressor feature columns are available
-    all_features = list(cfg.regressor.features)
+    # Diagnostic: verify tier feature columns are available
+    all_features = list(cfg.tier.features)
     available = [c for c in all_features if c in train_data_pd.columns]
     missing = [c for c in all_features if c not in train_data_pd.columns]
-    print(f"[data_loader] regressor features available: {len(available)}/{len(all_features)}")
+    print(f"[data_loader] tier features available: {len(available)}/{len(all_features)}")
     if missing:
-        print(f"[data_loader] WARNING: missing regressor features: {missing}")
+        print(f"[data_loader] WARNING: missing tier features: {missing}")
 
     # Convert to polars
     train_data = pl.from_pandas(train_data_pd)

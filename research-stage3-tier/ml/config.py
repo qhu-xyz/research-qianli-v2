@@ -1,9 +1,8 @@
-"""ML pipeline configuration dataclasses.
+"""ML pipeline configuration dataclasses for tier classification.
 
-ClassifierConfig  -- parameterizable; supports v0 (14-feat) and v1 (29-feat).
-RegressorConfig   -- mutable; agentic loop iterates on this.
-PipelineConfig    -- composition of classifier + regressor + pipeline params.
-GateConfig        -- quality gates loaded from JSON.
+TierConfig     -- single model config; agentic loop iterates on this.
+PipelineConfig -- composition of tier config + pipeline params.
+GateConfig     -- quality gates loaded from JSON.
 """
 from __future__ import annotations
 
@@ -13,34 +12,15 @@ from pathlib import Path
 from typing import Any
 
 
-# ── v0 classifier features (14) — original pipeline set ──────────────────
+# ── Feature sets (inherited from stage-2 regressor) ─────────────────────────
 
-_V0_CLF_FEATURES: list[str] = [
-    "prob_exceed_110",
-    "prob_exceed_105",
-    "prob_exceed_100",
-    "prob_exceed_95",
-    "prob_exceed_90",
-    "prob_below_100",
-    "prob_below_95",
-    "prob_below_90",
-    "expected_overload",
-    "density_skewness",
-    "density_kurtosis",
-    "density_cv",
-    "hist_da",
-    "hist_da_trend",
-]
-
-_V0_CLF_MONOTONE: list[int] = [
-    1, 1, 1, 1, 1,   # prob_exceed_*
-    -1, -1, -1,       # prob_below_*
-    1,                 # expected_overload
-    0, 0, 0,          # density_skewness, density_kurtosis, density_cv
-    1, 1,             # hist_da, hist_da_trend
-]
-
-# ── v1 classifier features (29) — from stage-1 v0011 ─────────────────────
+_DEAD_FEATURES: set[str] = {
+    "hist_physical_interaction",
+    "overload_exceedance_product",
+    "band_severity",
+    "sf_exceed_interaction",
+    "hist_seasonal_band",
+}
 
 _V1_CLF_FEATURES: list[str] = [
     "prob_exceed_110",
@@ -89,30 +69,17 @@ _V1_CLF_MONOTONE: list[int] = [
     0, 0, 0,          # band_severity, sf_exceed_interaction, hist_seasonal_band
 ]
 
-# ── Regressor features: ALL available (34) ────────────────────────────────
-# Built from V1 classifier features MINUS 5 zero-filled features that the
-# data loader never populates (hist_physical_interaction,
-# overload_exceedance_product, band_severity, sf_exceed_interaction,
-# hist_seasonal_band), plus the additional regressor-only features.
-
-_DEAD_FEATURES: set[str] = {
-    "hist_physical_interaction",
-    "overload_exceedance_product",
-    "band_severity",
-    "sf_exceed_interaction",
-    "hist_seasonal_band",
-}
-
-# Filter V1 classifier features to remove dead (always-zero) columns
-_V1_CLF_FOR_REGRESSOR: list[str] = [
+# Filter dead features
+_V1_CLF_FOR_TIER: list[str] = [
     f for f in _V1_CLF_FEATURES if f not in _DEAD_FEATURES
 ]
-_V1_CLF_MONO_FOR_REGRESSOR: list[int] = [
+_V1_CLF_MONO_FOR_TIER: list[int] = [
     m for f, m in zip(_V1_CLF_FEATURES, _V1_CLF_MONOTONE)
     if f not in _DEAD_FEATURES
 ]
 
-_ALL_REGRESSOR_FEATURES: list[str] = _V1_CLF_FOR_REGRESSOR + [
+# All 34 candidate features (same as stage-2 regressor)
+_ALL_TIER_FEATURES: list[str] = _V1_CLF_FOR_TIER + [
     "prob_exceed_85",
     "prob_exceed_80",
     "recent_hist_da",
@@ -125,7 +92,7 @@ _ALL_REGRESSOR_FEATURES: list[str] = _V1_CLF_FOR_REGRESSOR + [
     "prob_below_85",
 ]
 
-_ALL_REGRESSOR_MONOTONE: list[int] = _V1_CLF_MONO_FOR_REGRESSOR + [
+_ALL_TIER_MONOTONE: list[int] = _V1_CLF_MONO_FOR_TIER + [
     1, 1,     # prob_exceed_85, prob_exceed_80
     1,        # recent_hist_da
     1, 1,     # season_hist_da_1, season_hist_da_2
@@ -134,109 +101,49 @@ _ALL_REGRESSOR_MONOTONE: list[int] = _V1_CLF_MONO_FOR_REGRESSOR + [
     -1,       # prob_below_85
 ]
 
-
-# ── ClassifierConfig ──────────────────────────────────────────────────────
-
-@dataclass
-class ClassifierConfig:
-    """Classifier configuration. Use preset() for v0/v1 feature sets."""
-
-    features: list[str] = field(default_factory=lambda: list(_V0_CLF_FEATURES))
-    monotone_constraints: list[int] = field(default_factory=lambda: list(_V0_CLF_MONOTONE))
-
-    # XGBoost hyperparams (v0 defaults)
-    n_estimators: int = 200
-    max_depth: int = 4
-    learning_rate: float = 0.1
-    subsample: float = 0.8
-    colsample_bytree: float = 0.8
-    reg_alpha: float = 0.1
-    reg_lambda: float = 1.0
-    min_child_weight: int = 10
-
-    # Decision threshold
-    threshold_beta: float = 0.7
-
-    @staticmethod
-    def v0() -> ClassifierConfig:
-        """14-feature classifier (original pipeline feature set)."""
-        return ClassifierConfig(
-            features=list(_V0_CLF_FEATURES),
-            monotone_constraints=list(_V0_CLF_MONOTONE),
-        )
-
-    @staticmethod
-    def v1() -> ClassifierConfig:
-        """29-feature classifier (stage-1 v0011 feature set)."""
-        return ClassifierConfig(
-            features=list(_V1_CLF_FEATURES),
-            monotone_constraints=list(_V1_CLF_MONOTONE),
-            n_estimators=300,
-            learning_rate=0.07,
-            colsample_bytree=0.9,
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "features": list(self.features),
-            "monotone_constraints": list(self.monotone_constraints),
-            "n_estimators": self.n_estimators,
-            "max_depth": self.max_depth,
-            "learning_rate": self.learning_rate,
-            "subsample": self.subsample,
-            "colsample_bytree": self.colsample_bytree,
-            "reg_alpha": self.reg_alpha,
-            "reg_lambda": self.reg_lambda,
-            "min_child_weight": self.min_child_weight,
-            "threshold_beta": self.threshold_beta,
-        }
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> ClassifierConfig:
-        return cls(
-            features=list(d["features"]),
-            monotone_constraints=list(d["monotone_constraints"]),
-            n_estimators=d["n_estimators"],
-            max_depth=d["max_depth"],
-            learning_rate=d["learning_rate"],
-            subsample=d["subsample"],
-            colsample_bytree=d["colsample_bytree"],
-            reg_alpha=d["reg_alpha"],
-            reg_lambda=d["reg_lambda"],
-            min_child_weight=d["min_child_weight"],
-            threshold_beta=d.get("threshold_beta", 0.7),
-        )
+# Default tier bins: match existing SPICE system
+_DEFAULT_BINS: list[float] = [float("-inf"), 0, 100, 1000, 3000, float("inf")]
+_DEFAULT_MIDPOINTS: list[float] = [4000, 2000, 550, 50, 0]  # tier 0,1,2,3,4
+_DEFAULT_CLASS_WEIGHTS: dict[int, float] = {0: 10, 1: 5, 2: 2, 3: 1, 4: 0.5}
 
 
-# ── RegressorConfig ───────────────────────────────────────────────────────
+# ── TierConfig ───────────────────────────────────────────────────────────────
 
 @dataclass
-class RegressorConfig:
-    """Regressor configuration. Uses ALL available features by default."""
+class TierConfig:
+    """Tier classification configuration. Single multi-class XGBoost model."""
 
-    features: list[str] = field(default_factory=lambda: list(_ALL_REGRESSOR_FEATURES))
+    features: list[str] = field(default_factory=lambda: list(_ALL_TIER_FEATURES))
     monotone_constraints: list[int] = field(
-        default_factory=lambda: list(_ALL_REGRESSOR_MONOTONE)
+        default_factory=lambda: list(_ALL_TIER_MONOTONE)
+    )
+
+    # Tier definitions
+    bins: list[float] = field(default_factory=lambda: list(_DEFAULT_BINS))
+    tier_midpoints: list[float] = field(default_factory=lambda: list(_DEFAULT_MIDPOINTS))
+    num_class: int = 5
+    class_weights: dict[int, float] = field(
+        default_factory=lambda: dict(_DEFAULT_CLASS_WEIGHTS)
     )
 
     # XGBoost hyperparams
-    n_estimators: int = 600
+    n_estimators: int = 400
     max_depth: int = 5
-    learning_rate: float = 0.03
+    learning_rate: float = 0.05
     subsample: float = 0.8
     colsample_bytree: float = 0.8
     reg_alpha: float = 1.0
     reg_lambda: float = 1.0
     min_child_weight: int = 25
 
-    # Pipeline mode
-    unified_regressor: bool = False  # False = gated mode (binding-only training)
-    value_weighted: bool = False
-
     def to_dict(self) -> dict[str, Any]:
         return {
             "features": list(self.features),
             "monotone_constraints": list(self.monotone_constraints),
+            "bins": list(self.bins),
+            "tier_midpoints": list(self.tier_midpoints),
+            "num_class": self.num_class,
+            "class_weights": {str(k): v for k, v in self.class_weights.items()},
             "n_estimators": self.n_estimators,
             "max_depth": self.max_depth,
             "learning_rate": self.learning_rate,
@@ -245,15 +152,20 @@ class RegressorConfig:
             "reg_alpha": self.reg_alpha,
             "reg_lambda": self.reg_lambda,
             "min_child_weight": self.min_child_weight,
-            "unified_regressor": self.unified_regressor,
-            "value_weighted": self.value_weighted,
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> RegressorConfig:
+    def from_dict(cls, d: dict[str, Any]) -> TierConfig:
+        cw = d.get("class_weights", _DEFAULT_CLASS_WEIGHTS)
+        if isinstance(cw, dict):
+            cw = {int(k): float(v) for k, v in cw.items()}
         return cls(
             features=list(d["features"]),
             monotone_constraints=list(d["monotone_constraints"]),
+            bins=list(d.get("bins", _DEFAULT_BINS)),
+            tier_midpoints=list(d.get("tier_midpoints", _DEFAULT_MIDPOINTS)),
+            num_class=d.get("num_class", 5),
+            class_weights=cw,
             n_estimators=d["n_estimators"],
             max_depth=d["max_depth"],
             learning_rate=d["learning_rate"],
@@ -262,44 +174,36 @@ class RegressorConfig:
             reg_alpha=d["reg_alpha"],
             reg_lambda=d["reg_lambda"],
             min_child_weight=d["min_child_weight"],
-            unified_regressor=d.get("unified_regressor", False),
-            value_weighted=d.get("value_weighted", False),
         )
 
 
-# ── PipelineConfig ────────────────────────────────────────────────────────
+# ── PipelineConfig ───────────────────────────────────────────────────────────
 
 @dataclass
 class PipelineConfig:
-    """Full pipeline configuration: classifier + regressor + pipeline params."""
+    """Full pipeline configuration: tier model + pipeline params."""
 
-    classifier: ClassifierConfig = field(default_factory=ClassifierConfig)
-    regressor: RegressorConfig = field(default_factory=RegressorConfig)
+    tier: TierConfig = field(default_factory=TierConfig)
     train_months: int = 6
     val_months: int = 2
-    ev_scoring: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "classifier": self.classifier.to_dict(),
-            "regressor": self.regressor.to_dict(),
+            "tier": self.tier.to_dict(),
             "train_months": self.train_months,
             "val_months": self.val_months,
-            "ev_scoring": self.ev_scoring,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PipelineConfig:
         return cls(
-            classifier=ClassifierConfig.from_dict(d["classifier"]),
-            regressor=RegressorConfig.from_dict(d["regressor"]),
+            tier=TierConfig.from_dict(d["tier"]),
             train_months=d["train_months"],
             val_months=d["val_months"],
-            ev_scoring=d["ev_scoring"],
         )
 
 
-# ── GateConfig ────────────────────────────────────────────────────────────
+# ── GateConfig ───────────────────────────────────────────────────────────────
 
 @dataclass
 class GateConfig:

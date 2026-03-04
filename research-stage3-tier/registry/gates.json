@@ -1,6 +1,6 @@
 {
-  "version": 4,
-  "note": "Recalibrated 2026-03-04 from v0007 champion. Floors at 0.95x champion mean, tail_floors at 0.90x worst month.",
+  "version": 1,
+  "note": "Initial gates - pending v0 baseline calibration. All floors at 0 until v0 runs.",
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
   "eval_months": {
@@ -24,74 +24,71 @@
       "stage": 1,
       "ptype": "f0",
       "blocking": true
-    },
-    {
-      "stage": 2,
-      "ptype": "f1",
-      "blocking": true
-    },
-    {
-      "stage": 3,
-      "ptype": "f2p",
-      "blocking": false
     }
   ],
   "gates": {
-    "EV-VC@100": {
-      "floor": 0.066396,
-      "tail_floor": 0.000135,
+    "Tier-VC@100": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
       "direction": "higher",
       "group": "A",
-      "pending_baseline": false
+      "pending_baseline": true
     },
-    "EV-VC@500": {
-      "floor": 0.217926,
-      "tail_floor": 0.053646,
+    "Tier-VC@500": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
       "direction": "higher",
       "group": "A",
-      "pending_baseline": false
+      "pending_baseline": true
     },
-    "EV-NDCG": {
-      "floor": 0.713706,
-      "tail_floor": 0.543359,
+    "Tier-NDCG": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
       "direction": "higher",
       "group": "A",
-      "pending_baseline": false
+      "pending_baseline": true
     },
-    "Spearman": {
-      "floor": 0.373556,
-      "tail_floor": 0.236265,
+    "QWK": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
       "direction": "higher",
       "group": "A",
-      "pending_baseline": false
+      "pending_baseline": true
     },
-    "C-RMSE": {
-      "floor": 3062.208785,
-      "tail_floor": 6592.715083,
-      "direction": "lower",
-      "group": "B",
-      "pending_baseline": false
-    },
-    "C-MAE": {
-      "floor": 1209.075048,
-      "tail_floor": 2542.467527,
-      "direction": "lower",
-      "group": "B",
-      "pending_baseline": false
-    },
-    "EV-VC@1000": {
-      "floor": 0.301402,
-      "tail_floor": 0.089444,
+    "Macro-F1": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
       "direction": "higher",
       "group": "B",
-      "pending_baseline": false
+      "pending_baseline": true
     },
-    "R-REC@500": {
-      "floor": 0.033736,
-      "tail_floor": 0.012673,
+    "Tier-Accuracy": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
       "direction": "higher",
       "group": "B",
-      "pending_baseline": false
+      "pending_baseline": true
+    },
+    "Adjacent-Accuracy": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": true
+    },
+    "Tier-Recall@0": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": true
+    },
+    "Tier-Recall@1": {
+      "floor": 0.0,
+      "tail_floor": 0.0,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": true
     }
   }
 }

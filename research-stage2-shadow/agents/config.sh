@@ -15,7 +15,7 @@ STATE_FILE="${PROJECT_DIR}/state.json"
 # Smoke timings: orch=2.5m, worker=6.5m, reviewers=3m, synth=6m
 # Real-data timings: worker benchmark ~35-50m (12 months × 400 trees via Ray)
 TIMEOUT_ORCHESTRATOR=600     # 10 min (poll: 7 min)
-TIMEOUT_WORKER=3600          # 60 min — regression pipeline is slower than classification
+TIMEOUT_WORKER=5400          # 90 min — 2-hypothesis screening (~12 min) + full benchmark (~35 min) + code/tests (~10 min)
 TIMEOUT_REVIEWER_CLAUDE=600  # 10 min (poll: 7 min)
 TIMEOUT_REVIEWER_CODEX=600   # 10 min (poll: 7 min)
 TIMEOUT_SYNTHESIZER=1500     # 25 min (poll: 20 min) — synthesis observed at ~14 min; reads ~15 files + writes 8 files

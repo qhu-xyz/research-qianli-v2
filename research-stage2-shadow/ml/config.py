@@ -196,7 +196,7 @@ class RegressorConfig:
     learning_rate: float = 0.05
     subsample: float = 0.8
     colsample_bytree: float = 0.8
-    reg_alpha: float = 0.1
+    reg_alpha: float = 1.0
     reg_lambda: float = 5.0
     min_child_weight: int = 25
 

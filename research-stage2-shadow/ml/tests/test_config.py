@@ -111,7 +111,7 @@ class TestRegressorConfig:
         assert cfg.learning_rate == 0.05
         assert cfg.subsample == 0.8
         assert cfg.colsample_bytree == 0.8
-        assert cfg.reg_alpha == 0.1
+        assert cfg.reg_alpha == 1.0
         assert cfg.reg_lambda == 5.0
         assert cfg.min_child_weight == 25
 

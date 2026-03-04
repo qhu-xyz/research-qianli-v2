@@ -56,7 +56,21 @@
     - Prune-only beat prune+flow_direction by +6.3% on screen mean EV-VC@100
     - Binding direction does not correlate with shadow price magnitude
 
-12. **EV-VC@100 improvement is outlier-dependent across batches** (PATTERN — reinforced)
+12. **More trees + lower LR recovers breadth without harming Spearman** (NEW — confirmed in v0012)
+    - n_estimators 400→600, lr 0.05→0.03 (budget 20→18)
+    - EV-VC@500 +3.5%, EV-VC@1000 +2.6%, Spearman +0.4%, C-RMSE -0.4%
+    - Critical tail failure eliminated (2022-09 EV-VC@500: 0.0527→0.0720, +36.7%)
+    - Mechanism: finer-grained gradient estimation across more rounds improves mid-tier discrimination
+    - **This works because L2=1.0 (optimal)** — learning #4 failure was compounded with L2=5.0
+    - Tradeoff: EV-VC@100 -5.3% (slightly diluted top-100 discrimination)
+
+13. **Higher colsample_bytree (0.8→0.9) does NOT help breadth** (NEW — tested and rejected in v0012 screen)
+    - Barely moved EV-VC@500 (+3.2% on weak month vs +36.7% for more trees)
+    - Failed Spearman veto on strong month (-0.054 on 2022-12)
+    - Interpretation: breadth recovery needs more ensemble rounds, not more features per tree
+    - colsample=0.8 with 34 features (27/34 per tree) provides sufficient signal coverage
+
+14. **EV-VC@100 improvement is outlier-dependent across batches** (PATTERN — reinforced)
     - v0009: 3 months drove most of the +9% gain
     - v0011: 3 months drove most of the +5.2% gain (2021-05 +183%, 2021-11 +168%, 2021-09 +17.6%)
     - The model redistributes value capture rather than uniformly improving

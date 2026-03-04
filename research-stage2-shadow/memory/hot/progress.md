@@ -1,23 +1,29 @@
-## Status: ITER 2 PLANNED — feat-eng-3-20260304-121042
-**Champion**: v0011 (34 features, pruned from v0009's 39 nominal)
-**Batch started as**: Feature engineering / selection ONLY
-**Batch constraint relaxed for iter 2**: HP changes now allowed
+## Status: ITER 2 COMPLETE — feat-eng-3-20260304-121042
+**Champion**: v0012 (34 features, n_estimators=600, lr=0.03)
+**Batch started as**: Feature engineering / selection → relaxed to HP changes at iter 2
 
-### Iteration 2 Plan
-- **Hypothesis A (primary)**: n_estimators=600, lr=0.03 — more trees + lower LR for mid-tier discrimination
-- **Hypothesis B (alternative)**: colsample_bytree=0.9, n_estimators=500, lr=0.04 — restore per-tree feature coverage
-- **Screen months**: 2022-09 (weak, sole EV-VC@500 tail failure) + 2022-12 (strong, fresh)
-- **Objective**: Recover EV-VC@500 breadth without losing EV-VC@100 gains
+### Current Champion Metrics (v0012)
+| Metric | Mean | Floor | Margin |
+|--------|------|-------|--------|
+| EV-VC@100 | 0.0758 | 0.0664 | +14.2% |
+| EV-VC@500 | 0.2348 | 0.2179 | +7.8% |
+| EV-NDCG | 0.7518 | 0.7137 | +5.3% |
+| Spearman | 0.3940 | 0.3736 | +5.5% |
 
-### Iteration 1 Result
-- **Hypothesis A (winner)**: Prune 5 dead features (39→34). Selected over Hyp B (prune + flow_direction).
-- **Screen months**: 2022-09 (weak) + 2021-09 (strong)
-- **v0011 promoted**: EV-VC@100 +5.2%, Spearman +0.4%. EV-VC@500 -2.5% (precision-vs-breadth tradeoff accepted).
-- **Key risk**: EV-VC@500 gate margins very thin (L2 at limit, L3 margin +0.0023)
+### Pipeline Health
+- **No gate at limit** — all margins comfortable
+- **All Group B gates pass** (first time: C-RMSE and C-MAE pass since v0011)
+- **0 tail failures** on any Group A gate
 
 ### Batch Progress
 | Iter | Version | Outcome | Key Delta |
 |------|---------|---------|-----------|
 | 1 | v0011 | **PROMOTED** | EV-VC@100 +5.2%, EV-VC@500 -2.5% (prune dead features) |
-| 2 | — | **PLANNED** | HP tuning to recover EV-VC@500 breadth |
-| 3 | — | — | — |
+| 2 | v0012 | **PROMOTED** | EV-VC@500 +3.5%, EV-VC@100 -5.3% (more trees, lower LR) |
+| 3 | — | **PLANNED** | Target: EV-VC@100 recovery via mcw reduction or value_weighted |
+
+### Iter 3 Plan
+- **Objective**: Recover EV-VC@100 precision without surrendering EV-VC@500 gains
+- **Primary lever**: min_child_weight reduction (25→15-20) for sharper leaf predictions
+- **Alternative lever**: value_weighted=True to emphasize high-$ constraints in loss
+- **Feature set**: frozen at 34; n_estimators=600, lr=0.03 settled

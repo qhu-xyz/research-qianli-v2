@@ -32,3 +32,19 @@
 
 ### D7: Iter 2 priority: recover EV-VC@500 breadth without sacrificing EV-VC@100
 **Rationale**: The precision-vs-breadth tradeoff in v0011 is acceptable for now, but compounding EV-VC@500 degradation would erode the gate margin. Next iteration must target EV-VC@500 recovery. HP tuning (more trees + lower LR) is the primary lever.
+
+---
+
+## Iter 2 — feat-eng-3-20260304-121042
+
+### D8: Promote v0012 as new champion
+**Rationale**: All Group A gates pass all 3 layers with comfortable margins. Primary objective (EV-VC@500 breadth recovery) achieved: +3.5% mean, 2022-09 tail failure eliminated (0.0527→0.0720). EV-VC@500 margins improved from critical (L2 at limit, L3 +0.0023) to comfortable (L2 0 fails, L3 +0.0357). All Group B gates improved. EV-VC@100 regressed -5.3% but retains +14.2% margin to floor.
+
+### D9: HP config established at n_estimators=600, lr=0.03
+**Rationale**: 600/0.03 (budget=18) provides better ensemble averaging and mid-tier discrimination than 400/0.05 (budget=20). Hypothesis B (colsample=0.9, 500t, lr=0.04) rejected — barely moved EV-VC@500, failed Spearman veto on 2022-12.
+
+### D10: Iter 3 priority: recover EV-VC@100 precision
+**Rationale**: Two iterations moved EV-VC@100 in opposite directions (iter 1 +5.2%, iter 2 -5.3%), net ~neutral vs v0009. +14.2% margin is comfortable but not unlimited. Target EV-VC@100 recovery via mcw reduction or value_weighted=True, without surrendering EV-VC@500 gains.
+
+### D11: Do NOT further adjust n_estimators or learning_rate
+**Rationale**: 600/0.03 achieved its goal. Further tree increases yield diminishing returns with training time cost. This HP axis is settled for the 34-feature set.

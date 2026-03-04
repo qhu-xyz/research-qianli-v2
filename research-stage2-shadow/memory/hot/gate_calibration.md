@@ -2,54 +2,68 @@
 
 ### Current State: Gates v4, Calibrated to v0007 (0.95x mean, 0.90x worst)
 
-Now evaluating against v0011 champion.
+Now evaluating against v0012 champion.
 
-| Gate | Floor | v0011 Mean | Margin | Assessment |
+| Gate | Floor | v0012 Mean | Margin | Assessment |
 |------|-------|-----------|--------|------------|
-| EV-VC@100 | 0.0664 | 0.0801 | +20.6% | Loose — ample headroom |
-| EV-VC@500 | 0.2179 | 0.2270 | +4.2% | **Tight** — one bad iteration could fail L1 |
-| EV-NDCG | 0.7137 | 0.7499 | +5.1% | Moderate |
-| Spearman | 0.3736 | 0.3925 | +5.1% | Was binding, now looser than EV-VC@500 |
+| EV-VC@100 | 0.0664 | 0.0758 | +14.2% | Moderate — narrowed from +20.6% (v0011) |
+| EV-VC@500 | 0.2179 | 0.2348 | +7.8% | **Recovered** — was +4.2% (v0011), now healthy |
+| EV-NDCG | 0.7137 | 0.7518 | +5.3% | Moderate, improved from +5.1% |
+| Spearman | 0.3736 | 0.3940 | +5.5% | Moderate, improved from +5.1% |
 
-### Tail Floor Assessment (v0011)
+### Tail Floor Assessment (v0012)
 
 | Gate | Tail Floor | Worst Month | Fails | Max | Status |
 |------|-----------|-------------|-------|-----|--------|
-| EV-VC@100 | 0.000135 | 0.0034 (2021-05) | 0 | 1 | OK but tail_floor is non-protective |
-| EV-VC@500 | 0.0536 | 0.0527 (2022-09) | **1** | 1 | **AT LIMIT** — next regression flips L2 |
-| EV-NDCG | 0.5434 | 0.6060 (2022-06) | 0 | 1 | OK |
-| Spearman | 0.2363 | 0.2616 (2021-11) | 0 | 1 | OK |
+| EV-VC@100 | 0.000135 | 0.0006 (2021-05) | 0 | 1 | OK but tail_floor is non-protective |
+| EV-VC@500 | 0.0536 | 0.0676 (2022-06) | **0** | 1 | **CLEAR** — was at limit (1 fail) with v0011 |
+| EV-NDCG | 0.5434 | 0.6052 (2022-06) | 0 | 1 | OK |
+| Spearman | 0.2363 | 0.2651 (2021-11) | 0 | 1 | OK |
 
-### L3 Margins (v0011 vs v0009 champion)
+### L3 Margins (v0012 vs v0011 champion)
 
-| Gate | v0011 bot2 | Threshold (champ bot2 - 0.02) | Margin |
+| Gate | v0012 bot2 | Threshold (champ bot2 - 0.02) | Margin |
 |------|-----------|-------------------------------|--------|
-| EV-VC@100 | 0.0111 | -0.0135 | +0.0246 (trivially passing, tolerance > metric scale) |
-| EV-VC@500 | 0.0541 | 0.0518 | **+0.0023** (razor-thin) |
-| EV-NDCG | 0.6403 | 0.6246 | +0.0157 (OK) |
-| Spearman | 0.2678 | 0.2505 | +0.0173 (OK) |
+| EV-VC@100 | 0.0086 | -0.0089 | +0.0175 (trivially passing, tolerance > metric scale) |
+| EV-VC@500 | 0.0698 | 0.0341 | **+0.0357** (massive improvement from +0.0023) |
+| EV-NDCG | 0.6434 | 0.6203 | +0.0231 (OK) |
+| Spearman | 0.2696 | 0.2478 | +0.0218 (OK) |
 
 ### Binding Gate Constraint
-**EV-VC@500 has replaced Spearman as the binding constraint.** With L1 margin at +4.2%, L2 at exact limit, and L3 margin at +0.0023, any further EV-VC@500 degradation will block promotion.
 
-### L3 Noise Tolerance Issue (ONGOING, UNFIXED)
+**No gate is tight.** For the first time in the batch, all gates have comfortable margins:
+- EV-VC@100 L1 +14.2% is the tightest, but still not concerning
+- EV-VC@500 fully recovered from critical state to +7.8% L1, 0 tail fails, +0.0357 L3
+
+### Weakest Months (v0012)
+
+| Month | Persistently Weak Metrics |
+|-------|--------------------------|
+| 2022-06 | EV-VC@100 (0.0166), EV-VC@500 (0.0676), EV-NDCG (0.6052), Spearman (0.2742) |
+| 2021-05 | EV-VC@100 (0.0006), EV-VC@500 (0.0918) |
+| 2022-09 | EV-VC@500 (0.0720), EV-NDCG (0.6816) |
+| 2021-11 | Spearman (0.2651) |
+
+2022-06 is the structural weak month across all metrics — likely a market regime issue (low summer congestion).
+
+### L3 Noise Tolerance Issue (ONGOING, UNFIXED — 3rd iteration flagged)
 
 `noise_tolerance=0.02` is not scale-aware:
-- EV-VC@100 (bot2 ~0.011): L3 threshold goes to -0.009 → provides zero protection
-- EV-VC@500 (bot2 ~0.054): 0.02 is ~37% of value → very generous
-- C-RMSE (bot2 ~5300): 0.02 is negligible → requires near-exact match
+- EV-VC@100 (bot2 ~0.009): threshold goes to -0.011 → provides zero protection
+- EV-VC@500 (bot2 ~0.070): 0.02 is ~29% of value → very generous
+- C-RMSE (bot2 ~5283): 0.02 is negligible → requires near-exact match
 - Spearman (bot2 ~0.27): 0.02 is ~7% → reasonable
 
-**Recommendation (repeated)**: `max(abs_floor, pct * |champ_bottom_2_mean|)` with per-metric tuning. Both reviewers flagged this in both batches.
+**Recommendation (repeated, 3rd time)**: `max(abs_floor, pct * |champ_bottom_2_mean|)` with per-metric tuning.
 
-### Should Gates Recalibrate to v0011?
+### Should Gates Recalibrate to v0012?
 
-If gates recalibrate to v0011 champion (0.95x mean):
+If gates recalibrate to v0012 champion (0.95x mean):
 | Gate | New Floor | Current Floor | Change |
 |------|-----------|---------------|--------|
-| EV-VC@100 | 0.0761 | 0.0664 | +14.6% (tighter) |
-| EV-VC@500 | 0.2157 | 0.2179 | -1.0% (would loosen!) |
-| EV-NDCG | 0.7124 | 0.7137 | -0.2% (would loosen!) |
-| Spearman | 0.3729 | 0.3736 | -0.2% (would loosen!) |
+| EV-VC@100 | 0.0720 | 0.0664 | +8.4% (tighter) |
+| EV-VC@500 | 0.2231 | 0.2179 | +2.4% (tighter) |
+| EV-NDCG | 0.7142 | 0.7137 | +0.1% (negligible) |
+| Spearman | 0.3743 | 0.3736 | +0.2% (negligible) |
 
-Note: EV-VC@500, EV-NDCG, and Spearman floors would actually LOOSEN because v0011 means are lower than the v0007 champion used for calibration. This creates a ratchet-down risk. **Do NOT recalibrate gates downward.** Keep current floors.
+v0012 would tighten EV-VC@100 and EV-VC@500 floors modestly. Unlike v0011, this would NOT loosen any gate. Could consider recalibrating after batch concludes, but not mid-batch. **Keep current gates v4 for iter 3.**

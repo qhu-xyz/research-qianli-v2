@@ -1,7 +1,9 @@
 """Data loading for stage-2 shadow pipeline.
 
 Dispatches between synthetic smoke data (SMOKE_TEST=true) and real data.
-Real data loading will be implemented when we run actual benchmarks.
+
+load_data       — train/val split for model training + threshold optimization.
+load_test_data  — target month test data for evaluation.
 """
 from __future__ import annotations
 
@@ -52,14 +54,16 @@ def _load_smoke(cfg: PipelineConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Generate synthetic data for testing.
 
     Returns 80-row train and 20-row val DataFrames with:
-    - All regressor feature columns (Float64)
+    - All feature columns from classifier AND regressor (Float64)
     - actual_shadow_price: ~90% zeros, ~10% positive (exponential, scale=200)
     - constraint_id, branch_name: string metadata columns
     """
     rng = np.random.RandomState(42)
     n_total = 100
     n_train = 80
-    features = cfg.regressor.features
+    # Union of all features (classifier may have features not in regressor set)
+    all_features = set(cfg.regressor.features) | set(cfg.classifier.features)
+    features = sorted(all_features)
 
     # Feature data: uniform [0, 1) for all features
     feature_data: dict[str, np.ndarray] = {}
@@ -222,3 +226,110 @@ def _load_real(
         print(f"[data_loader] Ray shutdown, mem: {mem_mb():.0f} MB")
 
     return fit_df, val_df
+
+
+def load_test_data(
+    cfg: PipelineConfig,
+    auction_month: str,
+    class_type: str,
+    period_type: str,
+) -> pl.DataFrame:
+    """Load target-month test data for evaluation.
+
+    This loads the data for the month actually being predicted (the forward
+    month), which is distinct from the train/val data used for model fitting.
+
+    Parameters
+    ----------
+    cfg : PipelineConfig
+        Pipeline configuration.
+    auction_month : str
+        Auction month in YYYY-MM format.
+    class_type : str
+        "onpeak" or "offpeak".
+    period_type : str
+        Period type, e.g. "f0", "f1".
+
+    Returns
+    -------
+    pl.DataFrame
+        Test data for the target month.
+    """
+    if os.environ.get("SMOKE_TEST", "").lower() == "true":
+        # Smoke: return a small synthetic test set
+        _, val_df = _load_smoke(cfg)
+        return val_df
+    return _load_test_real(cfg, auction_month, class_type, period_type)
+
+
+def _load_test_real(
+    cfg: PipelineConfig,
+    auction_month: str,
+    class_type: str,
+    period_type: str,
+) -> pl.DataFrame:
+    """Load real target-month test data via MisoDataLoader.
+
+    Uses MisoDataLoader.load_test_data() to fetch the actual forward-month
+    constraint data that the model is being evaluated against.
+    """
+    import gc
+    import re
+    import sys
+
+    import pandas as pd
+
+    print(f"[data_loader:test] mem before imports: {mem_mb():.0f} MB")
+
+    src_path = "/home/xyz/workspace/research-qianli-v2/research-spice-shadow-price-pred-qianli/src"
+    if src_path not in sys.path:
+        sys.path.insert(0, src_path)
+    from shadow_price_prediction.data_loader import MisoDataLoader
+    from shadow_price_prediction.config import PredictionConfig
+
+    import ray
+    we_inited_ray = not ray.is_initialized()
+    if we_inited_ray:
+        os.environ.setdefault("RAY_ADDRESS", "ray://10.8.0.36:10001")
+        from pbase.config.ray import init_ray
+        import pmodel
+        import ml as shadow_ml
+        init_ray(extra_modules=[pmodel, shadow_ml])
+
+    pred_config = PredictionConfig()
+    pred_config.class_type = class_type
+    loader = MisoDataLoader(pred_config)
+
+    # Compute market month from auction month + horizon
+    auction_ts = pd.Timestamp(auction_month)
+    m = re.match(r"f(\d+)", period_type)
+    horizon = int(m.group(1)) if m else 3
+    market_ts = auction_ts + pd.DateOffset(months=horizon)
+
+    market_month_str = market_ts.strftime("%Y-%m")
+    print(f"[data_loader:test] loading test data: auction={auction_month}, "
+          f"market={market_month_str}, period_type={period_type}")
+
+    # Use load_test_data_for_period directly (load_test_data has an index bug)
+    test_data_pd = loader.load_test_data_for_period(
+        auction_month=auction_ts,
+        market_month=market_ts,
+        period_type=period_type,
+    )
+    print(f"[data_loader:test] loaded {len(test_data_pd)} rows, mem: {mem_mb():.0f} MB")
+
+    # Rename label → actual_shadow_price
+    if "label" in test_data_pd.columns and "actual_shadow_price" not in test_data_pd.columns:
+        test_data_pd = test_data_pd.rename(columns={"label": "actual_shadow_price"})
+
+    test_df = pl.from_pandas(test_data_pd)
+    del test_data_pd
+    gc.collect()
+
+    print(f"[data_loader:test] test_df: {test_df.shape}, mem: {mem_mb():.0f} MB")
+
+    if we_inited_ray:
+        ray.shutdown()
+        print(f"[data_loader:test] Ray shutdown, mem: {mem_mb():.0f} MB")
+
+    return test_df

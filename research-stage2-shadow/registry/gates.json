@@ -1,5 +1,6 @@
 {
-  "version": 2,
+  "version": 3,
+  "note": "Reset 2026-03-03. Gates will be recalibrated from target-month baselines (6+2 train/val).",
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
   "eval_months": {
@@ -37,76 +38,60 @@
   ],
   "gates": {
     "EV-VC@100": {
-      "floor": 0.022266,
-      "tail_floor": 0.001383,
+      "floor": 0.069032,
+      "tail_floor": 0.000114,
       "direction": "higher",
       "group": "A",
-      "pending_v0": false,
-      "v0_offset": 0.008,
-      "v0_tail_offset": 0.001
+      "pending_baseline": false
     },
     "EV-VC@500": {
-      "floor": 0.087962,
-      "tail_floor": 0.02281,
+      "floor": 0.21595,
+      "tail_floor": 0.040651,
       "direction": "higher",
       "group": "A",
-      "pending_v0": false,
-      "v0_offset": 0.03,
-      "v0_tail_offset": 0.01
+      "pending_baseline": false
     },
     "EV-NDCG": {
-      "floor": 0.689979,
-      "tail_floor": 0.624664,
+      "floor": 0.747213,
+      "tail_floor": 0.604491,
       "direction": "higher",
       "group": "A",
-      "pending_v0": false,
-      "v0_offset": 0.05,
-      "v0_tail_offset": 0.03
+      "pending_baseline": false
     },
     "Spearman": {
-      "floor": 0.342121,
-      "tail_floor": 0.288853,
+      "floor": 0.392798,
+      "tail_floor": 0.2649,
       "direction": "higher",
       "group": "A",
-      "pending_v0": false,
-      "v0_offset": 0.05,
-      "v0_tail_offset": 0.03
+      "pending_baseline": false
     },
     "C-RMSE": {
-      "floor": 3900.366561,
-      "tail_floor": 6746.203111,
+      "floor": 3133.338602,
+      "tail_floor": 5918.344005,
       "direction": "lower",
       "group": "B",
-      "pending_v0": false,
-      "v0_offset": 500,
-      "v0_tail_offset": 500
+      "pending_baseline": false
     },
     "C-MAE": {
-      "floor": 1476.484019,
-      "tail_floor": 2345.508927,
+      "floor": 1158.386444,
+      "tail_floor": 2283.259988,
       "direction": "lower",
       "group": "B",
-      "pending_v0": false,
-      "v0_offset": 200,
-      "v0_tail_offset": 200
+      "pending_baseline": false
     },
     "EV-VC@1000": {
-      "floor": 0.136432,
-      "tail_floor": 0.069288,
+      "floor": 0.312266,
+      "tail_floor": 0.090844,
       "direction": "higher",
       "group": "B",
-      "pending_v0": false,
-      "v0_offset": 0.05,
-      "v0_tail_offset": 0.02
+      "pending_baseline": false
     },
     "R-REC@500": {
-      "floor": 0.014179,
-      "tail_floor": 0.009272,
+      "floor": 0.034261,
+      "tail_floor": 0.013317,
       "direction": "higher",
       "group": "B",
-      "pending_v0": false,
-      "v0_offset": 0.005,
-      "v0_tail_offset": 0.003
+      "pending_baseline": false
     }
   }
 }

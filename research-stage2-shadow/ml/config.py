@@ -1,6 +1,6 @@
 """ML pipeline configuration dataclasses.
 
-ClassifierConfig  -- frozen; locked to stage-1 champion v0006.
+ClassifierConfig  -- parameterizable; supports v0 (14-feat) and v1 (29-feat).
 RegressorConfig   -- mutable; agentic loop iterates on this.
 PipelineConfig    -- composition of classifier + regressor + pipeline params.
 GateConfig        -- quality gates loaded from JSON.
@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 
 
-# ── Step-1 classifier features (13) ──────────────────────────────────────
+# ── v0 classifier features (14) — original pipeline set ──────────────────
 
-_CLASSIFIER_FEATURES: list[str] = [
+_V0_CLF_FEATURES: list[str] = [
     "prob_exceed_110",
     "prob_exceed_105",
     "prob_exceed_100",
@@ -27,57 +27,95 @@ _CLASSIFIER_FEATURES: list[str] = [
     "expected_overload",
     "density_skewness",
     "density_kurtosis",
+    "density_cv",
     "hist_da",
     "hist_da_trend",
 ]
 
-_CLASSIFIER_MONOTONE: list[int] = [
-    1, 1, 1, 1, 1,   # prob_exceed_*  -> higher prob => more likely spike
-    -1, -1, -1,       # prob_below_*   -> higher prob => less likely spike
+_V0_CLF_MONOTONE: list[int] = [
+    1, 1, 1, 1, 1,   # prob_exceed_*
+    -1, -1, -1,       # prob_below_*
     1,                 # expected_overload
-    0, 0,             # density_skewness, density_kurtosis (unconstrained)
+    0, 0, 0,          # density_skewness, density_kurtosis, density_cv
     1, 1,             # hist_da, hist_da_trend
 ]
 
-# ── Additional step-2 regressor features (11) ────────────────────────────
+# ── v1 classifier features (29) — from stage-1 v0011 ─────────────────────
 
-_ADDITIONAL_FEATURES: list[str] = [
-    "prob_exceed_85",
-    "prob_exceed_80",
-    "tail_concentration",
-    "prob_band_95_100",
-    "prob_band_100_105",
+_V1_CLF_FEATURES: list[str] = [
+    "prob_exceed_110",
+    "prob_exceed_105",
+    "prob_exceed_100",
+    "prob_exceed_95",
+    "prob_exceed_90",
+    "prob_below_100",
+    "prob_below_95",
+    "prob_below_90",
+    "expected_overload",
+    "hist_da",
+    "hist_da_trend",
+    "hist_physical_interaction",
+    "overload_exceedance_product",
+    "sf_max_abs",
+    "sf_mean_abs",
+    "sf_std",
+    "sf_nonzero_frac",
+    "is_interface",
+    "constraint_limit",
     "density_mean",
     "density_variance",
     "density_entropy",
+    "tail_concentration",
+    "prob_band_95_100",
+    "prob_band_100_105",
+    "hist_da_max_season",
+    "band_severity",
+    "sf_exceed_interaction",
+    "hist_seasonal_band",
+]
+
+_V1_CLF_MONOTONE: list[int] = [
+    1, 1, 1, 1, 1,   # prob_exceed_*
+    -1, -1, -1,       # prob_below_*
+    1,                 # expected_overload
+    1, 1,             # hist_da, hist_da_trend
+    0, 0,             # hist_physical_interaction, overload_exceedance_product
+    1, 1, 0, 0,       # sf_max_abs, sf_mean_abs, sf_std, sf_nonzero_frac
+    0, 0,             # is_interface, constraint_limit
+    0, 0, 0,          # density_mean, density_variance, density_entropy
+    1,                 # tail_concentration
+    0, 0,             # prob_band_95_100, prob_band_100_105
+    1,                 # hist_da_max_season
+    0, 0, 0,          # band_severity, sf_exceed_interaction, hist_seasonal_band
+]
+
+# ── Regressor features: ALL available (34) ────────────────────────────────
+
+_ALL_REGRESSOR_FEATURES: list[str] = _V1_CLF_FEATURES + [
+    "prob_exceed_85",
+    "prob_exceed_80",
     "recent_hist_da",
     "season_hist_da_1",
     "season_hist_da_2",
 ]
 
-_ADDITIONAL_MONOTONE: list[int] = [
+_ALL_REGRESSOR_MONOTONE: list[int] = _V1_CLF_MONOTONE + [
     1, 1,     # prob_exceed_85, prob_exceed_80
-    1,        # tail_concentration
-    0, 0,     # prob_band_95_100, prob_band_100_105 (unconstrained)
-    0, 0, 0,  # density_mean, density_variance, density_entropy (unconstrained)
     1,        # recent_hist_da
     1, 1,     # season_hist_da_1, season_hist_da_2
 ]
 
-_REGRESSOR_FEATURES: list[str] = _CLASSIFIER_FEATURES + _ADDITIONAL_FEATURES
-_REGRESSOR_MONOTONE: list[int] = _CLASSIFIER_MONOTONE + _ADDITIONAL_MONOTONE
 
+# ── ClassifierConfig ──────────────────────────────────────────────────────
 
-# ── ClassifierConfig (frozen — stage-1 champion v0006) ───────────────────
-
-@dataclass(frozen=True)
+@dataclass
 class ClassifierConfig:
-    """Frozen classifier configuration locked to stage-1 champion v0006."""
+    """Classifier configuration. Use preset() for v0/v1 feature sets."""
 
-    features: tuple[str, ...] = tuple(_CLASSIFIER_FEATURES)
-    monotone_constraints: tuple[int, ...] = tuple(_CLASSIFIER_MONOTONE)
+    features: list[str] = field(default_factory=lambda: list(_V0_CLF_FEATURES))
+    monotone_constraints: list[int] = field(default_factory=lambda: list(_V0_CLF_MONOTONE))
 
-    # XGBoost hyperparams
+    # XGBoost hyperparams (v0 defaults)
     n_estimators: int = 200
     max_depth: int = 4
     learning_rate: float = 0.1
@@ -89,6 +127,25 @@ class ClassifierConfig:
 
     # Decision threshold
     threshold_beta: float = 0.7
+
+    @staticmethod
+    def v0() -> ClassifierConfig:
+        """14-feature classifier (original pipeline feature set)."""
+        return ClassifierConfig(
+            features=list(_V0_CLF_FEATURES),
+            monotone_constraints=list(_V0_CLF_MONOTONE),
+        )
+
+    @staticmethod
+    def v1() -> ClassifierConfig:
+        """29-feature classifier (stage-1 v0011 feature set)."""
+        return ClassifierConfig(
+            features=list(_V1_CLF_FEATURES),
+            monotone_constraints=list(_V1_CLF_MONOTONE),
+            n_estimators=300,
+            learning_rate=0.07,
+            colsample_bytree=0.9,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -108,8 +165,8 @@ class ClassifierConfig:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> ClassifierConfig:
         return cls(
-            features=tuple(d["features"]),
-            monotone_constraints=tuple(d["monotone_constraints"]),
+            features=list(d["features"]),
+            monotone_constraints=list(d["monotone_constraints"]),
             n_estimators=d["n_estimators"],
             max_depth=d["max_depth"],
             learning_rate=d["learning_rate"],
@@ -118,19 +175,19 @@ class ClassifierConfig:
             reg_alpha=d["reg_alpha"],
             reg_lambda=d["reg_lambda"],
             min_child_weight=d["min_child_weight"],
-            threshold_beta=d["threshold_beta"],
+            threshold_beta=d.get("threshold_beta", 0.7),
         )
 
 
-# ── RegressorConfig (mutable — agentic loop iterates) ────────────────────
+# ── RegressorConfig ───────────────────────────────────────────────────────
 
 @dataclass
 class RegressorConfig:
-    """Mutable regressor configuration for stage-2 agentic iteration."""
+    """Regressor configuration. Uses ALL available features by default."""
 
-    features: list[str] = field(default_factory=lambda: list(_REGRESSOR_FEATURES))
+    features: list[str] = field(default_factory=lambda: list(_ALL_REGRESSOR_FEATURES))
     monotone_constraints: list[int] = field(
-        default_factory=lambda: list(_REGRESSOR_MONOTONE)
+        default_factory=lambda: list(_ALL_REGRESSOR_MONOTONE)
     )
 
     # XGBoost hyperparams
@@ -144,7 +201,7 @@ class RegressorConfig:
     min_child_weight: int = 10
 
     # Pipeline mode
-    unified_regressor: bool = False  # v0: gated mode
+    unified_regressor: bool = False  # False = gated mode (binding-only training)
     value_weighted: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -176,8 +233,8 @@ class RegressorConfig:
             reg_alpha=d["reg_alpha"],
             reg_lambda=d["reg_lambda"],
             min_child_weight=d["min_child_weight"],
-            unified_regressor=d["unified_regressor"],
-            value_weighted=d["value_weighted"],
+            unified_regressor=d.get("unified_regressor", False),
+            value_weighted=d.get("value_weighted", False),
         )
 
 
@@ -189,7 +246,7 @@ class PipelineConfig:
 
     classifier: ClassifierConfig = field(default_factory=ClassifierConfig)
     regressor: RegressorConfig = field(default_factory=RegressorConfig)
-    train_months: int = 10
+    train_months: int = 6
     val_months: int = 2
     ev_scoring: bool = True
 

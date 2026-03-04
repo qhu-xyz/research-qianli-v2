@@ -1,15 +1,10 @@
-"""Populate v0-relative gate floors from baseline metrics.
+"""Populate baseline gate floors from v0 metrics.
 
-For each gate with pending_v0=true:
-  - higher direction: floor = v0_metric - v0_offset
-  - lower direction (C-RMSE, C-MAE): floor = v0_metric + v0_offset
+For each gate with pending_baseline=true:
+  - higher direction: floor = v0_mean - offset, tail_floor = v0_min - tail_offset
+  - lower direction: floor = v0_mean + offset, tail_floor = v0_max + tail_offset
 
-Sets pending_v0 to false after populating. Idempotent (no-op if no pending entries).
-
-Stage-2 gate metrics:
-  Group A (blocking): EV-VC@100, EV-VC@500, EV-NDCG, Spearman  (higher is better)
-  Group B (monitor):  C-RMSE, C-MAE (lower is better),
-                      EV-VC@1000, R-REC@500 (higher is better)
+Sets pending_baseline to false after populating. Idempotent.
 
 Usage: python ml/populate_v0_gates.py [--registry-dir registry] [--gates-path registry/gates.json]
 """
@@ -20,16 +15,16 @@ from pathlib import Path
 
 
 def populate_v0_gates(
-    registry_dir: str = "registry",
-    gates_path: str = "registry/gates.json",
+    registry_dir: str | Path = "registry",
+    gates_path: str | Path = "registry/gates.json",
 ) -> dict:
-    """Populate v0-relative gate floors.
+    """Populate baseline gate floors from v0 metrics.
 
     Parameters
     ----------
-    registry_dir : str
+    registry_dir : str or Path
         Path to registry directory (must contain v0/metrics.json).
-    gates_path : str
+    gates_path : str or Path
         Path to gates.json file to update.
 
     Returns
@@ -67,7 +62,7 @@ def populate_v0_gates(
 
     modified = False
     for gate_name, gate_def in gates_data["gates"].items():
-        if not gate_def.get("pending_v0", False):
+        if not gate_def.get("pending_baseline", False):
             continue
 
         mean_val = v0_mean.get(gate_name)
@@ -88,7 +83,7 @@ def populate_v0_gates(
             extreme = v0_max.get(gate_name, mean_val)
             gate_def["tail_floor"] = round(extreme + v0_tail_offset, 6)
 
-        gate_def["pending_v0"] = False
+        gate_def["pending_baseline"] = False
         modified = True
         print(f"[populate_v0] {gate_name}: floor={gate_def['floor']}, "
               f"tail_floor={gate_def['tail_floor']} "

@@ -1,8 +1,8 @@
-"""Model training for classifier (frozen) and regressor (mutable) pipelines.
+"""Model training for classifier and regressor pipelines.
 
-train_classifier  -- XGBClassifier with frozen config, optional threshold tuning.
+train_classifier  -- XGBClassifier with config + optional threshold tuning.
 predict_proba     -- positive-class probability extraction.
-train_regressor   -- XGBRegressor with mutable config, optional sample weights.
+train_regressor   -- XGBRegressor with config + optional sample weights.
 predict_shadow_price -- inverse log1p transform with non-negativity clamp.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ def train_classifier(
     X_val: np.ndarray | None = None,
     y_val: np.ndarray | None = None,
 ) -> tuple[XGBClassifier, float]:
-    """Train an XGBClassifier using frozen config parameters.
+    """Train an XGBClassifier.
 
     Parameters
     ----------
@@ -31,7 +31,7 @@ def train_classifier(
     y_train : np.ndarray
         Binary labels of shape ``(n_samples,)`` with values in {0, 1}.
     cfg : ClassifierConfig
-        Frozen classifier configuration (hyperparams + monotone constraints).
+        Classifier configuration (hyperparams + monotone constraints).
     X_val : np.ndarray, optional
         Validation feature matrix for threshold optimization.
     y_val : np.ndarray, optional
@@ -100,7 +100,7 @@ def train_regressor(
     cfg: RegressorConfig,
     sample_weight: np.ndarray | None = None,
 ) -> XGBRegressor:
-    """Train an XGBRegressor using mutable config parameters.
+    """Train an XGBRegressor.
 
     Parameters
     ----------
@@ -110,7 +110,7 @@ def train_regressor(
         Regression targets of shape ``(n_samples,)``, typically
         ``log1p(max(0, shadow_price))``.
     cfg : RegressorConfig
-        Mutable regressor configuration (hyperparams + monotone constraints).
+        Regressor configuration (hyperparams + monotone constraints).
     sample_weight : np.ndarray, optional
         Per-sample weights of shape ``(n_samples,)``.
 

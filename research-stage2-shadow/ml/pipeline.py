@@ -1,7 +1,16 @@
 """Main pipeline orchestration: load -> clf -> reg -> EV-score -> evaluate.
 
-6-phase pipeline with crash-recovery support via ``from_phase``.
+7-phase pipeline with crash-recovery support via ``from_phase``.
 Prints mem_mb() at key stages for memory tracking.
+
+Phases:
+  1. Load train/val data (6+2 month lookback)
+  2. Prepare features and labels
+  3. Train classifier (threshold optimized on val)
+  4. Train regressor (gated on binding samples)
+  5. Load target-month test data
+  6. Evaluate on test data
+  7. Return results
 
 CLI usage::
 
@@ -22,11 +31,12 @@ from typing import Any
 
 import numpy as np
 
-from ml.config import PipelineConfig, RegressorConfig
-from ml.data_loader import load_data
+from ml.config import PipelineConfig
+from ml.data_loader import load_data, load_test_data
 from ml.evaluate import evaluate_pipeline
 from ml.features import (
     compute_binary_labels,
+    compute_interaction_features,
     compute_regression_target,
     prepare_clf_features,
     prepare_reg_features,
@@ -56,16 +66,17 @@ def run_pipeline(
     period_type: str,
     from_phase: int = 1,
 ) -> dict[str, Any]:
-    """Run the 6-phase shadow-price pipeline.
+    """Run the 7-phase shadow-price pipeline.
 
     Phases
     ------
-    1. Load data (train_df, val_df)
+    1. Load train/val data (for model training)
     2. Prepare features and labels
-    3. Train classifier (frozen config)
-    4. Train regressor (gated or unified)
-    5. Evaluate on validation set
-    6. Return results
+    3. Train classifier (threshold optimized on val)
+    4. Train regressor (gated on binding samples)
+    5. Load target-month test data
+    6. Evaluate on test data
+    7. Return results
 
     Parameters
     ----------
@@ -80,7 +91,7 @@ def run_pipeline(
     period_type : str
         Period type, e.g. "f0" or "monthly".
     from_phase : int
-        Phase to start from (1-6) for crash recovery.
+        Phase to start from (1-7) for crash recovery.
 
     Returns
     -------
@@ -95,6 +106,7 @@ def run_pipeline(
     # State variables populated across phases
     train_df = None
     val_df = None
+    test_df = None
     X_train_clf = None
     y_train_binary = None
     X_val_clf = None
@@ -106,19 +118,23 @@ def run_pipeline(
     reg_model = None
     metrics: dict[str, Any] = {}
 
-    # ── Phase 1: Load data ──────────────────────────────────────────────
+    # ── Phase 1: Load train/val data ─────────────────────────────────────
     if from_phase <= 1:
-        print(f"[phase 1] Loading data ... (mem={mem_mb():.0f} MB)")
+        print(f"[phase 1] Loading train/val data ... (mem={mem_mb():.0f} MB)")
         train_df, val_df = load_data(config, auction_month, class_type, period_type)
         print(f"[phase 1] train={len(train_df)} val={len(val_df)} "
               f"(mem={mem_mb():.0f} MB)")
 
-    # ── Phase 2: Prepare features ───────────────────────────────────────
+    # ── Phase 2: Prepare features ────────────────────────────────────────
     if from_phase <= 2:
         assert train_df is not None and val_df is not None, (
             "Phase 2 requires Phase 1 data. Use from_phase <= 1."
         )
         print(f"[phase 2] Preparing features ... (mem={mem_mb():.0f} MB)")
+
+        # Compute interaction features on train/val
+        train_df = compute_interaction_features(train_df)
+        val_df = compute_interaction_features(val_df)
 
         # Classifier features
         X_train_clf, _ = prepare_clf_features(train_df, config.classifier)
@@ -128,7 +144,7 @@ def run_pipeline(
         y_train_binary = compute_binary_labels(train_df)
         y_val_binary = compute_binary_labels(val_df)
 
-        # Regressor features (from train only -- val prepared later)
+        # Regressor features (from train only)
         X_train_reg, _ = prepare_reg_features(train_df, config.regressor)
 
         # Regression target (from train only)
@@ -140,7 +156,7 @@ def run_pipeline(
               f"binding_train={n_binding_train} "
               f"(mem={mem_mb():.0f} MB)")
 
-    # ── Phase 3: Train classifier (frozen config) ───────────────────────
+    # ── Phase 3: Train classifier ────────────────────────────────────────
     if from_phase <= 3:
         assert X_train_clf is not None and y_train_binary is not None, (
             "Phase 3 requires Phase 2 features. Use from_phase <= 2."
@@ -155,7 +171,11 @@ def run_pipeline(
         )
         print(f"[phase 3] threshold={threshold:.4f} (mem={mem_mb():.0f} MB)")
 
-    # ── Phase 4: Train regressor ────────────────────────────────────────
+        # Free val features (only needed for threshold optimization)
+        del X_val_clf, y_val_binary
+        gc.collect()
+
+    # ── Phase 4: Train regressor ─────────────────────────────────────────
     if from_phase <= 4:
         assert X_train_reg is not None and y_train_reg is not None, (
             "Phase 4 requires Phase 2 features. Use from_phase <= 2."
@@ -168,12 +188,10 @@ def run_pipeline(
         unified = config.regressor.unified_regressor
 
         if unified:
-            # Unified mode: train on ALL samples
             print("[phase 4] mode=unified (all samples)")
             X_reg_fit = X_train_reg
             y_reg_fit = y_train_reg
         else:
-            # Gated mode: train only on binding samples
             binding_mask = y_train_binary == 1
             n_binding = int(np.sum(binding_mask))
 
@@ -194,65 +212,71 @@ def run_pipeline(
         print(f"[phase 4] regressor trained (mem={mem_mb():.0f} MB)")
 
         # Free training data
-        del X_reg_fit, y_reg_fit
+        del X_reg_fit, y_reg_fit, X_train_reg, y_train_reg, X_train_clf
+        del train_df, val_df
         gc.collect()
 
-    # ── Phase 5: Evaluate on validation set ─────────────────────────────
+    # ── Phase 5: Load target-month test data ─────────────────────────────
     if from_phase <= 5:
+        print(f"[phase 5] Loading test data ... (mem={mem_mb():.0f} MB)")
+        test_df = load_test_data(config, auction_month, class_type, period_type)
+        test_df = compute_interaction_features(test_df)
+        print(f"[phase 5] test={len(test_df)} (mem={mem_mb():.0f} MB)")
+
+    # ── Phase 6: Evaluate on test data ───────────────────────────────────
+    if from_phase <= 6:
         assert clf_model is not None and reg_model is not None, (
-            "Phase 5 requires trained models. Use from_phase <= 3."
+            "Phase 6 requires trained models. Use from_phase <= 4."
         )
-        assert val_df is not None, (
-            "Phase 5 requires validation data. Use from_phase <= 1."
+        assert test_df is not None, (
+            "Phase 6 requires test data. Use from_phase <= 5."
         )
-        print(f"[phase 5] Evaluating ... (mem={mem_mb():.0f} MB)")
+        print(f"[phase 6] Evaluating on test data ... (mem={mem_mb():.0f} MB)")
 
-        # Classifier probabilities on val
-        val_proba = predict_proba(clf_model, X_val_clf)
+        # Classifier features + probabilities on test
+        X_test_clf, _ = prepare_clf_features(test_df, config.classifier)
+        test_proba = predict_proba(clf_model, X_test_clf)
+        del X_test_clf
 
-        # Regressor features on val
-        X_val_reg, _ = prepare_reg_features(val_df, config.regressor)
-
-        # Regressor predictions on val
+        # Regressor features + predictions on test
+        X_test_reg, _ = prepare_reg_features(test_df, config.regressor)
         unified = config.regressor.unified_regressor
 
         if unified:
-            # Unified: predict on all val samples
-            val_shadow = predict_shadow_price(reg_model, X_val_reg)
+            test_shadow = predict_shadow_price(reg_model, X_test_reg)
         else:
-            # Gated: only predict on samples above classifier threshold
-            val_shadow = np.zeros(len(val_df), dtype=np.float64)
-            above_mask = val_proba >= threshold
+            test_shadow = np.zeros(len(test_df), dtype=np.float64)
+            above_mask = test_proba >= threshold
             if np.any(above_mask):
-                val_shadow[above_mask] = predict_shadow_price(
-                    reg_model, X_val_reg[above_mask]
+                test_shadow[above_mask] = predict_shadow_price(
+                    reg_model, X_test_reg[above_mask]
                 )
+        del X_test_reg
 
         # EV scores
         if config.ev_scoring:
-            ev_scores = val_proba * val_shadow
+            ev_scores = test_proba * test_shadow
         else:
-            ev_scores = val_shadow.copy()
+            ev_scores = test_shadow.copy()
 
         # Actual shadow prices
-        actual = val_df["actual_shadow_price"].to_numpy().astype(np.float64)
+        actual = test_df["actual_shadow_price"].to_numpy().astype(np.float64)
 
         # Evaluate
         metrics = evaluate_pipeline(
             actual_shadow_price=actual,
-            pred_proba=val_proba,
-            pred_shadow_price=val_shadow,
+            pred_proba=test_proba,
+            pred_shadow_price=test_shadow,
             ev_scores=ev_scores,
         )
 
-        # Free intermediates
-        del X_val_reg, val_proba, val_shadow, ev_scores, actual
+        del test_proba, test_shadow, ev_scores, actual, test_df
         gc.collect()
 
-        print(f"[phase 5] evaluation complete (mem={mem_mb():.0f} MB)")
+        print(f"[phase 6] evaluation complete (mem={mem_mb():.0f} MB)")
 
-    # ── Phase 6: Return results ─────────────────────────────────────────
-    print(f"[phase 6] Pipeline complete (mem={mem_mb():.0f} MB)")
+    # ── Phase 7: Return results ──────────────────────────────────────────
+    print(f"[phase 7] Pipeline complete (mem={mem_mb():.0f} MB)")
     print("[metrics]")
     for key, value in metrics.items():
         if isinstance(value, float):
@@ -306,7 +330,7 @@ def _apply_config_overrides(
 
     Supports top-level fields (train_months, val_months, ev_scoring)
     and nested regressor fields via "regressor" key.
-    Classifier overrides are ignored (frozen config).
+    Supports classifier overrides via "classifier" key.
     """
     overrides = json.loads(overrides_json)
 

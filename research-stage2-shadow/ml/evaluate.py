@@ -1,14 +1,16 @@
-"""EV-based evaluation harness (HUMAN-WRITE-ONLY).
+"""Evaluation harness for shadow-price prediction pipeline.
 
-Provides threshold-independent metrics for shadow-price prediction,
-centred on Expected Value (EV) score ranking rather than binary
-classification thresholds.
+Stage 1 metrics: classifier quality (AUC, AP, Brier, S1-VCAP@K, S1-NDCG).
+Stage 2 metrics: EV-based ranking (EV-VC@K, EV-NDCG, Spearman, C-RMSE/MAE).
+
+All metrics are threshold-independent.
 """
 
 from __future__ import annotations
 
 import numpy as np
 from scipy.stats import spearmanr
+from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 
 # Metrics where lower values are better (worst month = highest value).
 _LOWER_IS_BETTER = {"C-RMSE", "C-MAE"}
@@ -110,40 +112,91 @@ def _recall_at_k(
     return float(binding_in_top_k / n_binding)
 
 
-def evaluate_pipeline(
+def evaluate_classifier(
     actual_shadow_price: np.ndarray,
     pred_proba: np.ndarray,
-    pred_shadow_price: np.ndarray,
-    ev_scores: np.ndarray,
 ) -> dict:
-    """Compute EV-based, threshold-independent evaluation metrics.
+    """Compute stage-1 classifier quality metrics (threshold-independent).
 
     Parameters
     ----------
     actual_shadow_price : np.ndarray
         Ground-truth shadow prices.
     pred_proba : np.ndarray
-        Predicted binding probabilities (unused for EV metrics but
-        part of the pipeline interface).
-    pred_shadow_price : np.ndarray
-        Predicted shadow prices.
-    ev_scores : np.ndarray
-        Expected-value scores for ranking.
+        Predicted binding probabilities from classifier.
 
     Returns
     -------
     dict
-        Dictionary with Group A (blocking), Group B (monitor), and
+        Stage-1 metrics: AUC, AP, Brier, S1-VCAP@100, S1-VCAP@500, S1-NDCG.
+    """
+    binary = (actual_shadow_price > 0).astype(int)
+    n_pos = int(binary.sum())
+
+    if n_pos == 0 or n_pos == len(binary):
+        # Degenerate: all one class
+        return {
+            "AUC": 0.0, "AP": 0.0, "Brier": 1.0,
+            "S1-VCAP@100": 0.0, "S1-VCAP@500": 0.0, "S1-NDCG": 0.0,
+        }
+
+    auc = float(roc_auc_score(binary, pred_proba))
+    ap = float(average_precision_score(binary, pred_proba))
+    brier = float(brier_score_loss(binary, pred_proba))
+
+    # S1-VCAP@K: value capture using probability ranking (not EV)
+    s1_vcap_100 = _value_capture_at_k(actual_shadow_price, pred_proba, 100)
+    s1_vcap_500 = _value_capture_at_k(actual_shadow_price, pred_proba, 500)
+
+    # S1-NDCG: NDCG using probability ranking
+    s1_ndcg = _ndcg(actual_shadow_price, pred_proba)
+
+    return {
+        "AUC": auc,
+        "AP": ap,
+        "Brier": brier,
+        "S1-VCAP@100": s1_vcap_100,
+        "S1-VCAP@500": s1_vcap_500,
+        "S1-NDCG": s1_ndcg,
+    }
+
+
+def evaluate_pipeline(
+    actual_shadow_price: np.ndarray,
+    pred_proba: np.ndarray,
+    pred_shadow_price: np.ndarray,
+    ev_scores: np.ndarray,
+) -> dict:
+    """Compute all evaluation metrics (stage-1 + stage-2).
+
+    Parameters
+    ----------
+    actual_shadow_price : np.ndarray
+        Ground-truth shadow prices.
+    pred_proba : np.ndarray
+        Predicted binding probabilities from classifier.
+    pred_shadow_price : np.ndarray
+        Predicted shadow prices from regressor.
+    ev_scores : np.ndarray
+        Expected-value scores (prob × shadow_price) for ranking.
+
+    Returns
+    -------
+    dict
+        Combined stage-1 classifier metrics + stage-2 EV-based metrics +
         monitoring metrics.
     """
     n = len(actual_shadow_price)
     binding_mask = actual_shadow_price > 0
     n_binding = int(binding_mask.sum())
 
+    # --- Stage 1: classifier quality ---
+    s1_metrics = evaluate_classifier(actual_shadow_price, pred_proba)
+
     # --- Monitoring ---
     binding_rate = float(n_binding / n) if n > 0 else 0.0
 
-    # --- Group A: EV-based, threshold-independent ---
+    # --- Stage 2 Group A: EV-based, threshold-independent ---
     ev_vc_100 = _value_capture_at_k(actual_shadow_price, ev_scores, 100)
     ev_vc_500 = _value_capture_at_k(actual_shadow_price, ev_scores, 500)
     ev_ndcg = _ndcg(actual_shadow_price, ev_scores)
@@ -156,7 +209,7 @@ def evaluate_pipeline(
         corr, _ = spearmanr(binding_actual, binding_pred)
         spearman_val = float(corr) if not np.isnan(corr) else 0.0
 
-    # --- Group B: monitor ---
+    # --- Stage 2 Group B: monitor ---
     if n_binding == 0:
         c_rmse = 0.0
         c_mae = 0.0
@@ -171,12 +224,14 @@ def evaluate_pipeline(
     r_rec_500 = _recall_at_k(actual_shadow_price, ev_scores, 500)
 
     return {
-        # Group A (blocking)
+        # Stage 1 (classifier quality)
+        **s1_metrics,
+        # Stage 2 Group A (blocking)
         "EV-VC@100": ev_vc_100,
         "EV-VC@500": ev_vc_500,
         "EV-NDCG": ev_ndcg,
         "Spearman": spearman_val,
-        # Group B (monitor)
+        # Stage 2 Group B (monitor)
         "C-RMSE": c_rmse,
         "C-MAE": c_mae,
         "EV-VC@1000": ev_vc_1000,

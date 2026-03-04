@@ -11,6 +11,49 @@ import polars as pl
 
 from ml.config import ClassifierConfig, RegressorConfig
 
+# Interaction features required by v0011 classifier (29-feature set).
+_INTERACTION_FEATURES = {
+    "hist_physical_interaction",
+    "overload_exceedance_product",
+    "band_severity",
+    "sf_exceed_interaction",
+    "hist_seasonal_band",
+}
+
+
+def compute_interaction_features(df: pl.DataFrame) -> pl.DataFrame:
+    """Compute derived interaction features from raw columns.
+
+    These five features are products of raw MisoDataLoader columns and
+    are required by v0011's 29-feature classifier config.  The function
+    is idempotent — if the columns already exist they are overwritten.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        Must contain the raw source columns: ``hist_da``,
+        ``prob_exceed_100``, ``expected_overload``, ``prob_exceed_105``,
+        ``prob_band_95_100``, ``sf_max_abs``, ``hist_da_max_season``,
+        ``prob_band_100_105``.
+
+    Returns
+    -------
+    pl.DataFrame
+        Copy of *df* with the five interaction columns added/replaced.
+    """
+    return df.with_columns([
+        (pl.col("hist_da") * pl.col("prob_exceed_100"))
+            .alias("hist_physical_interaction"),
+        (pl.col("expected_overload") * pl.col("prob_exceed_105"))
+            .alias("overload_exceedance_product"),
+        (pl.col("prob_band_95_100") * pl.col("expected_overload"))
+            .alias("band_severity"),
+        (pl.col("sf_max_abs") * pl.col("prob_exceed_100"))
+            .alias("sf_exceed_interaction"),
+        (pl.col("hist_da_max_season") * pl.col("prob_band_100_105"))
+            .alias("hist_seasonal_band"),
+    ])
+
 
 def prepare_clf_features(
     df: pl.DataFrame,
@@ -21,7 +64,7 @@ def prepare_clf_features(
     Returns
     -------
     X : np.ndarray
-        Feature matrix of shape ``(n_rows, 13)`` with nulls filled to 0.0.
+        Feature matrix with nulls filled to 0.0.
     monotone : list[int]
         Monotone constraint values aligned with columns of *X*.
     """
@@ -45,7 +88,7 @@ def prepare_reg_features(
     Returns
     -------
     X : np.ndarray
-        Feature matrix of shape ``(n_rows, 24)`` with nulls filled to 0.0.
+        Feature matrix with nulls filled to 0.0.
     monotone : list[int]
         Monotone constraint values aligned with columns of *X*.
     """

@@ -14,7 +14,7 @@ import os
 import resource
 from pathlib import Path
 
-from ml.config import PipelineConfig, RegressorConfig
+from ml.config import PipelineConfig
 from ml.evaluate import aggregate_months
 from ml.pipeline import run_pipeline
 

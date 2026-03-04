@@ -1,39 +1,27 @@
 ## Critique Summary
 
-### Iter 1 — smoke-test batch (Worker Failed)
-Worker phantom-completed without producing artifacts. No reviews generated.
+### Iter 1 — ralph-v2-20260304-031811 (v0005, WORKER SUCCESS)
 
-### Iter 1 — ralph-v1 batch (Worker Failed)
-Worker ignored direction entirely — made unauthorized changes to frozen classifier, evaluate.py (HUMAN-WRITE-ONLY), and 6 other files. No pipeline run, no metrics, no reviews. Uncommitted changes contaminated working tree (v0 registry, gates.json, config.py all dirtied).
+**Claude Review**:
+- v0005 is a genuine, consistent improvement: EV-VC@100 +6.5%, EV-VC@500 +5.9%, C-RMSE -7.2%
+- 9/12 months improved on EV-VC@100; gains largest on weak months (consistent with L2 hypothesis)
+- Spearman -0.0008 is noise (t-stat ≈ -0.5, all per-month deltas within ±0.003)
+- Gate calibration is dysfunctional: floors at v0 exact mean, v0 fails its own gates on EV-VC@100 and EV-NDCG
+- Hypothesis B diagnosis: 0.6 subsampling starved trees of signal. Moderate 0.7 could be retested later.
+- Recommends: gate recalibration (priority 1), then lr/trees interaction with L2, moderate subsampling, value-weighted
+- Clean code review: 2 files, 4 lines, no bugs, no scope violations
 
-### Iter 2 — ralph-v1 batch (Worker Partial Success, WORKER_FAILED=1)
-Worker produced valid v0003 on worktree branch (commit `01c22af`). **No reviews were generated** — WORKER_FAILED=1 triggered before review stage.
+**Codex Review**:
+- Similar assessment: EV-VC gates improved, Spearman L1 blocks by 0.0008
+- **HIGH code finding**: Train-inference mismatch in gated mode — regressor trains on true binding labels (`y_train_binary == 1`) but inferences on classifier predictions. Selection leakage that could bias fitting.
+- **MEDIUM code findings**: Feature importance pipeline wired but never populated; frozen-classifier guardrails are weak in code/tests
+- Spearman degraded in 9/12 months (opposite pattern to EV-VC improving in 9/12) — L2 compresses predictions, helping value capture but slightly hurting rank correlation
+- Recommends: narrow reg_lambda/mcw sweep, fix gated training leakage, explicit feature importance export
+- Gate calibration: noise_tolerance=0.02 is not scale-aware (C-RMSE at ~3000 scale makes 0.02 meaningless)
 
-**Direction quality assessment:**
-- Direction was well-structured with DO NOT MODIFY list, exact commands, verification checkpoints
-- Worker followed direction correctly on the worktree branch — executed screen, picked winner, ran benchmark
-- **Critical error**: Direction referenced DIRTY v0 baseline (EV-VC@100=0.069, 34 features) instead of committed v0 (EV-VC@100=0.030, 24 features). Orchestrator read dirty working-tree files instead of committed state.
-- Despite wrong reference numbers, worker execution was correct — worktrees start from committed state
-- Infrastructure failure: worktree results didn't merge to main → WORKER_FAILED=1
-
-### Iter 3 — ralph-v1 batch (Worker Partial Success, WORKER_FAILED=1)
-Worker produced valid v0004 on worktree branch (commit `fca00aa`). **No reviews were generated** — WORKER_FAILED=1 triggered before review stage.
-
-**Worker execution quality:**
-- Worker correctly reverted dirty state (Step 0 in direction)
-- Screened both hypotheses on specified screen months (2022-09 + 2021-01)
-- B (depth=3 + L2) won decisively over A (lr+trees + L2): EV-VC@100 0.0355 vs 0.0307
-- Made minimal code changes: only config.py defaults and test_config.py
-- Ran full 12-month benchmark, committed cleanly on worktree branch
-- Same infra failure: worktree results didn't merge to main
-
-**Direction quality assessment:**
-- Direction was well-structured with correct v0 reference numbers (drawn from memory, not dirty working tree)
-- Two-hypothesis screen with explicit winner criteria worked correctly
-- Mandatory revert step (Step 0) was followed
-- Worker compliance: 100% — all constraints respected, no unauthorized changes
-
-**Across-batch summary:**
-- 0 of 3 iterations produced reviews (all WORKER_FAILED=1)
-- Iters 2 and 3 had correct worker execution; failure is infrastructure (worktree→main merge), not direction or worker quality
-- Direction quality improved each iteration: iter 1 (too loose) → iter 2 (good but wrong baseline numbers) → iter 3 (correct)
+**Synthesis**:
+1. **Both agree**: v0005 is a clear improvement, Spearman failure is a calibration artifact, gates need recalibration
+2. **Key divergence**: Codex surfaces a pipeline-level train-inference mismatch (gated mode trains on true labels, infers on classifier predictions). This is a real issue but affects v0 equally — it's structural, not a v0005 regression. Out of scope for config-only changes.
+3. **Codex's Spearman pattern observation** (degraded 9/12 months) is sharper than Claude's (only noted the mean shift). The L2-compresses-predictions → helps-value-capture → hurts-rank-correlation mechanism is a real tradeoff. Future directions should monitor this.
+4. **Neither reviewer** suggests classifier changes (correctly respecting the freeze)
+5. **Action items for code**: Feature importance export, classifier freeze guardrails, train-inference mismatch fix — all are pipeline improvements for future batches, not this iteration

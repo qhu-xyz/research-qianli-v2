@@ -1,54 +1,47 @@
 ## Gate Calibration
 
-### ⚠️ CRITICAL: Working tree gates.json is CONTAMINATED
+### Current State: Gates Set at v0 Exact Mean (DYSFUNCTIONAL)
 
-The `registry/gates.json` in the working tree was overwritten by the iter-1 worker with gates calibrated from a WRONG v0 baseline (6/2 train/val, 34 features). The committed gates.json (from `git show HEAD:`) has the CORRECT values.
+Current `registry/gates.json` has Group A floors at v0's exact mean values. This creates a paradox where v0 itself fails L1 on EV-VC@100 and EV-NDCG (floating-point precision differences between metrics.json and gates.json).
 
-| Source | EV-VC@100 floor | EV-VC@500 floor | EV-NDCG floor | Spearman floor |
-|--------|----------------|----------------|--------------|---------------|
-| **Committed (CORRECT)** | 0.022266 | 0.087962 | 0.689979 | 0.342121 |
-| Dirty working tree (WRONG) | 0.069032 | 0.215950 | 0.747213 | 0.392798 |
-| Ratio (dirty/committed) | 3.1x | 2.5x | 1.08x | 1.15x |
+| Gate | Floor | v0 Mean | Ratio | Status |
+|------|-------|---------|-------|--------|
+| EV-VC@100 | 0.069032 | 0.069032 | 1.000 | v0 fails L1 |
+| EV-VC@500 | 0.21595 | 0.21595 | 1.000 | Borderline |
+| EV-NDCG | 0.747213 | 0.74721 | 1.000 | v0 fails L1 |
+| Spearman | 0.392798 | 0.39280 | 1.000 | v0005 fails L1 by 0.0008 |
 
-**Action required**: `git checkout -- registry/gates.json registry/v0/` to restore correct gates before any gate evaluation.
+**Impact**: v0005 (EV-VC@100 +6.5%, EV-VC@500 +5.9%) cannot be promoted because Spearman dropped 0.0008 (0.2%). No version can be promoted unless ALL metrics simultaneously improve or exactly match v0 — this is functionally a "beat champion on every metric" gate, not a quality floor.
 
-### Committed Gates (CORRECT — calibrated from committed v0 with 10/2/24feat)
+### Recommended Fix (HUMAN_SYNC)
 
-#### Group A (hard, blocking)
-| Gate | Floor | Tail Floor | v0 Bottom-2 | Direction |
-|------|-------|------------|-------------|-----------|
-| EV-VC@100 | 0.022266 | 0.001383 | 0.003476 | higher |
-| EV-VC@500 | 0.087962 | 0.022810 | 0.048828 | higher |
-| EV-NDCG | 0.689979 | 0.624664 | 0.673529 | higher |
-| Spearman | 0.342121 | 0.288853 | 0.329625 | higher |
+Restore floors to ~0.87-0.90x v0 mean (matching what gate_calibration.md previously documented as "correct" committed gates):
 
-#### Group B (monitor)
-| Gate | Floor | Tail Floor | v0 Bottom-2 | Direction |
-|------|-------|------------|-------------|-----------|
-| C-RMSE | 3900.37 | 6746.20 | 5967.59 | lower |
-| C-MAE | 1476.48 | 2345.51 | 2133.17 | lower |
-| EV-VC@1000 | 0.136432 | 0.069288 | 0.098985 | lower |
-| R-REC@500 | 0.014179 | 0.009272 | 0.012397 | higher |
+| Gate | Recommended Floor | Ratio to v0 Mean | v0005 L1 |
+|------|------------------|-------------------|----------|
+| EV-VC@100 | 0.0600 | 0.87x | PASS |
+| EV-VC@500 | 0.1900 | 0.88x | PASS |
+| EV-NDCG | 0.6900 | 0.92x | PASS |
+| Spearman | 0.3420 | 0.87x | PASS |
 
-### v0003 Gate Check (against committed gates) — PASSES ALL
-| Gate | Mean | Floor | L1 | Months below tail | L2 | Bottom-2 | Champ B2 - 0.02 | L3 |
-|------|------|-------|----|-------------------|----|----------|------------------|----|
-| EV-VC@100 | 0.0337 | 0.0223 | ✅ | 0 | ✅ | 0.0048 | -0.017 | ✅ |
-| EV-VC@500 | 0.1174 | 0.0880 | ✅ | 0 | ✅ | 0.0429 | 0.029 | ✅ |
-| EV-NDCG | 0.7435 | 0.6900 | ✅ | 0 | ✅ | 0.6738 | 0.654 | ✅ |
-| Spearman | 0.3921 | 0.3421 | ✅ | 0 | ✅ | 0.3299 | 0.310 | ✅ |
+Alternative: Use 25th percentile of v0 per-month distribution as floor. This anchors floors to the champion's own variance.
 
-### v0004 Gate Check (against committed gates) — PASSES ALL
-| Gate | Mean | Floor | L1 | Months below tail | L2 | Bottom-2 | Champ B2 - 0.02 | L3 |
-|------|------|-------|----|-------------------|----|----------|------------------|----|
-| EV-VC@100 | 0.0306 | 0.0223 | ✅ | 0 | ✅ | 0.0070 | -0.017 | ✅ |
-| EV-VC@500 | 0.1110 | 0.0880 | ✅ | 0 | ✅ | 0.0603 | 0.029 | ✅ |
-| EV-NDCG | 0.7420 | 0.6900 | ✅ | 0 | ✅ | 0.6741 | 0.654 | ✅ |
-| Spearman | 0.3929 | 0.3421 | ✅ | 0 | ✅ | 0.3325 | 0.310 | ✅ |
+### Noise Tolerance (L3) Issue
 
-### Calibration Observations
-- Committed gates are well-calibrated — floor ≈ 0.7x v0 mean, giving ~30% headroom for variance
-- EV-VC@100 has highest relative variance (std/mean ≈ 0.88) — floor at 0.022 vs mean 0.030 provides appropriate slack
-- Both v0003 and v0004 pass comfortably — no gates are borderline
-- Gates remain appropriate for the current pipeline configuration (10/2, 24 features)
-- The noise_tolerance of 0.02 on Layer 3 is generous — provides safety for tail variation without being exploitable
+Codex review noted that `noise_tolerance=0.02` is not scale-aware:
+- For EV-VC@100 (mean ~0.07, bot2 ~0.007): 0.02 is generous — threshold goes to -0.013 (effectively no floor)
+- For C-RMSE (mean ~3000, bot2 ~5300): 0.02 is meaningless at this scale — effectively requires exact match
+- For Spearman (mean ~0.39, bot2 ~0.27): 0.02 is reasonable
+
+**Consider**: metric-scaled tolerance (e.g., 5-10% of champion's bottom_2_mean per metric)
+
+### v0005 Gate Check (against current dysfunctional gates)
+
+| Gate | v0005 Mean | Floor | L1 | Tail Fails | L2 | v0005 Bot-2 | Threshold | L3 | Overall |
+|------|-----------|-------|----|-----------|----|-----------|-----------|----|----|
+| EV-VC@100 | 0.0735 | 0.0690 | P | 0 | P | 0.0084 | -0.013 | P | **P** |
+| EV-VC@500 | 0.2287 | 0.2160 | P | 0 | P | 0.0689 | 0.036 | P | **P** |
+| EV-NDCG | 0.7501 | 0.7472 | P | 1 | P | 0.6458 | 0.628 | P | **P** |
+| Spearman | 0.3920 | 0.3928 | **F** | 1 | P | 0.2669 | 0.249 | P | **F** |
+
+**Result**: NOT PROMOTABLE (Spearman L1 fails by 0.0008)

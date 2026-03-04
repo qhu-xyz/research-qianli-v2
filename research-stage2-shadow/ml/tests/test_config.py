@@ -65,21 +65,26 @@ class TestClassifierConfig:
 
 class TestRegressorConfig:
     def test_regressor_config_defaults(self):
-        """Verify 34 features, constraints, hyperparams, unified_regressor=False."""
+        """Verify 39 features, constraints, hyperparams, unified_regressor=False."""
         cfg = RegressorConfig()
 
-        # 34 features: 29 v1 clf + 5 additional
-        assert len(cfg.features) == 34
+        # 39 features: 29 v1 clf + 10 additional
+        assert len(cfg.features) == 39
 
-        # Last 5 must be the additional regressor-only features
+        # Last 10 must be the additional regressor-only features
         additional_features = [
             "prob_exceed_85",
             "prob_exceed_80",
             "recent_hist_da",
             "season_hist_da_1",
             "season_hist_da_2",
+            "density_skewness",
+            "density_kurtosis",
+            "density_cv",
+            "season_hist_da_3",
+            "prob_below_85",
         ]
-        assert cfg.features[-5:] == additional_features
+        assert cfg.features[-10:] == additional_features
 
         # monotone constraints length matches features
         assert len(cfg.monotone_constraints) == len(cfg.features)

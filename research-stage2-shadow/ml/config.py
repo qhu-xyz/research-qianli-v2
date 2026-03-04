@@ -97,12 +97,20 @@ _ALL_REGRESSOR_FEATURES: list[str] = _V1_CLF_FEATURES + [
     "recent_hist_da",
     "season_hist_da_1",
     "season_hist_da_2",
+    "density_skewness",
+    "density_kurtosis",
+    "density_cv",
+    "season_hist_da_3",
+    "prob_below_85",
 ]
 
 _ALL_REGRESSOR_MONOTONE: list[int] = _V1_CLF_MONOTONE + [
     1, 1,     # prob_exceed_85, prob_exceed_80
     1,        # recent_hist_da
     1, 1,     # season_hist_da_1, season_hist_da_2
+    0, 0, 0,  # density_skewness, density_kurtosis, density_cv
+    1,        # season_hist_da_3
+    -1,       # prob_below_85
 ]
 
 

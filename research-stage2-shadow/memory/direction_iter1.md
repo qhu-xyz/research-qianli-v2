@@ -1,98 +1,105 @@
-# Direction — Iteration 1 (ralph-v1-20260304-003317)
+# Direction — Iteration 1 (batch ralph-v2-20260304-031811)
 
-## Goal
-Establish whether basic hyperparameter tuning of the regressor can improve over v0 baseline. Both hypotheses are pure `--overrides` changes — no code modifications needed for screening or full benchmark.
+## Context
 
-## v0 Baseline Summary (champion)
-- Regressor: XGBoost 400 trees, max_depth=5, lr=0.05, reg_lambda=1.0, min_child_weight=10
-- Mode: gated (binding-only), no value weighting
-- 34 features, full monotone constraints
-- Means: EV-VC@100=0.069, EV-VC@500=0.216, EV-NDCG=0.747, Spearman=0.393
-- Catastrophic months: 2022-06 (universal worst), 2021-05 (near-zero EV-VC@100)
+Champion is **v0** (baseline, 6/2 train/val, 34 features, default regressor hyperparams).
 
----
+Previous batch (ralph-v1) found L2 regularization (reg_lambda=5, mcw=25) to be the single best lever (+11% EV-VC@100 mean in 10/2/24feat config). That finding was never promoted to main due to infrastructure issues. This iteration re-validates L2 in the current 6/2/34feat pipeline config and tests whether row/column subsampling provides additional benefit.
 
-## Hypothesis A (Primary): Slower learning rate + more trees
+### v0 Baseline (current champion)
 
-**Rationale**: v0 uses lr=0.05 with 400 trees. Reducing lr to 0.03 with 700 trees creates a smoother, higher-capacity ensemble that should reduce overfitting on training windows. The lr×n_estimators product increases from 20 to 21, maintaining similar total learning while distributing it across more, smaller steps. This is the safest variance-reduction move — standard ML practice for improving generalization on tail months.
-
-**Expected effect**: Modest improvement on tail months (2022-06, 2021-05, 2022-09) through better generalization. Should not regress on strong months.
-
-**Overrides**:
-```json
-{"regressor": {"learning_rate": 0.03, "n_estimators": 700}}
-```
+| Metric | Mean | Std | Min | Bottom-2 |
+|--------|------|-----|-----|----------|
+| EV-VC@100 | 0.0690 | 0.056 | 0.00011 | 0.0068 |
+| EV-VC@500 | 0.2160 | 0.111 | 0.0407 | 0.0558 |
+| EV-NDCG | 0.7472 | 0.060 | 0.6045 | 0.6476 |
+| Spearman | 0.3928 | 0.071 | 0.2649 | 0.2689 |
 
 ---
 
-## Hypothesis B (Alternative): Heavier L2 regularization + larger leaves
+## Hypothesis A (primary) — L2 Regularization
 
-**Rationale**: v0 uses reg_lambda=1.0 and min_child_weight=10. Increasing reg_lambda to 5.0 and min_child_weight to 25 constrains the model more aggressively — preventing the regressor from fitting noisy leaf-level patterns in small binding subsets. The catastrophic months (2022-06 with C-RMSE=5918) suggest the model overfits on some training windows. Heavier regularization is a different lever than ensemble smoothing (Hypothesis A) and targets the same root cause (overfitting) through a different mechanism (penalty-based vs averaging-based).
+**What**: Increase L2 penalty and minimum leaf weight to constrain overfitting on small binding subsets.
 
-**Expected effect**: Reduced variance on tail months at possible cost of slightly lower peak performance. Should help C-RMSE/C-MAE (monitored) and may improve EV metrics on bad months.
+**Rationale**: L2 regularization was the strongest lever found in the previous batch (reg_lambda 1.0→5.0, mcw 10→25). With 34 features and only 6 months of training data (~10k binding samples/month), overfitting is the primary quality limiter. L2 shrinkage constrains extreme leaf weights that cause mis-ranking on out-of-sample months.
 
 **Overrides**:
 ```json
 {"regressor": {"reg_lambda": 5.0, "min_child_weight": 25}}
 ```
 
+**Expected impact**: +5-15% EV-VC@100 mean, improved tail safety (bottom-2). Previous batch saw +11% mean and +37% bottom-2 in a 10/2/24feat config; effect should be similar or stronger with 34 features (more overfitting surface for L2 to control).
+
+**Risk**: Low — confirmed across 12 months in previous batch (different config but same mechanism).
+
+---
+
+## Hypothesis B (alternative) — L2 + Subsampling Reduction
+
+**What**: Combine L2 regularization with reduced row and column sampling to force tree diversity.
+
+**Rationale**: With 34 features, colsample_bytree=0.6 means each tree sees ~20 features — reducing co-adapted feature splits. With 6 months of training data, subsample=0.6 forces each tree to learn from a different 60% of the binding sample, improving generalization. This is a DIFFERENT regularization mechanism from L2 (diversity via randomization vs shrinkage via penalty). Unlike the ensemble smoothing approach (lr/trees) tested in the previous batch — which COMPETED with L2 — subsampling should COMPLEMENT L2 because they operate on different axes.
+
+**Overrides**:
+```json
+{"regressor": {"reg_lambda": 5.0, "min_child_weight": 25, "subsample": 0.6, "colsample_bytree": 0.6}}
+```
+
+**Expected impact**: Could add 3-8% on top of L2 alone, especially on weak months where the model overfits to idiosyncratic training patterns. If it works, this is strictly better than A.
+
+**Risk**: Medium — too aggressive subsampling (0.6 is 25% less data per tree) could starve trees of signal on already-small binding subsets. Could hurt strong months if the model needs full feature/sample access to capture the signal.
+
 ---
 
 ## Screen Months
 
-| Role | Month | Rationale |
-|------|-------|-----------|
-| **Weak** | 2022-06 | Universal worst: EV-NDCG=0.604, EV-VC@100=0.014, Spearman=0.273, C-RMSE=5918. Any improvement should show here first. |
-| **Strong** | 2022-12 | Best EV-VC@100=0.194, strong EV-NDCG=0.815, Spearman=0.385. Changes must NOT regress here. |
+**Weak month: 2022-06**
+- Consistently worst across ALL Group A gates: EV-NDCG=0.6045 (lowest), Spearman=0.2728 (2nd lowest), EV-VC@100=0.0136 (2nd lowest), EV-VC@500=0.0756 (2nd lowest)
+- Systemic weakness (not just one metric), making it ideal for detecting overall improvements
+- Also used as diagnostic month in previous batch — enables comparison
+
+**Strong month: 2022-12**
+- Strongest EV-VC@100 (0.1942), strong EV-NDCG (0.8153)
+- Regression canary: if a config hurts this month, the regularization is too aggressive
+- Also used in previous batch — enables comparison
 
 ---
 
 ## Winner Criteria
 
-1. **Primary**: Higher mean EV-VC@100 across the 2 screen months
-2. **Safety**: Spearman must not drop >0.05 on either screen month vs v0
-3. **Tiebreak**: If EV-VC@100 is within 0.005, prefer higher mean EV-NDCG
-4. **Both fail**: If both hypotheses regress EV-VC@100 mean below v0 on screen months, pick the one that regresses least and proceed to full benchmark anyway (we need data)
+1. **Primary**: Higher mean EV-VC@100 across the 2 screen months (2022-06 and 2022-12)
+2. **Tiebreak** (if EV-VC@100 difference < 0.002): Higher mean EV-NDCG across screen months
+3. **Override**: If the winner has Spearman drop > 0.05 below v0 on either screen month, pick the other hypothesis instead (rank correlation collapse is unacceptable)
+4. **Default**: If both are within noise of each other, prefer A (simpler config, lower risk)
 
 ---
 
 ## Code Changes for Winner
 
-**Neither hypothesis requires code changes.** Both are pure hyperparameter overrides.
+### If Hypothesis A wins
 
-For the winning config, the worker should:
-1. Update `ml/config.py` `RegressorConfig` defaults to match the winning hyperparameters
-2. That's it — no other file changes needed
+Update `ml/config.py` — `RegressorConfig` class defaults:
+- `reg_lambda: float = 1.0` → `reg_lambda: float = 5.0`
+- `min_child_weight: int = 10` → `min_child_weight: int = 25`
 
-Specifically:
-- **If A wins**: In `ml/config.py`, change `RegressorConfig` fields:
-  - `n_estimators: int = 400` → `n_estimators: int = 700`
-  - `learning_rate: float = 0.05` → `learning_rate: float = 0.03`
-- **If B wins**: In `ml/config.py`, change `RegressorConfig` fields:
-  - `reg_lambda: float = 1.0` → `reg_lambda: float = 5.0`
-  - `min_child_weight: int = 10` → `min_child_weight: int = 25`
+Update `tests/test_config.py` — adjust any assertions on default values.
 
----
+### If Hypothesis B wins
 
-## Expected Gate Impact
+Update `ml/config.py` — `RegressorConfig` class defaults:
+- `reg_lambda: float = 1.0` → `reg_lambda: float = 5.0`
+- `min_child_weight: int = 10` → `min_child_weight: int = 25`
+- `subsample: float = 0.8` → `subsample: float = 0.6`
+- `colsample_bytree: float = 0.8` → `colsample_bytree: float = 0.6`
 
-| Gate | v0 Mean | Direction | Expected Δ |
-|------|---------|-----------|------------|
-| EV-VC@100 | 0.069 | ↗ | +0.005 to +0.015 (better top-ranking from smoother predictions) |
-| EV-VC@500 | 0.216 | ↗ | +0.005 to +0.010 |
-| EV-NDCG | 0.747 | ↗ | +0.005 to +0.015 |
-| Spearman | 0.393 | → | ±0.01 (rank correlation is robust to smoothing) |
-| C-RMSE | 3133 | ↘ | -50 to -200 (reduced overfitting → lower error) |
-
-Layer 1 (mean quality) is tight — floor equals v0 mean. Even a small improvement passes. Layer 2 (tail safety) is permissive on EV-VC@100 (tail_floor=0.0001). Layer 3 (tail non-regression) needs bottom-2 months to stay within 0.02 of v0's bottom-2.
+Update `tests/test_config.py` — adjust any assertions on default values.
 
 ---
 
-## Risk Assessment
+## DO NOT MODIFY
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| Both hypotheses produce near-identical results to v0 | Medium | We still get data to calibrate next iteration; proceed to full benchmark with the marginal winner |
-| Slower lr + more trees increases training time significantly | Low | 700 trees at lr=0.03 adds ~75% more training time; still well within 35-min budget for 12 months |
-| Heavier regularization underfits, hurting strong months | Low-Medium | Screen month 2022-12 (strong) catches this; safety criterion protects against it |
-| Neither hypothesis helps the catastrophic months (structural issue, not overfitting) | Medium | If screen results on 2022-06 show no improvement, iter 2 should try value-weighted training (requires pipeline.py code change) or feature selection |
+- Any file in `ml/` other than `config.py` (and `tests/test_config.py` for test assertions)
+- `registry/gates.json`
+- `ml/evaluate.py`
+- Any classifier configuration (ClassifierConfig is FROZEN)
+- `state.json` (orchestrator manages this)

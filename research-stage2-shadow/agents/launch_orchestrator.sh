@@ -41,12 +41,13 @@ fi
 
 # Build the tmux command with full env setup
 # RT-12: timeout wrapper = OS-level hard kill if agent loops forever
+# RT-16: unset CLAUDECODE to avoid "nested session" detection when launched from Claude Code
 if [[ "$PHASE" == "synthesize" ]]; then
   HARD_TIMEOUT="${TIMEOUT_SYNTHESIZER}"
-  TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && { echo 'WORKER_FAILED=${WORKER_FAILED:-0}'; cat '${PROMPT}'; } | timeout ${HARD_TIMEOUT} claude --print --model opus --dangerously-skip-permissions > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+  TMUX_CMD="cd '${PROJECT_DIR}' && unset CLAUDECODE && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && { echo 'WORKER_FAILED=${WORKER_FAILED:-0}'; cat '${PROMPT}'; } | timeout ${HARD_TIMEOUT} claude --print --model opus --dangerously-skip-permissions > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 else
   HARD_TIMEOUT="${TIMEOUT_ORCHESTRATOR}"
-  TMUX_CMD="cd '${PROJECT_DIR}' && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${HARD_TIMEOUT} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+  TMUX_CMD="cd '${PROJECT_DIR}' && unset CLAUDECODE && export PYTHONPATH='${PROJECT_DIR}' && source '${VENV_ACTIVATE}' && timeout ${HARD_TIMEOUT} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 fi
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"

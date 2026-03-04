@@ -51,7 +51,8 @@ done
 
 # Worker runs in worktree's project subdir, needs PROJECT_DIR for absolute path access
 # RT-12: timeout wrapper = OS-level hard kill if agent loops forever
-TMUX_CMD="cd '${WT_PROJECT}' && export PROJECT_DIR='${PROJECT_DIR}' && export PYTHONPATH='${WT_PROJECT}' && export SMOKE_TEST='${SMOKE_TEST}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_WORKER} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
+# RT-16: unset CLAUDECODE to avoid "nested session" detection when launched from Claude Code
+TMUX_CMD="cd '${WT_PROJECT}' && unset CLAUDECODE && export PROJECT_DIR='${PROJECT_DIR}' && export PYTHONPATH='${WT_PROJECT}' && export SMOKE_TEST='${SMOKE_TEST}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_WORKER} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"
 
 tmux new-session -d -s "$SESSION" "$TMUX_CMD"
 echo "[launch_worker] Started session: $SESSION (worktree=$WT_PROJECT, log=$LOG)"

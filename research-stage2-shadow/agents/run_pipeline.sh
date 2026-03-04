@@ -35,7 +35,7 @@ if [[ "$FOREGROUND" == "false" && -z "${TMUX:-}" ]]; then
   [[ "$MAX_ITER" != "3" ]] && ARGS+=(--max-iter "$MAX_ITER")
   [[ "$PAUSE_AFTER" != "0" ]] && ARGS+=(--pause-after "$PAUSE_AFTER")
 
-  tmux new-session -d -s "$SESSION" "bash ${ARGS[*]} 2>&1 | tee '${LOG}'"
+  tmux new-session -d -s "$SESSION" "unset CLAUDECODE; bash ${ARGS[*]} 2>&1 | tee '${LOG}'"
   echo "Pipeline launched in tmux session: $SESSION"
   echo "  Attach:  tmux attach -t $SESSION"
   echo "  Log:     $LOG"

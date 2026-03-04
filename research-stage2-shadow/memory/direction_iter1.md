@@ -1,125 +1,98 @@
-# Direction — Iteration 1
+# Direction — Iteration 1 (ralph-v1-20260304-003317)
 
-**Batch**: screen-test-20260304-000123
-**Champion**: v0 (baseline)
-**Objective**: Improve regressor quality to boost EV ranking metrics while maintaining tail safety
+## Goal
+Establish whether basic hyperparameter tuning of the regressor can improve over v0 baseline. Both hypotheses are pure `--overrides` changes — no code modifications needed for screening or full benchmark.
 
-## Context
+## v0 Baseline Summary (champion)
+- Regressor: XGBoost 400 trees, max_depth=5, lr=0.05, reg_lambda=1.0, min_child_weight=10
+- Mode: gated (binding-only), no value weighting
+- 34 features, full monotone constraints
+- Means: EV-VC@100=0.069, EV-VC@500=0.216, EV-NDCG=0.747, Spearman=0.393
+- Catastrophic months: 2022-06 (universal worst), 2021-05 (near-zero EV-VC@100)
 
-This is the first iteration of a new batch. The previous batch's iter 1 failed (phantom worker completion). No successful regressor experiments exist yet.
+---
 
-**v0 diagnosis**: The baseline shows extreme per-month variance in EV-VC@100 (std=0.056 on mean=0.069), suggesting the regressor overfits to training-window patterns that don't generalize. The universal worst month is 2022-06 (EV-NDCG=0.604, Spearman=0.273, C-RMSE=5918). Gate floors equal v0 means — any regression fails promotion.
+## Hypothesis A (Primary): Slower learning rate + more trees
 
-**Strategy**: Since this is the first iteration with no prior signal, we test two orthogonal regularization strategies — structural regularization (fewer parameters per tree) vs penalty-based regularization (stronger L2/leaf constraints). Both aim to reduce variance and improve weak-month performance.
+**Rationale**: v0 uses lr=0.05 with 400 trees. Reducing lr to 0.03 with 700 trees creates a smoother, higher-capacity ensemble that should reduce overfitting on training windows. The lr×n_estimators product increases from 20 to 21, maintaining similar total learning while distributing it across more, smaller steps. This is the safest variance-reduction move — standard ML practice for improving generalization on tail months.
 
-## Screen Months
+**Expected effect**: Modest improvement on tail months (2022-06, 2021-05, 2022-09) through better generalization. Should not regress on strong months.
 
-- **Weak month: 2022-06** — Universal worst: EV-NDCG=0.604, Spearman=0.273, C-RMSE=5918, C-MAE=2283. Regression quality collapses here. Any improvement in regularization should help this month most.
-- **Strong month: 2022-12** — Best EV-VC@100=0.194, strong EV-NDCG=0.815, strong EV-VC@500=0.344. Must NOT regress here. Good sanity check that regularization doesn't kill strong-month performance.
-
-**Rationale**: 2022-06 is the clear stress test — it drives the bottom-2 mean for EV-NDCG and Spearman. If regularization helps here, it directly improves Layer 3 gate checks. 2022-12 is the best-performing month; if regularization kills performance here, the hypothesis is a net negative.
-
-## Hypothesis A (Primary): Slower learning with more trees
-
-**Idea**: Reduce learning rate and compensate with more trees. Lower lr means each tree makes smaller corrections → smoother ensemble → better ranking stability. The product `lr × n_estimators` controls total learning capacity; keeping it roughly constant (0.05×400=20 → 0.03×700=21) preserves capacity while smoothing.
-
-**Override JSON**:
+**Overrides**:
 ```json
 {"regressor": {"learning_rate": 0.03, "n_estimators": 700}}
 ```
 
-**Screen command**:
-```bash
-cd /home/xyz/workspace/pmodel && source .venv/bin/activate
-cd /home/xyz/workspace/research-qianli-v2/research-stage2-shadow
-python -m ml.benchmark --version-id _screenA --ptype f0 --class-type onpeak \
-  --eval-months 2022-06 2022-12 \
-  --overrides '{"regressor": {"learning_rate": 0.03, "n_estimators": 700}}'
-```
+---
 
-**Why this might work**:
-- XGBoost with lower lr + more trees is a well-known recipe for better generalization
-- Smoother model → fewer extreme predictions → better ranking in volatile months
-- Conservative change: doesn't touch feature set, regularization penalties, or tree depth
+## Hypothesis B (Alternative): Heavier L2 regularization + larger leaves
 
-**Risk**: ~75% longer training time per month (700 vs 400 trees). Acceptable for screening (2 months). Manageable for full 12-month run.
+**Rationale**: v0 uses reg_lambda=1.0 and min_child_weight=10. Increasing reg_lambda to 5.0 and min_child_weight to 25 constrains the model more aggressively — preventing the regressor from fitting noisy leaf-level patterns in small binding subsets. The catastrophic months (2022-06 with C-RMSE=5918) suggest the model overfits on some training windows. Heavier regularization is a different lever than ensemble smoothing (Hypothesis A) and targets the same root cause (overfitting) through a different mechanism (penalty-based vs averaging-based).
 
-## Hypothesis B (Alternative): Stronger L2 + larger leaf size
+**Expected effect**: Reduced variance on tail months at possible cost of slightly lower peak performance. Should help C-RMSE/C-MAE (monitored) and may improve EV metrics on bad months.
 
-**Idea**: Increase L2 penalty (reg_lambda 1→5) and minimum leaf weight (min_child_weight 10→20). This prevents the model from fitting small groups of training samples with extreme predictions — exactly the failure mode that causes volatile month-to-month performance.
-
-**Override JSON**:
+**Overrides**:
 ```json
-{"regressor": {"reg_lambda": 5.0, "min_child_weight": 20}}
+{"regressor": {"reg_lambda": 5.0, "min_child_weight": 25}}
 ```
 
-**Screen command**:
-```bash
-cd /home/xyz/workspace/pmodel && source .venv/bin/activate
-cd /home/xyz/workspace/research-qianli-v2/research-stage2-shadow
-python -m ml.benchmark --version-id _screenB --ptype f0 --class-type onpeak \
-  --eval-months 2022-06 2022-12 \
-  --overrides '{"regressor": {"reg_lambda": 5.0, "min_child_weight": 20}}'
-```
+---
 
-**Why this might work**:
-- Higher reg_lambda penalizes large leaf weights → shrinks extreme predictions toward zero
-- Higher min_child_weight requires more samples per leaf → prevents overfitting to rare patterns
-- Together, they make the model more conservative on uncertain predictions, which should help ranking
+## Screen Months
 
-**Risk**: Over-regularization could flatten predictions, hurting Spearman (rank correlation needs spread in predictions). If both screen months show Spearman drop > 0.05, this hypothesis is too aggressive.
+| Role | Month | Rationale |
+|------|-------|-----------|
+| **Weak** | 2022-06 | Universal worst: EV-NDCG=0.604, EV-VC@100=0.014, Spearman=0.273, C-RMSE=5918. Any improvement should show here first. |
+| **Strong** | 2022-12 | Best EV-VC@100=0.194, strong EV-NDCG=0.815, Spearman=0.385. Changes must NOT regress here. |
+
+---
 
 ## Winner Criteria
 
-1. **Primary**: Higher mean EV-VC@100 across the 2 screen months (2022-06 + 2022-12)
-2. **Safety gate**: Spearman must not drop > 0.05 vs v0 on EITHER screen month. If both hypotheses fail this, pick the one with smaller Spearman drop.
-3. **Tiebreaker**: Higher mean EV-NDCG across the 2 screen months
+1. **Primary**: Higher mean EV-VC@100 across the 2 screen months
+2. **Safety**: Spearman must not drop >0.05 on either screen month vs v0
+3. **Tiebreak**: If EV-VC@100 is within 0.005, prefer higher mean EV-NDCG
+4. **Both fail**: If both hypotheses regress EV-VC@100 mean below v0 on screen months, pick the one that regresses least and proceed to full benchmark anyway (we need data)
 
-**v0 baselines for screen months** (for comparison):
-| Month | EV-VC@100 | EV-VC@500 | EV-NDCG | Spearman |
-|-------|-----------|-----------|---------|----------|
-| 2022-06 | 0.0136 | 0.0756 | 0.6045 | 0.2728 |
-| 2022-12 | 0.1942 | 0.3445 | 0.8153 | 0.3847 |
+---
 
 ## Code Changes for Winner
 
-Both hypotheses are pure hyperparameter changes. For the winning config:
+**Neither hypothesis requires code changes.** Both are pure hyperparameter overrides.
 
-1. **Update `ml/config.py`** — Modify `RegressorConfig.__init__` defaults to match the winning override values.
-   - For Hypothesis A winner: change `learning_rate=0.05` → `0.03`, `n_estimators=400` → `700`
-   - For Hypothesis B winner: change `reg_lambda=1.0` → `5.0`, `min_child_weight=10` → `20`
+For the winning config, the worker should:
+1. Update `ml/config.py` `RegressorConfig` defaults to match the winning hyperparameters
+2. That's it — no other file changes needed
 
-2. **No other code changes needed** — these are pure config defaults, no pipeline wiring required.
+Specifically:
+- **If A wins**: In `ml/config.py`, change `RegressorConfig` fields:
+  - `n_estimators: int = 400` → `n_estimators: int = 700`
+  - `learning_rate: float = 0.05` → `learning_rate: float = 0.03`
+- **If B wins**: In `ml/config.py`, change `RegressorConfig` fields:
+  - `reg_lambda: float = 1.0` → `reg_lambda: float = 5.0`
+  - `min_child_weight: int = 10` → `min_child_weight: int = 25`
 
-3. **Full benchmark command** (after code change):
-```bash
-cd /home/xyz/workspace/pmodel && source .venv/bin/activate
-cd /home/xyz/workspace/research-qianli-v2/research-stage2-shadow
-python -m ml.benchmark --version-id v0001 --ptype f0 --class-type onpeak
-```
+---
 
-## Expected Impact
+## Expected Gate Impact
 
-| Gate | v0 Mean | Expected Direction | Reasoning |
-|------|---------|-------------------|-----------|
-| EV-VC@100 | 0.069 | +0.005 to +0.015 | Better ranking from smoother predictions |
-| EV-VC@500 | 0.216 | +0.005 to +0.010 | Same mechanism, broader scope |
-| EV-NDCG | 0.747 | +0.005 to +0.015 | Ranking quality improves with regularization |
-| Spearman | 0.393 | ±0.010 | May slightly improve or be neutral |
-| C-RMSE | 3133 | -100 to +100 | Regularization may slightly increase error on train but reduce on test |
+| Gate | v0 Mean | Direction | Expected Δ |
+|------|---------|-----------|------------|
+| EV-VC@100 | 0.069 | ↗ | +0.005 to +0.015 (better top-ranking from smoother predictions) |
+| EV-VC@500 | 0.216 | ↗ | +0.005 to +0.010 |
+| EV-NDCG | 0.747 | ↗ | +0.005 to +0.015 |
+| Spearman | 0.393 | → | ±0.01 (rank correlation is robust to smoothing) |
+| C-RMSE | 3133 | ↘ | -50 to -200 (reduced overfitting → lower error) |
 
-**Bottom-2 mean (tail safety)**: Main expected benefit — regularization should improve 2022-06 performance, directly lifting the bottom-2 mean for all Group A metrics.
+Layer 1 (mean quality) is tight — floor equals v0 mean. Even a small improvement passes. Layer 2 (tail safety) is permissive on EV-VC@100 (tail_floor=0.0001). Layer 3 (tail non-regression) needs bottom-2 months to stay within 0.02 of v0's bottom-2.
+
+---
 
 ## Risk Assessment
 
-1. **Over-regularization**: Too much smoothing could make all predictions similar, destroying ranking ability. Screen month check catches this — watch Spearman.
-2. **Training time**: Hypothesis A (700 trees) takes ~75% longer. Full 12-month run: ~60 min instead of ~35 min. Acceptable.
-3. **Marginal improvement**: Both hypotheses are conservative. If neither moves the needle meaningfully on screen months, future iterations should try bolder changes (feature selection, value-weighted training with pipeline.py wiring, unified regressor mode).
-4. **2022-06 may be classifier-limited**: The frozen classifier has its worst S1-NDCG (0.606) in this month. Even perfect regression won't fully fix EV metrics if the classifier's ranking is poor. But improving regression quality in this month still helps.
-
-## Notes for Worker
-
-- **Both hypotheses use `--overrides` only** — no code changes needed for screening
-- **Save screen results** to compare: note the per-month EV-VC@100, EV-NDCG, and Spearman for both hypotheses
-- **If BOTH hypotheses lose to v0** on screen months: still pick the one that's closest to v0, implement it, and run full benchmark. The 2-month screen is noisy — full 12-month may show different results.
-- **value_weighted is intentionally deferred** to a future iteration — it requires pipeline.py code changes that can't be screened via --overrides
+| Risk | Likelihood | Mitigation |
+|------|-----------|------------|
+| Both hypotheses produce near-identical results to v0 | Medium | We still get data to calibrate next iteration; proceed to full benchmark with the marginal winner |
+| Slower lr + more trees increases training time significantly | Low | 700 trees at lr=0.03 adds ~75% more training time; still well within 35-min budget for 12 months |
+| Heavier regularization underfits, hurting strong months | Low-Medium | Screen month 2022-12 (strong) catches this; safety criterion protects against it |
+| Neither hypothesis helps the catastrophic months (structural issue, not overfitting) | Medium | If screen results on 2022-06 show no improvement, iter 2 should try value-weighted training (requires pipeline.py code change) or feature selection |

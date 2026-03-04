@@ -148,3 +148,14 @@ everything else
 ### what was dropped
 - precision, recall, F1, pred_binding_rate — all threshold-dependent
 - prior registry/v0 metrics — computed on val split, not target month, invalid
+
+
+### planning for f0p pipeline
+Feed this as the human prompt:
+- Do some feature engineering on f0. 
+    1. are we reporting on target month? make sure we are doing so
+    2. now all i want you to change from v7 is to do more feature engineering or include more features, or exclude some features for one 3-iter-per-report. Nothing but feature engineering or feature selection for 3 iterations. 
+    - you can ask the coder to do research to decide a. which features to include/exclude and b. which FE works best. 
+    - then generate 2 hypothesis, run 2 month test, run full one year.
+
+- is my instruction clear, do u know what to do?

@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "note": "Reset 2026-03-03. Gates will be recalibrated from target-month baselines (6+2 train/val).",
+  "version": 4,
+  "note": "Recalibrated 2026-03-04 from v0007 champion. Floors at 0.95x champion mean, tail_floors at 0.90x worst month.",
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
   "eval_months": {
@@ -38,57 +38,57 @@
   ],
   "gates": {
     "EV-VC@100": {
-      "floor": 0.069032,
-      "tail_floor": 0.000114,
+      "floor": 0.066396,
+      "tail_floor": 0.000135,
       "direction": "higher",
       "group": "A",
       "pending_baseline": false
     },
     "EV-VC@500": {
-      "floor": 0.21595,
-      "tail_floor": 0.040651,
+      "floor": 0.217926,
+      "tail_floor": 0.053646,
       "direction": "higher",
       "group": "A",
       "pending_baseline": false
     },
     "EV-NDCG": {
-      "floor": 0.747213,
-      "tail_floor": 0.604491,
+      "floor": 0.713706,
+      "tail_floor": 0.543359,
       "direction": "higher",
       "group": "A",
       "pending_baseline": false
     },
     "Spearman": {
-      "floor": 0.392798,
-      "tail_floor": 0.2649,
+      "floor": 0.373556,
+      "tail_floor": 0.236265,
       "direction": "higher",
       "group": "A",
       "pending_baseline": false
     },
     "C-RMSE": {
-      "floor": 3133.338602,
-      "tail_floor": 5918.344005,
+      "floor": 3062.208785,
+      "tail_floor": 6592.715083,
       "direction": "lower",
       "group": "B",
       "pending_baseline": false
     },
     "C-MAE": {
-      "floor": 1158.386444,
-      "tail_floor": 2283.259988,
+      "floor": 1209.075048,
+      "tail_floor": 2542.467527,
       "direction": "lower",
       "group": "B",
       "pending_baseline": false
     },
     "EV-VC@1000": {
-      "floor": 0.312266,
-      "tail_floor": 0.090844,
+      "floor": 0.301402,
+      "tail_floor": 0.089444,
       "direction": "higher",
       "group": "B",
       "pending_baseline": false
     },
     "R-REC@500": {
-      "floor": 0.034261,
-      "tail_floor": 0.013317,
+      "floor": 0.033736,
+      "tail_floor": 0.012673,
       "direction": "higher",
       "group": "B",
       "pending_baseline": false

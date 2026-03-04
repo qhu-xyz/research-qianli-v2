@@ -134,8 +134,9 @@ EOF
 - Only plan changes to RegressorConfig parameters: features, monotone_constraints, n_estimators, max_depth, learning_rate, subsample, colsample_bytree, reg_alpha, reg_lambda, min_child_weight, unified_regressor, value_weighted
 - **Business objective: Maximize expected value ranking quality.** All blocking gates are threshold-independent (EV-based).
 - Focus improvements on EV ranking quality (EV-VC@100, EV-VC@500, EV-NDCG) and regression quality (Spearman, C-RMSE, C-MAE)
-- If iteration 1: establish baseline hypothesis from human requirements and business_context.md
+- If iteration 1: establish baseline hypothesis from human requirements, business_context.md, AND `memory/human_input.md` (batch-specific constraints)
 - If iteration 2+: build on previous results and reviewer feedback
+- **ALWAYS check `memory/human_input.md`** for batch-specific constraints (e.g., FE-only, no hyperparameter changes). Respect these constraints strictly.
 - **ALWAYS produce exactly 2 hypotheses** — even if one is conservative (small tweak) and the other aggressive (bigger change)
 - **ALWAYS include `--overrides` JSON** for each hypothesis so the worker can screen without code changes
 - **ALWAYS pick 2 screen months** (1 weak + 1 strong) with rationale

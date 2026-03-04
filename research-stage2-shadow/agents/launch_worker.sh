@@ -42,6 +42,13 @@ git worktree add "$WT_DIR" -b "$WT_BRANCH" 2>/dev/null || git worktree add "$WT_
 REPO_PREFIX=$(git rev-parse --show-prefix)  # e.g. "research-stage2-shadow/"
 WT_PROJECT="${WT_DIR}/${REPO_PREFIX%/}"      # worktree's project subdirectory
 
+# RT-14: Make HUMAN-WRITE-ONLY files read-only in worktree to prevent agent modification
+for protected in "ml/evaluate.py" "registry/gates.json"; do
+  if [[ -f "${WT_PROJECT}/${protected}" ]]; then
+    chmod 444 "${WT_PROJECT}/${protected}"
+  fi
+done
+
 # Worker runs in worktree's project subdir, needs PROJECT_DIR for absolute path access
 # RT-12: timeout wrapper = OS-level hard kill if agent loops forever
 TMUX_CMD="cd '${WT_PROJECT}' && export PROJECT_DIR='${PROJECT_DIR}' && export PYTHONPATH='${WT_PROJECT}' && export SMOKE_TEST='${SMOKE_TEST}' && source '${VENV_ACTIVATE}' && timeout ${TIMEOUT_WORKER} claude --print --model opus --dangerously-skip-permissions < '${PROMPT}' > '${LOG}' 2>&1; echo 'EXIT_CODE='\$? >> '${LOG}'"

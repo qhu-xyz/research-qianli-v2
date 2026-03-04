@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
-import pytest
 
 from ml.config import ClassifierConfig, RegressorConfig
 from ml.features import (
@@ -16,13 +15,16 @@ from ml.features import (
 
 
 def _make_sample_df(n: int = 3) -> pl.DataFrame:
-    """Build a minimal DataFrame with all 24 regressor columns + actual_shadow_price."""
-    cfg = RegressorConfig()
+    """Build a minimal DataFrame with all regressor + classifier columns + actual_shadow_price."""
+    reg_cfg = RegressorConfig()
+    clf_cfg = ClassifierConfig()
+    # Union of all features (classifier may have features not in regressor set)
+    all_features = sorted(set(reg_cfg.features) | set(clf_cfg.features))
     data: dict[str, list[float]] = {}
-    for i, feat in enumerate(cfg.features):
+    for i, feat in enumerate(all_features):
         data[feat] = [float(i + row) for row in range(n)]
     # Add actual_shadow_price for label functions
-    data["actual_shadow_price"] = [10.0, -5.0, 0.0]
+    data["actual_shadow_price"] = [10.0, -5.0, 0.0][:n]
     return pl.DataFrame(data)
 
 
@@ -32,15 +34,15 @@ def _make_sample_df(n: int = 3) -> pl.DataFrame:
 
 class TestPrepareClfFeatures:
     def test_shape_and_monotone_length(self):
-        """Output X has shape (3, 13) and monotone list has length 13."""
+        """Output X has shape (3, 14) and monotone list has length 14."""
         df = _make_sample_df(n=3)
         cfg = ClassifierConfig()
         X, monotone = prepare_clf_features(df, cfg)
 
         assert isinstance(X, np.ndarray)
-        assert X.shape == (3, 13)
+        assert X.shape == (3, len(cfg.features))
         assert isinstance(monotone, list)
-        assert len(monotone) == 13
+        assert len(monotone) == len(cfg.features)
 
     def test_monotone_values_match_config(self):
         """Returned monotone constraints must match the config exactly."""
@@ -80,15 +82,15 @@ class TestPrepareClfFeatures:
 
 class TestPrepareRegFeatures:
     def test_shape_and_monotone_length(self):
-        """Output X has shape (3, 24) and monotone list has length 24."""
+        """Output X has shape (3, 34) and monotone list has length 34."""
         df = _make_sample_df(n=3)
         cfg = RegressorConfig()
         X, monotone = prepare_reg_features(df, cfg)
 
         assert isinstance(X, np.ndarray)
-        assert X.shape == (3, 24)
+        assert X.shape == (3, len(cfg.features))
         assert isinstance(monotone, list)
-        assert len(monotone) == 24
+        assert len(monotone) == len(cfg.features)
 
     def test_monotone_values_match_config(self):
         """Returned monotone constraints must match the config exactly."""
@@ -182,7 +184,7 @@ class TestComputeScalePosWeight:
         """scale_pos_weight = n_neg / n_pos."""
         labels = np.array([1, 0, 0, 0, 0])
         weight = compute_scale_pos_weight(labels)
-        assert weight == pytest.approx(4.0)
+        assert weight == 4.0
 
     def test_no_positives_returns_one(self):
         """If n_positive == 0, return 1.0 to avoid division by zero."""
@@ -194,4 +196,4 @@ class TestComputeScalePosWeight:
         """Equal positives and negatives => weight 1.0."""
         labels = np.array([1, 1, 0, 0])
         weight = compute_scale_pos_weight(labels)
-        assert weight == pytest.approx(1.0)
+        assert weight == 1.0

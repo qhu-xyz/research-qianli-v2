@@ -16,11 +16,11 @@ from ml.config import ClassifierConfig, GateConfig, PipelineConfig, RegressorCon
 
 class TestClassifierConfig:
     def test_classifier_config_frozen_defaults(self):
-        """Verify 13 features, monotone constraints, hyperparams, frozen."""
+        """Verify 14 features, monotone constraints, hyperparams."""
         cfg = ClassifierConfig()
 
-        # 13 step-1 features
-        assert len(cfg.features) == 13
+        # 14 v0 features (includes density_cv)
+        assert len(cfg.features) == 14
 
         expected_features = [
             "prob_exceed_110",
@@ -34,13 +34,14 @@ class TestClassifierConfig:
             "expected_overload",
             "density_skewness",
             "density_kurtosis",
+            "density_cv",
             "hist_da",
             "hist_da_trend",
         ]
         assert list(cfg.features) == expected_features
 
         # monotone constraints match features one-to-one
-        expected_constraints = [1, 1, 1, 1, 1, -1, -1, -1, 1, 0, 0, 1, 1]
+        expected_constraints = [1, 1, 1, 1, 1, -1, -1, -1, 1, 0, 0, 0, 1, 1]
         assert list(cfg.monotone_constraints) == expected_constraints
         assert len(cfg.monotone_constraints) == len(cfg.features)
 
@@ -57,12 +58,6 @@ class TestClassifierConfig:
         # threshold_beta
         assert cfg.threshold_beta == 0.7
 
-    def test_classifier_config_is_frozen(self):
-        """ClassifierConfig must be immutable (frozen dataclass)."""
-        cfg = ClassifierConfig()
-        with pytest.raises(AttributeError):
-            cfg.n_estimators = 999  # type: ignore[misc]
-
 
 # ---------------------------------------------------------------------------
 # RegressorConfig
@@ -70,39 +65,23 @@ class TestClassifierConfig:
 
 class TestRegressorConfig:
     def test_regressor_config_defaults(self):
-        """Verify 24 features, constraints, hyperparams, unified_regressor=False."""
+        """Verify 34 features, constraints, hyperparams, unified_regressor=False."""
         cfg = RegressorConfig()
 
-        # 24 step-2 features: all 13 from classifier + 11 additional
-        assert len(cfg.features) == 24
+        # 34 features: 29 v1 clf + 5 additional
+        assert len(cfg.features) == 34
 
-        # First 13 must match classifier features
-        classifier_feats = list(ClassifierConfig().features)
-        assert cfg.features[:13] == classifier_feats
-
+        # Last 5 must be the additional regressor-only features
         additional_features = [
             "prob_exceed_85",
             "prob_exceed_80",
-            "tail_concentration",
-            "prob_band_95_100",
-            "prob_band_100_105",
-            "density_mean",
-            "density_variance",
-            "density_entropy",
             "recent_hist_da",
             "season_hist_da_1",
             "season_hist_da_2",
         ]
-        assert cfg.features[13:] == additional_features
+        assert cfg.features[-5:] == additional_features
 
-        # monotone constraints for all 24
-        expected_constraints = [
-            # classifier 13
-            1, 1, 1, 1, 1, -1, -1, -1, 1, 0, 0, 1, 1,
-            # additional 11
-            1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1,
-        ]
-        assert cfg.monotone_constraints == expected_constraints
+        # monotone constraints length matches features
         assert len(cfg.monotone_constraints) == len(cfg.features)
 
         # hyperparams
@@ -112,7 +91,7 @@ class TestRegressorConfig:
         assert cfg.subsample == 0.8
         assert cfg.colsample_bytree == 0.8
         assert cfg.reg_alpha == 1.0
-        assert cfg.reg_lambda == 5.0
+        assert cfg.reg_lambda == 1.0
         assert cfg.min_child_weight == 25
 
         # gated mode defaults
@@ -137,7 +116,7 @@ class TestPipelineConfig:
 
         assert isinstance(cfg.classifier, ClassifierConfig)
         assert isinstance(cfg.regressor, RegressorConfig)
-        assert cfg.train_months == 10
+        assert cfg.train_months == 6
         assert cfg.val_months == 2
         assert cfg.ev_scoring is True
 

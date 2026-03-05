@@ -10,9 +10,15 @@
 
 3. **Class imbalance dominates**: Even with class weights {0:10, 1:5}, the model overwhelmingly predicts tiers 3-4 (majority classes).
 
-4. **Feature importance**: Check `registry/v0/feature_importance.json` for top features. Likely dominated by hist_da and prob_exceed features.
+4. **Feature importance (v0)**: Top 5 by gain: recent_hist_da (21.1%), hist_da (13.3%), prob_band_95_100 (6.8%), prob_band_100_105 (6.5%), hist_da_trend (3.8%). Bottom 6 all ~1.1-1.2% (density_skewness, prob_exceed_90, density_cv, density_variance, prob_below_90, prob_exceed_95).
 
-5. **Monthly variance is high**: VC@100 ranges 0.008-0.246. Some months have very few high-value constraints, making metrics noisy.
+5. **Monthly variance is high**: VC@100 ranges 0.003-0.248. Some months have very few high-value constraints, making metrics noisy.
+
+## Process Learnings
+
+6. **Worker reliability**: Complex directions with 2 competing hypotheses + detailed overrides increase failure risk. Simpler, single-hypothesis directions with explicit step-by-step instructions are safer.
+
+7. **Leaked state**: Workers can increment version_counter.json without producing artifacts. The orchestrator should be aware of version counter drift after failures.
 
 ## Technical Notes
 

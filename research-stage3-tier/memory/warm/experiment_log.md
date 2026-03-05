@@ -9,3 +9,14 @@
   - QWK=0.359, Macro-F1=0.369
   - Tier-Recall@0=0.374, Tier-Recall@1=0.098
 - **Key finding**: Tier 4 has 0 samples in all months. Tier-Recall@1 catastrophically low.
+
+## Iter 1 — WORKER FAILED (batch: tier-fe-1-20260304-182037, 2026-03-05)
+- **Planned**: Feature swap — remove 3 low-importance features, add 3 interaction features (Hyp A) vs aggressive pruning 34→28 (Hyp B)
+- **Status**: FAILED — worker wrote handoff claiming "done" but produced NO artifacts
+  - `registry/v0001/` does not exist (no metrics, no config, no changes_summary)
+  - No reports generated in `reports/tier-fe-1-20260304-182037/iter1/`
+  - No reviews generated
+  - Version counter advanced to 2 (leaked side effect)
+- **Root cause**: Worker exited prematurely after writing handoff signal but before running benchmark or producing any registry artifacts. Likely a session timeout or crash during screening phase.
+- **Result**: No data collected. Hypotheses A and B remain UNTESTED.
+- **Recovery**: Retry with simplified direction in iter2 — same hypotheses but streamline worker instructions to reduce execution risk.

@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "note": "Calibrated from V6.2B baseline",
+  "noise_tolerance": 0.02,
+  "tail_max_failures": 1,
+  "eval_months": {
+    "primary": [
+      "2020-09",
+      "2020-12",
+      "2021-03",
+      "2021-06",
+      "2021-09",
+      "2021-12",
+      "2022-03",
+      "2022-06",
+      "2022-09",
+      "2022-12",
+      "2023-03",
+      "2023-05"
+    ]
+  },
+  "gates": {
+    "VC@20": {
+      "floor": 0.465236,
+      "tail_floor": 0.431516,
+      "direction": "higher",
+      "group": "A"
+    },
+    "VC@100": {
+      "floor": 0.752115,
+      "tail_floor": 0.755618,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@20": {
+      "floor": 0.4575,
+      "tail_floor": 0.4,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@100": {
+      "floor": 0.63075,
+      "tail_floor": 0.55,
+      "direction": "higher",
+      "group": "A"
+    },
+    "NDCG": {
+      "floor": 0.843312,
+      "tail_floor": 0.895425,
+      "direction": "higher",
+      "group": "A"
+    },
+    "VC@10": {
+      "floor": 0.393726,
+      "tail_floor": 0.360637,
+      "direction": "higher",
+      "group": "B"
+    },
+    "VC@25": {
+      "floor": 0.490289,
+      "tail_floor": 0.474919,
+      "direction": "higher",
+      "group": "B"
+    },
+    "VC@50": {
+      "floor": 0.614355,
+      "tail_floor": 0.567035,
+      "direction": "higher",
+      "group": "B"
+    },
+    "VC@200": {
+      "floor": 0.864065,
+      "tail_floor": 0.932748,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Recall@10": {
+      "floor": 0.4875,
+      "tail_floor": 0.3,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Recall@50": {
+      "floor": 0.516,
+      "tail_floor": 0.42,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Spearman": {
+      "floor": 0.817333,
+      "tail_floor": 0.887695,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Tier0-AP": {
+      "floor": 0.704086,
+      "tail_floor": 0.693126,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Tier01-AP": {
+      "floor": 0.841653,
+      "tail_floor": 0.890459,
+      "direction": "higher",
+      "group": "B"
+    }
+  }
+}

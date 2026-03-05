@@ -1,29 +1,31 @@
-# Direction — Iteration 2 (batch: tier-fe-2)
+# Direction -- Iteration 2 (batch: tier-fe-2)
 
-## CRITICAL: READ THIS BEFORE DOING ANYTHING
+## Context
 
-**3 consecutive worker iterations have FAILED** because the worker wrote the handoff signal without doing any actual work. DO NOT write the handoff signal until ALL steps below are complete and verified. The handoff is the LAST thing you do, not the first.
+Champion is v0 with 34 features. This is an FE-only batch -- only features, monotone constraints, and `features.py` may change. All hyperparameters, class weights, bins, and midpoints are FROZEN.
 
-## Single Hypothesis: Add 3 Interaction Features (34 → 37)
+**3 consecutive worker failures** across 2 batches. No hypotheses have been tested yet. The interaction feature hypothesis remains the correct first experiment.
 
-No screening. No A/B comparison. One hypothesis, full benchmark.
+**Gate status (Group A blocking):**
 
-**What**: Add overload_x_hist, prob110_x_recent_hist, tail_x_hist to the existing 34 features.
+| Gate | v0 Mean | Floor | Status |
+|------|---------|-------|--------|
+| Tier-VC@100 | 0.071 | 0.075 | **FAILING Layer 1** |
+| Tier-VC@500 | 0.230 | 0.217 | passing |
+| Tier0-AP | 0.306 | 0.306 | barely passing |
+| Tier01-AP | 0.311 | 0.311 | barely passing |
 
-**Why**: Top features (recent_hist_da 21.1%, hist_da 13.3%) are used independently. Pre-computing products with physical flow signals should help tier 0/1 discrimination and improve Tier-VC@100 (currently 0.071, needs ≥0.075).
+**Key weakness**: The model lacks explicit compound severity signals. Top features (recent_hist_da 21.1%, hist_da 13.3%) are used independently. Pre-computing interaction products should help tier 0/1 discrimination and push Tier-VC@100 above 0.075.
 
-## Step-by-Step Instructions
+## REQUIRED CODE CHANGE (do this BEFORE screening)
 
-Execute these steps IN ORDER. Do NOT skip any step. Do NOT write the handoff until step 6.
-
-### Step 1: Modify `ml/features.py`
-
-Add 3 new interaction columns to `compute_interaction_features()`. The function currently computes 5 dead features. Add 3 more columns after them:
+Both hypotheses need 3 new interaction features computed in `ml/features.py`. Add them to `compute_interaction_features()`:
 
 ```python
 def compute_interaction_features(df: pl.DataFrame) -> pl.DataFrame:
+    """Compute derived interaction features from raw columns."""
     return df.with_columns([
-        # Existing 5 dead features (keep as-is)
+        # Existing 5 dead features (keep for backward compat)
         (pl.col("hist_da") * pl.col("prob_exceed_100"))
             .alias("hist_physical_interaction"),
         (pl.col("expected_overload") * pl.col("prob_exceed_105"))
@@ -34,7 +36,7 @@ def compute_interaction_features(df: pl.DataFrame) -> pl.DataFrame:
             .alias("sf_exceed_interaction"),
         (pl.col("hist_da_max_season") * pl.col("prob_band_100_105"))
             .alias("hist_seasonal_band"),
-        # NEW: 3 interaction features
+        # NEW interaction features (3)
         (pl.col("expected_overload") * pl.col("hist_da"))
             .alias("overload_x_hist"),
         (pl.col("prob_exceed_110") * pl.col("recent_hist_da"))
@@ -44,128 +46,66 @@ def compute_interaction_features(df: pl.DataFrame) -> pl.DataFrame:
     ])
 ```
 
-### Step 2: Modify `ml/config.py`
+## Hypothesis A (primary): Add 3 interaction features (34 -> 37)
 
-Add 3 features to `_ALL_TIER_FEATURES` and 3 monotone constraints to `_ALL_TIER_MONOTONE`.
+**What**: Add overload_x_hist, prob110_x_recent_hist, tail_x_hist to the existing 34 features.
 
-Change the end of `_ALL_TIER_FEATURES` (line 82-93) from:
-```python
-_ALL_TIER_FEATURES: list[str] = _V1_CLF_FOR_TIER + [
-    "prob_exceed_85",
-    "prob_exceed_80",
-    "recent_hist_da",
-    "season_hist_da_1",
-    "season_hist_da_2",
-    "density_skewness",
-    "density_kurtosis",
-    "density_cv",
-    "season_hist_da_3",
-    "prob_below_85",
-]
-```
-to:
-```python
-_ALL_TIER_FEATURES: list[str] = _V1_CLF_FOR_TIER + [
-    "prob_exceed_85",
-    "prob_exceed_80",
-    "recent_hist_da",
-    "season_hist_da_1",
-    "season_hist_da_2",
-    "density_skewness",
-    "density_kurtosis",
-    "density_cv",
-    "season_hist_da_3",
-    "prob_below_85",
-    "overload_x_hist",
-    "prob110_x_recent_hist",
-    "tail_x_hist",
-]
+**Rationale**: These combine the two highest-importance features (recent_hist_da 21.1%, hist_da 13.3%) with physical flow signals (expected_overload, prob_exceed_110, tail_concentration). The products create explicit compound severity signals that should help distinguish tier 0/1 constraints from lower tiers. At max_depth=5, XGBoost may struggle to learn these interactions implicitly.
+
+**Monotone constraints for new features**: all +1 (both factors in each product are +1 monotone).
+
+Hypothesis A overrides:
+```json
+{"tier": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_exceed_90", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_variance", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_skewness", "density_kurtosis", "density_cv", "season_hist_da_3", "prob_below_85", "overload_x_hist", "prob110_x_recent_hist", "tail_x_hist"], "monotone_constraints": [1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, -1, 1, 1, 1]}}
 ```
 
-Change the end of `_ALL_TIER_MONOTONE` (line 95-102) from:
-```python
-_ALL_TIER_MONOTONE: list[int] = _V1_CLF_MONO_FOR_TIER + [
-    1, 1,     # prob_exceed_85, prob_exceed_80
-    1,        # recent_hist_da
-    1, 1,     # season_hist_da_1, season_hist_da_2
-    0, 0, 0,  # density_skewness, density_kurtosis, density_cv
-    1,        # season_hist_da_3
-    -1,       # prob_below_85
-]
-```
-to:
-```python
-_ALL_TIER_MONOTONE: list[int] = _V1_CLF_MONO_FOR_TIER + [
-    1, 1,     # prob_exceed_85, prob_exceed_80
-    1,        # recent_hist_da
-    1, 1,     # season_hist_da_1, season_hist_da_2
-    0, 0, 0,  # density_skewness, density_kurtosis, density_cv
-    1,        # season_hist_da_3
-    -1,       # prob_below_85
-    1, 1, 1,  # overload_x_hist, prob110_x_recent_hist, tail_x_hist
-]
+## Hypothesis B (alternative): Add 3 interactions + prune 4 low-importance (34 -> 33)
+
+**What**: Add the same 3 interaction features, but also remove the 4 lowest-importance features: density_skewness (rank 34, 1.09%), prob_exceed_90 (rank 33, 1.13%), density_cv (rank 32, 1.13%), density_variance (rank 31, 1.17%).
+
+**Rationale**: These 4 features each contribute <1.2% importance by gain and may add noise. Removing them concentrates tree splits on higher-signal features. Net: 34 - 4 + 3 = 33 features.
+
+Hypothesis B overrides:
+```json
+{"tier": {"features": ["prob_exceed_110", "prob_exceed_105", "prob_exceed_100", "prob_exceed_95", "prob_below_100", "prob_below_95", "prob_below_90", "expected_overload", "hist_da", "hist_da_trend", "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac", "is_interface", "constraint_limit", "density_mean", "density_entropy", "tail_concentration", "prob_band_95_100", "prob_band_100_105", "hist_da_max_season", "prob_exceed_85", "prob_exceed_80", "recent_hist_da", "season_hist_da_1", "season_hist_da_2", "density_kurtosis", "season_hist_da_3", "prob_below_85", "overload_x_hist", "prob110_x_recent_hist", "tail_x_hist"], "monotone_constraints": [1, 1, 1, 1, -1, -1, -1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, -1, 1, 1, 1]}}
 ```
 
-### Step 3: Update tests
+## Screen Months
 
-Find the test that checks feature count (34) and update it to 37. Look in `ml/tests/` for assertions like `== 34` or `len(features) == 34`.
+- **Weak month: 2022-06** -- worst Tier0-AP (0.114), worst Tier-NDCG (0.643), worst Tier-VC@500 (0.045), low VC@100 (0.025). Comprehensive worst month. Interaction features should help here if they help at all.
+- **Strong month: 2021-09** -- best Tier-VC@100 (0.248), best Tier-VC@500 (0.381), strong NDCG (0.855). Must not regress here.
 
-### Step 4: Run tests
+**Rationale**: 2022-06 tests improvement potential on the hardest month. 2021-09 tests that we don't hurt the best month. Together they bracket the performance range.
 
-```bash
-cd /home/xyz/workspace/research-qianli-v2/research-stage3-tier
-source /home/xyz/workspace/pmodel/.venv/bin/activate
-PYTHONPATH=. python -m pytest ml/tests/ -v
-```
+## Winner Criteria
 
-All tests must pass before proceeding.
+Pick the hypothesis with **higher mean Tier-VC@100 across the 2 screen months**, unless:
+- QWK drops > 0.05 vs v0 on either screen month -> disqualify
+- Tier0-AP drops below v0's tail_floor (0.114) on either month -> disqualify
 
-### Step 5: Run full 12-month benchmark
+If both tied within 0.005 on Tier-VC@100, prefer Hypothesis A (simpler, no information loss from pruning).
 
-```bash
-cd /home/xyz/workspace/research-qianli-v2/research-stage3-tier
-source /home/xyz/workspace/pmodel/.venv/bin/activate
-PYTHONPATH=. python ml/benchmark.py --version-id v0003 2>&1 | tee registry/v0003/benchmark.log
-```
+## Code Changes for Winner
 
-Wait for this to complete. It will take several minutes. Do NOT proceed until it finishes.
+**If Hypothesis A wins** (add 3 features, 34 -> 37):
+1. `ml/features.py` -- already modified above (keep all 3 new columns in `compute_interaction_features`)
+2. `ml/config.py` -- append to `_ALL_TIER_FEATURES`: `"overload_x_hist", "prob110_x_recent_hist", "tail_x_hist"` and to `_ALL_TIER_MONOTONE`: `1, 1, 1`
+3. `ml/tests/` -- update expected feature count from 34 to 37
 
-### Step 6: Verify artifacts exist
+**If Hypothesis B wins** (add 3 + prune 4, 34 -> 33):
+1. `ml/features.py` -- already modified above
+2. `ml/config.py` -- append 3 new features and monotone values as above, THEN add `density_skewness`, `prob_exceed_90`, `density_cv`, `density_variance` to `_DEAD_FEATURES` set
+3. `ml/tests/` -- update expected feature count from 34 to 33
 
-Before writing the handoff, verify:
-```bash
-ls registry/v0003/metrics.json registry/v0003/config.json registry/v0003/changes_summary.md
-```
+## Expected Impact
 
-All 3 files must exist. If any are missing, the benchmark did not complete — investigate and fix before continuing.
+- **Tier-VC@100**: +0.005 to +0.015 (from 0.071 to ~0.076-0.086). The only failing Group A gate; interaction features should improve top-of-ranking quality.
+- **Tier0-AP**: +0.01 to +0.03. Compound severity signals should improve tier 0 precision-recall.
+- **Tier01-AP**: +0.005 to +0.02. Similar improvement for combined tier 0+1 detection.
+- **QWK**: Neutral to +0.01. Better tier 0/1 detection shouldn't hurt ordinal consistency.
 
-### Step 7: Run comparison
+## Risk Assessment
 
-```bash
-PYTHONPATH=. python ml/compare.py --candidate v0003 --champion v0 2>&1 | tee reports/tier-fe-2-20260304-225923/iter2/comparison.md
-```
-
-### Step 8: Write changes_summary.md
-
-Write `registry/v0003/changes_summary.md` describing:
-- What changed: added 3 interaction features (overload_x_hist, prob110_x_recent_hist, tail_x_hist)
-- Feature count: 34 → 37
-- Why: compound severity signals for tier 0/1 discrimination
-
-### Step 9: Write handoff signal (ONLY after steps 1-8 are complete)
-
-Only now write the handoff JSON.
-
-## Allowed File Modifications
-
-- `ml/features.py` — `compute_interaction_features()` only
-- `ml/config.py` — `_ALL_TIER_FEATURES` and `_ALL_TIER_MONOTONE` lists only
-- `ml/tests/` — feature count assertions only
-- `registry/v0003/` — version artifacts (created by benchmark)
-
-## FORBIDDEN Changes
-
-- Any TierConfig field except features/monotone_constraints
-- ml/train.py, ml/pipeline.py, ml/evaluate.py, ml/benchmark.py
-- registry/gates.json
-- Any hyperparameter, class weight, bin, or midpoint
+- **Low risk**: Interaction features are products of positively-correlated factors. Monotone constraint (+1) is correct. Worst case is no improvement (neutral).
+- **Pruning risk (Hyp B only)**: Removing density_variance/cv/skewness loses distribution shape information. If these help in specific months, Hyp B could regress on tail months. This is why Hyp A is primary.
+- **Overfitting risk**: 37 features with max_depth=5 and 400 trees is well within capacity. Not a concern.

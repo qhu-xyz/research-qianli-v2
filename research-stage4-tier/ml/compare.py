@@ -4,8 +4,8 @@ Loads all registered versions, checks each metric against gate floors,
 produces a Markdown comparison table and JSON summary.
 
 LTR gate metrics:
-  Group A (blocking): VC@20, VC@100, Recall@20, Recall@100, NDCG
-  Group B (monitor):  VC@10, VC@25, VC@50, VC@200, Recall@10, Recall@50,
+  Group A (blocking): VC@20, VC@100, Recall@20, Recall@50, Recall@100, NDCG
+  Group B (monitor):  VC@10, VC@25, VC@50, VC@200, Recall@10,
                       Spearman, Tier0-AP, Tier01-AP
 
 All metrics are higher-is-better.

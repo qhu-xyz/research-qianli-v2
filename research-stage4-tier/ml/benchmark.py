@@ -3,9 +3,14 @@
 Runs the full pipeline (load -> train -> predict -> evaluate) for each
 evaluation month independently.
 
+Two-stage evaluation:
+  --screen  12 representative months (~36s with LightGBM) — default for hypothesis testing
+  --full    36 rolling months (~108s with LightGBM) — only run if screening passes
+
 CLI:
-  python ml/benchmark.py --version-id v1 --ptype f0 --class-type onpeak
-  python ml/benchmark.py --version-id v1 --screen   # quick 4-month screen
+  python ml/benchmark.py --version-id v2 --screen              # hypothesis screening (default)
+  python ml/benchmark.py --version-id v2 --full                 # comprehensive validation
+  python ml/benchmark.py --version-id v2 --eval-months 2021-06  # specific months
 """
 
 import argparse
@@ -15,7 +20,7 @@ import resource
 import statistics
 from pathlib import Path
 
-from ml.config import PipelineConfig
+from ml.config import PipelineConfig, _SCREEN_EVAL_MONTHS, _FULL_EVAL_MONTHS
 from ml.evaluate import aggregate_months
 from ml.pipeline import run_pipeline
 
@@ -56,9 +61,6 @@ def _eval_single_month(
     return metrics
 
 
-_SCREEN_MONTHS = ["2020-12", "2021-09", "2022-06", "2023-03"]
-
-
 def run_benchmark(
     version_id: str,
     eval_months: list[str],
@@ -66,7 +68,7 @@ def run_benchmark(
     period_type: str = "f0",
     registry_dir: str = "registry",
     config: PipelineConfig | None = None,
-    screen: bool = False,
+    mode: str = "screen",
 ) -> dict:
     """Run benchmark across multiple evaluation months.
 
@@ -84,15 +86,13 @@ def run_benchmark(
         Path to registry directory.
     config : PipelineConfig or None
         Pipeline config. Uses default if None.
-    screen : bool
-        If True, only evaluate on 4 screening months (fast hypothesis test).
+    mode : str
+        "screen" (12 months, hypothesis testing) or "full" (36 months, validation).
     """
     if config is None:
         config = PipelineConfig()
 
-    if screen:
-        eval_months = _SCREEN_MONTHS
-        print(f"[benchmark] SCREEN MODE: evaluating on {eval_months}")
+    print(f"[benchmark] {mode.upper()} MODE: {len(eval_months)} eval months")
 
     per_month = {}
     skipped = []
@@ -123,7 +123,7 @@ def run_benchmark(
             "period_type": period_type,
             "train_months": config.train_months,
             "val_months": config.val_months,
-            "screen": screen,
+            "mode": mode,
         },
         "per_month": per_month,
         "aggregate": agg,
@@ -187,27 +187,27 @@ def run_benchmark(
 
 def main():
     parser = argparse.ArgumentParser(description="Run multi-month LTR benchmark")
-    parser.add_argument("--version-id", required=True, help="Version ID (e.g. v1)")
+    parser.add_argument("--version-id", required=True, help="Version ID (e.g. v2)")
     parser.add_argument("--ptype", default="f0", help="Period type")
     parser.add_argument("--class-type", default="onpeak", help="Class type")
     parser.add_argument("--eval-months", nargs="+", default=None,
-                        help="Eval months (default: read from gates.json)")
+                        help="Eval months (overrides --screen/--full)")
     parser.add_argument("--registry-dir", default="registry", help="Registry directory")
-    parser.add_argument("--gates-path", default="registry/gates.json", help="Gates JSON")
-    parser.add_argument("--screen", action="store_true",
-                        help="Quick screen on 4 months only")
+    parser.add_argument("--screen", action="store_true", default=True,
+                        help="Screen: 12 representative months (default)")
+    parser.add_argument("--full", action="store_true",
+                        help="Full: 36 rolling months (run after screening passes)")
     args = parser.parse_args()
 
-    eval_months = args.eval_months
-    if eval_months is None and not args.screen:
-        with open(args.gates_path) as f:
-            gates = json.load(f)
-        eval_months = gates.get("eval_months", {}).get("primary", [])
-        if not eval_months:
-            raise ValueError("No eval_months in gates.json and none provided via --eval-months")
-
-    if args.screen:
-        eval_months = _SCREEN_MONTHS
+    if args.eval_months:
+        eval_months = args.eval_months
+        mode = "custom"
+    elif args.full:
+        eval_months = _FULL_EVAL_MONTHS
+        mode = "full"
+    else:
+        eval_months = _SCREEN_EVAL_MONTHS
+        mode = "screen"
 
     run_benchmark(
         version_id=args.version_id,
@@ -215,7 +215,7 @@ def main():
         class_type=args.class_type,
         period_type=args.ptype,
         registry_dir=args.registry_dir,
-        screen=args.screen,
+        mode=mode,
     )
 
 

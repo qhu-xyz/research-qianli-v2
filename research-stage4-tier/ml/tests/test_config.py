@@ -5,9 +5,9 @@ from ml.config import LTRConfig, PipelineConfig, GateConfig
 
 def test_ltr_config_defaults():
     cfg = LTRConfig()
-    assert cfg.objective == "rank:pairwise"
+    assert cfg.backend == "lightgbm"
     assert cfg.n_estimators == 400
-    assert cfg.max_depth == 5
+    assert cfg.num_leaves == 31
     assert cfg.early_stopping_rounds == 50
     assert len(cfg.features) == 40
     assert len(cfg.monotone_constraints) == len(cfg.features)
@@ -17,7 +17,7 @@ def test_ltr_config_roundtrip():
     d = cfg.to_dict()
     cfg2 = LTRConfig.from_dict(d)
     assert cfg2.features == cfg.features
-    assert cfg2.objective == cfg.objective
+    assert cfg2.backend == cfg.backend
     assert cfg2.n_estimators == cfg.n_estimators
 
 def test_pipeline_config_roundtrip():
@@ -26,7 +26,7 @@ def test_pipeline_config_roundtrip():
     cfg2 = PipelineConfig.from_dict(d)
     assert cfg2.train_months == 6
     assert cfg2.val_months == 2
-    assert cfg2.ltr.objective == "rank:pairwise"
+    assert cfg2.ltr.backend == "lightgbm"
 
 def test_gate_config_missing_file(tmp_path):
     cfg = GateConfig.from_json(tmp_path / "nonexistent.json")

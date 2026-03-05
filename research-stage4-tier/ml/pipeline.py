@@ -64,13 +64,12 @@ def run_pipeline(
     del train_df, val_df
     gc.collect()
 
-    # Phase 3: Train
-    # NOTE: We do NOT pass eval_set for early stopping because XGBoost's
-    # default NDCG eval metric requires labels in [0, 31] but shadow prices
-    # are raw floats (0 to 100k+). Training uses all n_estimators instead.
-    print(f"[phase 3] Training LTR model ... (mem={mem_mb():.0f} MB)")
+    # Phase 3: Train (LightGBM uses rank-transformed labels internally,
+    # so early stopping works. XGBoost skips early stopping.)
+    print(f"[phase 3] Training LTR model ({config.ltr.backend}) ... (mem={mem_mb():.0f} MB)")
     model = train_ltr_model(
         X_train, y_train, groups_train, config.ltr,
+        X_val=X_val, y_val=y_val, groups_val=groups_val,
     )
     del X_train, y_train, groups_train, X_val, y_val, groups_val
     gc.collect()
@@ -85,9 +84,12 @@ def run_pipeline(
     print(f"[phase 5] Evaluating ... (mem={mem_mb():.0f} MB)")
     metrics = evaluate_ltr(actual_sp, scores)
 
-    # Feature importance
-    importance = model.feature_importances_
+    # Feature importance (LightGBM: .feature_importance(), XGBoost: .feature_importances_)
     feat_names = config.ltr.features
+    if hasattr(model, "feature_importance"):
+        importance = model.feature_importance(importance_type="gain")
+    else:
+        importance = model.feature_importances_
     metrics["_feature_importance"] = {
         name: float(imp)
         for name, imp in sorted(

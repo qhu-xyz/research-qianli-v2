@@ -1,6 +1,6 @@
 """LTR pipeline configuration.
 
-LTRConfig      -- XGBoost rank:pairwise model config.
+LTRConfig      -- LightGBM lambdarank model config (default) or XGBoost rank:pairwise.
 PipelineConfig -- composition of LTR config + pipeline params.
 GateConfig     -- quality gates loaded from JSON.
 """
@@ -61,12 +61,25 @@ _STAGE3_MONOTONE: list[int] = [
 _ALL_FEATURES: list[str] = _STAGE3_FEATURES + _V62B_FEATURES
 _ALL_MONOTONE: list[int] = _STAGE3_MONOTONE + [0] * len(_V62B_FEATURES)
 
-# ── Eval months: 12 months spread across 2020-06 to 2023-05 ──
-_DEFAULT_EVAL_MONTHS: list[str] = [
+# ── Eval months ──
+# Screen: 12 representative months (1 per quarter, ~36s with LightGBM)
+# Full: 36 rolling months for comprehensive validation (~108s with LightGBM)
+# Strategy: screen first on 12; if promising, run full 36; else move on.
+_SCREEN_EVAL_MONTHS: list[str] = [
     "2020-09", "2020-12", "2021-03", "2021-06",
     "2021-09", "2021-12", "2022-03", "2022-06",
     "2022-09", "2022-12", "2023-03", "2023-05",
 ]
+
+_FULL_EVAL_MONTHS: list[str] = [
+    f"{y:04d}-{m:02d}"
+    for y in range(2020, 2024)
+    for m in range(1, 13)
+    if (y, m) >= (2020, 6) and (y, m) <= (2023, 5)
+]
+
+# Default = screen (fast hypothesis testing)
+_DEFAULT_EVAL_MONTHS: list[str] = _SCREEN_EVAL_MONTHS
 
 # ── Data paths ──
 V62B_SIGNAL_BASE = "/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1"
@@ -77,36 +90,44 @@ SPICE6_CI_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/constraint_in
 
 @dataclass
 class LTRConfig:
-    """XGBoost learning-to-rank configuration."""
+    """Learning-to-rank configuration (LightGBM lambdarank or XGBoost rank:pairwise)."""
 
     features: list[str] = field(default_factory=lambda: list(_ALL_FEATURES))
     monotone_constraints: list[int] = field(default_factory=lambda: list(_ALL_MONOTONE))
 
-    # XGBoost hyperparams
-    objective: str = "rank:pairwise"
+    # Backend: "lightgbm" (22x faster) or "xgboost"
+    backend: str = "lightgbm"
+
+    # Shared hyperparams
     n_estimators: int = 400
-    max_depth: int = 5
     learning_rate: float = 0.05
+    min_child_weight: int = 25
+
+    # LightGBM-specific
+    num_leaves: int = 31
     subsample: float = 0.8
     colsample_bytree: float = 0.8
     reg_alpha: float = 1.0
     reg_lambda: float = 1.0
-    min_child_weight: int = 25
+
+    # XGBoost-specific (used only when backend="xgboost")
+    max_depth: int = 5
     early_stopping_rounds: int = 50
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "features": list(self.features),
             "monotone_constraints": list(self.monotone_constraints),
-            "objective": self.objective,
+            "backend": self.backend,
             "n_estimators": self.n_estimators,
-            "max_depth": self.max_depth,
             "learning_rate": self.learning_rate,
+            "min_child_weight": self.min_child_weight,
+            "num_leaves": self.num_leaves,
+            "max_depth": self.max_depth,
             "subsample": self.subsample,
             "colsample_bytree": self.colsample_bytree,
             "reg_alpha": self.reg_alpha,
             "reg_lambda": self.reg_lambda,
-            "min_child_weight": self.min_child_weight,
             "early_stopping_rounds": self.early_stopping_rounds,
         }
 

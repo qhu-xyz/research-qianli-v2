@@ -12,6 +12,17 @@
 - **Hypothesis**: Removing 6 lowest-importance features should improve sampling efficiency and concentrate tree splits on high-signal features
 - **Result**: UNTESTED — worker failed
 
+### H2a: Add 3 interaction features → 37 features (iter2, UNTESTED — worker failed)
+- **Hypothesis**: Adding hist_physical_interaction, overload_exceedance_product, hist_seasonal_band to the existing 34 features should improve compound severity detection for tier 0/1
+- **Rationale**: Pre-computed interactions between price history and flow exceedance provide XGBoost with explicit compound signals at max_depth=5
+- **Result**: UNTESTED — worker failed (identical failure mode to iter1)
+- **Retry**: Queued as sole hypothesis for iter3 (last iteration)
+
+### H2b: Prune 6 + add 3 interactions → 31 features (iter2, UNTESTED — worker failed)
+- **Hypothesis**: Removing 6 lowest-importance features + adding 3 interactions
+- **Result**: UNTESTED — worker failed
+- **Status**: DROPPED — no iterations remaining for A/B. Iter3 tests only H2a.
+
 ## Candidate Hypotheses (untested, for future batches)
 
 1. **Increase tier 1 class weight** (5→15 or 20): Should improve Tier-Recall@1 from 0.098 [BLOCKED: FE-only batch]

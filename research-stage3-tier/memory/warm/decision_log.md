@@ -12,4 +12,10 @@
 ## 2026-03-05: Iter 1 worker failure — retry with simplified direction
 - **Decision**: Retry the same feature engineering hypotheses in iter2 with simplified worker instructions
 - **Rationale**: Worker failed to produce any artifacts despite claiming done. The hypotheses (interaction features + light pruning vs aggressive pruning) are still the right first experiments for this FE-only batch. Simplifying the direction to a single hypothesis reduces worker execution complexity and failure risk.
-- **Outcome**: Pending — iter2 direction written
+- **Outcome**: FAILED — same failure mode as iter1. Worker wrote handoff claiming done but produced no artifacts.
+
+## 2026-03-05: Iter 2 worker failure — last chance with iter3
+- **Decision**: Iter3 must use the simplest possible direction: single hypothesis, no screening phase, no A/B comparison. Just add the 3 interaction features directly and run the full 12-month benchmark.
+- **Rationale**: Two consecutive worker failures with identical symptoms (handoff written, no artifacts) suggests a systematic issue. The screening phase (2-month subset) may be contributing to failure complexity. Skipping screening and going directly to full benchmark is simpler and, since this is the last iteration, we need all 12 months anyway.
+- **Risk**: If the worker fails again, we end the batch with no iterations producing data. But we cannot simplify further than "add features, run benchmark."
+- **Outcome**: Pending — iter3 direction to be written

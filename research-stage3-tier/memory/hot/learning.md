@@ -16,9 +16,13 @@
 
 ## Process Learnings
 
-6. **Worker reliability**: Complex directions with 2 competing hypotheses + detailed overrides increase failure risk. Simpler, single-hypothesis directions with explicit step-by-step instructions are safer.
+6. **Worker reliability is the critical bottleneck**: Two consecutive identical failures — worker writes handoff claiming "done" but produces zero artifacts. The issue is NOT direction complexity; the worker execution itself is systematically broken.
 
-7. **Leaked state**: Workers can increment version_counter.json without producing artifacts. The orchestrator should be aware of version counter drift after failures.
+7. **Leaked state**: Workers increment version_counter.json without producing artifacts. After 2 failures, version_counter is at next_id=3 but only v0 exists in registry/.
+
+8. **Direction simplification alone is insufficient**: Iter2 direction was simpler than iter1 (same hypotheses, clearer instructions) but produced the identical failure. The problem is not in the orchestrator's direction quality.
+
+9. **Screening phase may be a failure amplifier**: Both failed iterations included a 2-month screening step before full benchmark. For iter3, eliminating screening and going directly to full benchmark reduces the number of steps the worker must execute.
 
 ## Technical Notes
 
@@ -26,3 +30,4 @@
 - `multi:softprob` objective required for probability outputs
 - monotone_constraints must be tuple, not list, for XGBoost
 - mem_mb() uses ru_maxrss/1024 on Linux
+- Dead interaction features (hist_physical_interaction, overload_exceedance_product, hist_seasonal_band) are already computed by `compute_interaction_features()` — they exist as DataFrame columns but are excluded by `_DEAD_FEATURES` set in config.py

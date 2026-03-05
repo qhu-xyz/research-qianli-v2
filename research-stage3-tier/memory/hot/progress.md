@@ -2,35 +2,34 @@
 
 ## Current State
 - **Champion**: v0 (baseline, unchanged)
-- **Current batch**: tier-fe-2-20260304-225923 (FE only)
-- **Current iteration**: 2 (planning complete, worker next)
-- **Version counter**: next_id=4 (leaked from 3 consecutive worker failures)
-- **Consecutive worker failures**: 3 (2 from tier-fe-1, 1 from tier-fe-2)
+- **Iterations completed**: 0 successful (all prior failed due to infrastructure bug, now fixed)
+- **Version counter**: next_id=5 (leaked 4 times from failed iterations)
+- **Next batch**: tier-fe-2 (FE only, 3 iterations)
 
-## Batch History
+## Root Cause of All Prior Failures
 
-### Previous batch: tier-fe-1 (3 iterations, ALL FAILED)
-- Worker execution failures -- no artifacts produced in any iteration
-- Hypotheses (interaction features + pruning) remain untested
-- Version counter leaked to next_id=3
+ALL worker failures (tier-fe-1 iter1-2, tier-fe-2 iter1) had the same root cause:
+**Uncommitted changes to HUMAN-WRITE-ONLY files** caused the pre-merge guard to reject worker output.
 
-### Current batch: tier-fe-2
+The guard in `run_single_iter.sh` (line 116-121) diffs main working tree vs worktree.
+If main has uncommitted edits to evaluate.py or gates.json, the worktree (branched from HEAD)
+has the old version, and the guard sees a diff → rejects the worker.
 
-**Iter 1 -- WORKER FAILED**
-- Direction: Add 3 interaction features (overload_x_hist, prob110_x_recent_hist, tail_x_hist), screen 2 months, full benchmark
-- Worker wrote handoff claiming done but made zero code changes and produced zero artifacts
-- Version counter leaked: 3->4
+**Fix**: All changes to evaluate.py, gates.json, and registry/v0/ are now committed to main (commit a2a38c5).
 
-**Iter 2 -- PLANNED (orchestrator plan complete)**
-- Hypothesis A: Add 3 interaction features (34->37)
-- Hypothesis B: Add 3 interactions + prune 4 low-importance (34->33)
-- Screen months: 2022-06 (weak) + 2021-09 (strong)
-- Full 2-hypothesis screening protocol restored
-- Direction written to memory/direction_iter2.md
+## Metric Redesign (v2 gates) — COMMITTED
+
+**Group A (blocking)** — all tier-count invariant:
+- Tier-VC@100, Tier-VC@500, Tier0-AP (new), Tier01-AP (new)
+
+**Group B (monitor)** — no hard gates:
+- Tier-NDCG, QWK, Macro-F1, Value-QWK, Tier-Recall@0, Tier-Recall@1
+
+**Removed**: Tier-Accuracy, Adjacent-Accuracy
 
 ## Priority Improvement Areas
-1. Tier-VC@100 below floor (0.071 vs 0.075) -- only Group A gate failing Layer 1
-2. Tier0-AP mean 0.306 -- high variance (0.114 to 0.594), worst months late 2022
-3. Tier01-AP mean 0.311 -- barely passing, worst months 2022-06 (0.195), 2022-12 (0.194)
-4. Tier-Recall@1 catastrophically low (0.047) -- missing most strongly binding constraints
-5. High variance across months -- 2022-06 is the worst month across most metrics
+1. Tier-VC@100 below floor (0.071 vs 0.075) — only Group A gate failing Layer 1
+2. Tier0-AP mean 0.306 — high variance (0.114 to 0.594), worst months late 2022
+3. Tier01-AP mean 0.311 — barely passing, worst months 2022-06 (0.195), 2022-12 (0.194)
+4. Tier-Recall@1 catastrophically low (0.047) — missing most strongly binding constraints
+5. High variance across months — 2022-06 is the worst month across most metrics

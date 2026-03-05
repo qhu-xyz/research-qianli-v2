@@ -14,11 +14,11 @@
 
 ## Process Learnings
 
-6. **Worker reliability is the critical bottleneck**: 3 consecutive failures across 2 batches — worker writes handoff claiming "done" but produces zero artifacts. Not a timeout; the worker is not executing the direction at all.
+6. **CRITICAL: Commit all HUMAN-WRITE-ONLY changes before launching pipeline**: The pre-merge guard in `run_single_iter.sh` diffs main working tree vs worktree for evaluate.py and gates.json. If main has uncommitted edits, the worktree (branched from HEAD) has the old committed version, the guard sees a diff, and rejects ALL worker output. This was the root cause of ALL 4 consecutive failures across tier-fe-1 and tier-fe-2. The workers actually ran correctly — their work was silently rejected at merge time.
 
-7. **Leaked state**: Workers increment version_counter.json without producing artifacts. After 3 failures across 2 batches, version_counter is at next_id=4 but only v0 exists in registry/.
+7. **Leaked state**: Workers increment version_counter.json without producing artifacts when the merge guard rejects. After 4 failures, version_counter reached next_id=5 but only v0 exists in registry/.
 
-8. **Direction simplification alone is insufficient**: The problem is not direction complexity. Iter1 of tier-fe-2 had extremely detailed instructions with exact code snippets, yet the worker still failed identically. The worker appears to write the handoff signal immediately without reading or executing the direction.
+8. **Pre-launch checklist**: Before `run_pipeline.sh`: (a) `git status` shows no uncommitted changes to evaluate.py or gates.json, (b) `git diff` on HUMAN-WRITE-ONLY files is empty, (c) all gates have `pending_baseline: false`.
 
 9. **The interaction feature hypothesis remains the right first experiment**: Pre-computed products of top-importance features (recent_hist_da, hist_da) with physical flow signals (expected_overload, prob_exceed_110, tail_concentration) should help tier 0/1 discrimination. This has been the plan since batch tier-fe-1 and remains untested.
 

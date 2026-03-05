@@ -21,13 +21,16 @@ def _set_smoke_test(monkeypatch):
 # ── Gate metric keys that must always be present ─────────────────────────
 
 _REQUIRED_GATE_KEYS = {
+    # Group A (blocking)
     "Tier-VC@100",
     "Tier-VC@500",
+    "Tier0-AP",
+    "Tier01-AP",
+    # Group B (monitor)
     "Tier-NDCG",
     "QWK",
     "Macro-F1",
-    "Tier-Accuracy",
-    "Adjacent-Accuracy",
+    "Value-QWK",
     "Tier-Recall@0",
     "Tier-Recall@1",
 }

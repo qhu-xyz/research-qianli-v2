@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "note": "Initial gates - pending v0 baseline calibration. All floors at 0 until v0 runs.",
+  "version": 2,
+  "note": "v2: Group A = tier-count invariant blocking gates (VC@k, AP). Group B = whole-population monitors (no hard gates). AP gates pending v0 baseline.",
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
   "eval_months": {
@@ -41,18 +41,32 @@
       "group": "A",
       "pending_baseline": false
     },
+    "Tier0-AP": {
+      "floor": 0.306199,
+      "tail_floor": 0.114448,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "Tier01-AP": {
+      "floor": 0.311,
+      "tail_floor": 0.193494,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
     "Tier-NDCG": {
       "floor": 0.766866,
       "tail_floor": 0.6293,
       "direction": "higher",
-      "group": "A",
+      "group": "B",
       "pending_baseline": false
     },
     "QWK": {
       "floor": 0.358666,
       "tail_floor": 0.183913,
       "direction": "higher",
-      "group": "A",
+      "group": "B",
       "pending_baseline": false
     },
     "Macro-F1": {
@@ -62,16 +76,9 @@
       "group": "B",
       "pending_baseline": false
     },
-    "Tier-Accuracy": {
-      "floor": 0.943147,
-      "tail_floor": 0.931147,
-      "direction": "higher",
-      "group": "B",
-      "pending_baseline": false
-    },
-    "Adjacent-Accuracy": {
-      "floor": 0.974789,
-      "tail_floor": 0.961032,
+    "Value-QWK": {
+      "floor": 0.391395,
+      "tail_floor": 0.180416,
       "direction": "higher",
       "group": "B",
       "pending_baseline": false
@@ -89,13 +96,6 @@
       "direction": "higher",
       "group": "B",
       "pending_baseline": false
-    },
-    "Value-QWK": {
-      "floor": 0,
-      "tail_floor": 0,
-      "direction": "higher",
-      "group": "B",
-      "pending_baseline": true
     }
   }
 }

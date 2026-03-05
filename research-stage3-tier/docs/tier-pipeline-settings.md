@@ -163,41 +163,40 @@ This is the primary ranking signal — Tier-VC@100 and Tier-VC@500 evaluate how 
 
 ## 7. Metrics
 
+All Group A metrics are **tier-count invariant**: you cannot improve them by simply predicting more constraints as tier 0. This ensures the autonomous FE loop cannot game the gates.
+
 ### Group A — Blocking Gates (must pass to promote)
 
-| Metric | What It Measures | Range |
-|--------|-----------------|-------|
-| **Tier-VC@100** | Fraction of total actual shadow price value captured by top 100 constraints ranked by `tier_ev_score` | [0, 1] |
-| **Tier-VC@500** | Same as VC@100 but top 500 | [0, 1] |
-| **Tier-NDCG** | Normalized DCG using actual shadow price as relevance, ranked by `tier_ev_score` | [0, 1] |
-| **QWK** | Cohen's Quadratic Weighted Kappa — penalizes large tier mismatches quadratically | (-inf, 1] |
+| Metric | What It Measures | Why Invariant | Range |
+|--------|-----------------|---------------|-------|
+| **Tier-VC@100** | Value captured by top 100 constraints ranked by `tier_ev_score` | Ranking-based, uses probabilities not labels | [0, 1] |
+| **Tier-VC@500** | Same as VC@100 but top 500 | Ranking-based | [0, 1] |
+| **Tier0-AP** | Average Precision for tier 0 using P(tier=0) as score | Threshold-free, integrates over all thresholds | [0, 1] |
+| **Tier01-AP** | Average Precision for tier 0+1 using P(tier=0)+P(tier=1) as score | Threshold-free | [0, 1] |
+
+**Why AP?** AP integrates precision over all recall levels. Unlike recall (trivially gameable by predicting everything as tier 0) or F1 (has a peak but still manipulable in low-recall regime), AP is truly threshold-free — it evaluates how well the probability scores separate positives from negatives across all possible thresholds.
 
 ### Group B — Monitor Gates (tracked, don't block promotion)
 
 | Metric | What It Measures | Range |
 |--------|-----------------|-------|
+| **Tier-NDCG** | Normalized DCG using actual shadow price as relevance, ranked by `tier_ev_score` | [0, 1] |
+| **QWK** | Cohen's Quadratic Weighted Kappa — penalizes large tier mismatches quadratically | (-inf, 1] |
 | **Macro-F1** | Unweighted average F1 across all tiers | [0, 1] |
-| **Tier-Accuracy** | Overall classification accuracy | [0, 1] |
-| **Adjacent-Accuracy** | Fraction of predictions within 1 tier of actual | [0, 1] |
+| **Value-QWK** | Value-Weighted QWK — tier 0 misclassifications penalized ~80x more than tier 3 | (-inf, 1] |
 | **Tier-Recall@0** | Recall for tier 0 (heavily binding, $3000+) | [0, 1] |
 | **Tier-Recall@1** | Recall for tier 1 (strongly binding, $1000-3000) | [0, 1] |
-| **Value-QWK** | Value-Weighted QWK — tier 0 misclassifications penalized ~80x more than tier 3 | (-inf, 1] |
 
-### Value-Weighted QWK
+### Why Tier-NDCG, QWK, Value-QWK Moved to Group B
 
-Standard QWK treats all tier misclassifications equally (by ordinal distance). Value-QWK weights each row of the confusion matrix by the tier's midpoint value:
+- **Tier-NDCG**: Invariant but measures whole-population ranking, not tier 0/1 specifically
+- **QWK**: Invariant (symmetric confusion penalty), but dominated by tier 3 volume
+- **Value-QWK**: NOT invariant — the 135:1 reward/penalty asymmetry (tier 0 weight 0.606 vs tier 3 weight 0.008) means over-predicting tier 0 can improve it
 
-```
-Weight for tier 0 miss: 4000 / 6600 = 0.606  (60.6% of total penalty budget)
-Weight for tier 1 miss: 2000 / 6600 = 0.303  (30.3%)
-Weight for tier 2 miss:  550 / 6600 = 0.083   (8.3%)
-Weight for tier 3 miss:   50 / 6600 = 0.008   (0.8%)
-Weight for tier 4 miss:    0 / 6600 = 0.000   (0.0%)
-```
+### Removed Metrics
 
-This reflects the capital allocation reality: getting tier 0 wrong ($4000 shadow price) costs ~80x more than getting tier 3 wrong ($50).
-
-**Status:** Added as Group B monitor with `pending_baseline: true`. Will be calibrated after v0 baseline completes.
+- **Tier-Accuracy**: Dominated by tier 3 (~97% of samples), not informative
+- **Adjacent-Accuracy**: Same issue as Tier-Accuracy
 
 ### All Metrics Are Higher-Is-Better
 
@@ -215,22 +214,20 @@ No direction inversions needed (unlike stage 2 which had lower-is-better C-RMSE)
 | **2. Tail Safety** | `count(months < tail_floor) <= 1` | No catastrophic months |
 | **3. Tail Non-Regression** | `bottom_2_mean(new) >= bottom_2_mean(champ) - 0.02` | Worst months don't regress |
 
-### Gate Floors (from v0 baseline, PRE-early-stopping)
-
-These floors will be recalibrated after the current v0 baseline (with early stopping) completes.
+### Gate Floors (from v0 baseline with early stopping)
 
 | Gate | Floor | Tail Floor | Group |
 |------|-------|------------|-------|
 | Tier-VC@100 | 0.075 | 0.008 | A |
 | Tier-VC@500 | 0.217 | 0.047 | A |
-| Tier-NDCG | 0.767 | 0.629 | A |
-| QWK | 0.359 | 0.184 | A |
+| Tier0-AP | 0.306 | 0.114 | A |
+| Tier01-AP | 0.311 | 0.193 | A |
+| Tier-NDCG | 0.767 | 0.629 | B |
+| QWK | 0.359 | 0.184 | B |
 | Macro-F1 | 0.369 | 0.288 | B |
-| Tier-Accuracy | 0.943 | 0.931 | B |
-| Adjacent-Accuracy | 0.975 | 0.961 | B |
+| Value-QWK | 0.391 | 0.180 | B |
 | Tier-Recall@0 | 0.374 | 0.076 | B |
 | Tier-Recall@1 | 0.098 | 0.026 | B |
-| Value-QWK | pending | pending | B |
 
 ### Calibration Formula
 

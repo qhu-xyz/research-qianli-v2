@@ -2,16 +2,18 @@
 
 HUMAN-WRITE-ONLY — workers MUST NOT modify this file.
 
-Group A (blocking): Tier-VC@100, Tier-VC@500, Tier-NDCG, QWK.
-Group B (monitor): Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0, Tier-Recall@1, Value-QWK.
+Group A (blocking): Tier-VC@100, Tier-VC@500, Tier0-AP, Tier01-AP.
+  All Group A metrics are tier-count invariant (ranking/threshold-free).
+Group B (monitor): Tier-NDCG, QWK, Macro-F1, Value-QWK, Tier-Recall@0, Tier-Recall@1.
 
 All ranking metrics use tier_ev_score for ranking and actual_shadow_price
 as relevance — preserving the downstream capital allocation objective.
+AP metrics use tier probabilities directly (threshold-free, invariant).
 """
 from __future__ import annotations
 
 import numpy as np
-from sklearn.metrics import f1_score
+from sklearn.metrics import average_precision_score, f1_score
 
 # No lower-is-better metrics in tier pipeline.
 _LOWER_IS_BETTER: set[str] = set()
@@ -202,6 +204,42 @@ def _tier_recall(
     return float((pred_tier[mask] == target_tier).sum() / n_actual)
 
 
+def _tier_ap(
+    actual_tier: np.ndarray,
+    tier_proba: np.ndarray,
+    target_tiers: list[int],
+) -> float:
+    """Average Precision for a set of target tiers.
+
+    Uses predicted probability as the score and actual tier membership as the
+    binary label.  For a single tier (e.g. [0]), the score is P(tier=0).
+    For combined tiers (e.g. [0, 1]), the score is P(tier=0) + P(tier=1).
+
+    AP is threshold-free and tier-count invariant — it integrates over all
+    possible thresholds, so simply predicting more constraints as a target
+    tier cannot monotonically improve it.
+
+    Parameters
+    ----------
+    actual_tier : np.ndarray
+        Ground-truth tier labels in {0, 1, 2, 3, 4}.
+    tier_proba : np.ndarray
+        Predicted tier probabilities, shape ``(n_samples, 5)``.
+    target_tiers : list[int]
+        Target tier indices (e.g. [0] for Tier0-AP, [0, 1] for Tier01-AP).
+
+    Returns
+    -------
+    float
+        AP score in [0, 1]. Returns 0 if no positive samples exist.
+    """
+    y_true = np.isin(actual_tier, target_tiers).astype(int)
+    if y_true.sum() == 0:
+        return 0.0
+    y_score = tier_proba[:, target_tiers].sum(axis=1)
+    return float(average_precision_score(y_true, y_score))
+
+
 def evaluate_tier_pipeline(
     actual_shadow_price: np.ndarray,
     actual_tier: np.ndarray,
@@ -234,21 +272,18 @@ def evaluate_tier_pipeline(
     """
     n = len(actual_tier)
 
-    # --- Group A: blocking gates ---
+    # --- Group A: blocking gates (all tier-count invariant) ---
     tier_vc_100 = _value_capture_at_k(actual_shadow_price, tier_ev_score, 100)
     tier_vc_500 = _value_capture_at_k(actual_shadow_price, tier_ev_score, 500)
+    tier0_ap = _tier_ap(actual_tier, tier_proba, [0])
+    tier01_ap = _tier_ap(actual_tier, tier_proba, [0, 1])
+
+    # --- Group B: monitor (whole-population, no hard gates) ---
     tier_ndcg = _ndcg(actual_shadow_price, tier_ev_score)
     qwk = _quadratic_weighted_kappa(actual_tier, pred_tier)
-
-    # --- Group B: monitor ---
     macro_f1 = float(f1_score(
         actual_tier, pred_tier, average="macro", zero_division=0,
     ))
-    tier_accuracy = float(np.mean(actual_tier == pred_tier)) if n > 0 else 0.0
-    adjacent_accuracy = (
-        float(np.mean(np.abs(actual_tier.astype(int) - pred_tier.astype(int)) <= 1))
-        if n > 0 else 0.0
-    )
     tier_recall_0 = _tier_recall(actual_tier, pred_tier, 0)
     tier_recall_1 = _tier_recall(actual_tier, pred_tier, 1)
 
@@ -257,18 +292,18 @@ def evaluate_tier_pipeline(
     value_qwk = _value_weighted_qwk(actual_tier, pred_tier, tier_midpoints)
 
     return {
-        # Group A (blocking)
+        # Group A (blocking) — tier-count invariant
         "Tier-VC@100": tier_vc_100,
         "Tier-VC@500": tier_vc_500,
+        "Tier0-AP": tier0_ap,
+        "Tier01-AP": tier01_ap,
+        # Group B (monitor)
         "Tier-NDCG": tier_ndcg,
         "QWK": qwk,
-        # Group B (monitor)
         "Macro-F1": macro_f1,
-        "Tier-Accuracy": tier_accuracy,
-        "Adjacent-Accuracy": adjacent_accuracy,
+        "Value-QWK": value_qwk,
         "Tier-Recall@0": tier_recall_0,
         "Tier-Recall@1": tier_recall_1,
-        "Value-QWK": value_qwk,
         # Monitoring
         "n_samples": n,
         "n_binding": int((actual_tier < 4).sum()),

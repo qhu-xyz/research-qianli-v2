@@ -4,8 +4,8 @@ Loads all registered versions, checks each metric against gate floors,
 produces a Markdown comparison table and JSON summary.
 
 Tier gate metrics:
-  Group A (blocking): Tier-VC@100, Tier-VC@500, Tier-NDCG, QWK
-  Group B (monitor):  Macro-F1, Tier-Accuracy, Adjacent-Accuracy, Tier-Recall@0/1
+  Group A (blocking): Tier-VC@100, Tier-VC@500, Tier0-AP, Tier01-AP
+  Group B (monitor):  Tier-NDCG, QWK, Macro-F1, Value-QWK, Tier-Recall@0/1
 
 All metrics are higher-is-better.
 

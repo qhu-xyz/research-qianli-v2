@@ -25,16 +25,17 @@ class TestEvaluateTierPipelineBasic:
 
         result = evaluate_tier_pipeline(actual_sp, actual_tier, pred_tier, tier_proba, tier_ev_score)
 
-        # Group A keys
+        # Group A keys (blocking, tier-count invariant)
         assert "Tier-VC@100" in result
         assert "Tier-VC@500" in result
+        assert "Tier0-AP" in result
+        assert "Tier01-AP" in result
+
+        # Group B keys (monitor)
         assert "Tier-NDCG" in result
         assert "QWK" in result
-
-        # Group B keys
         assert "Macro-F1" in result
-        assert "Tier-Accuracy" in result
-        assert "Adjacent-Accuracy" in result
+        assert "Value-QWK" in result
         assert "Tier-Recall@0" in result
         assert "Tier-Recall@1" in result
 

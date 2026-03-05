@@ -2,9 +2,7 @@
 
 ## v0 Baseline Insights
 
-1. **Tier 4 is empty**: No negative shadow prices exist in real MISO data. The model effectively operates as a 4-class classifier. Consider:
-   - Removing tier 4 entirely (4-class model)
-   - Keeping tier 4 with 0 weight (current approach works but wastes a class)
+1. **Tier 4 is empty**: No negative shadow prices exist in real MISO data. The model effectively operates as a 4-class classifier. Consider removing tier 4 entirely or keeping with 0 weight.
 
 2. **Tier 1 recall is catastrophic (0.098)**: The model rarely predicts tier 1. This is the most critical improvement area since tier 1 constraints ([1000, 3000)) represent significant value.
 
@@ -16,13 +14,13 @@
 
 ## Process Learnings
 
-6. **Worker reliability is the critical bottleneck**: Two consecutive identical failures — worker writes handoff claiming "done" but produces zero artifacts. The issue is NOT direction complexity; the worker execution itself is systematically broken.
+6. **Worker reliability is the critical bottleneck**: 3 consecutive failures across 2 batches — worker writes handoff claiming "done" but produces zero artifacts. Not a timeout; the worker is not executing the direction at all.
 
-7. **Leaked state**: Workers increment version_counter.json without producing artifacts. After 2 failures, version_counter is at next_id=3 but only v0 exists in registry/.
+7. **Leaked state**: Workers increment version_counter.json without producing artifacts. After 3 failures across 2 batches, version_counter is at next_id=4 but only v0 exists in registry/.
 
-8. **Direction simplification alone is insufficient**: Iter2 direction was simpler than iter1 (same hypotheses, clearer instructions) but produced the identical failure. The problem is not in the orchestrator's direction quality.
+8. **Direction simplification alone is insufficient**: The problem is not direction complexity. Iter1 of tier-fe-2 had extremely detailed instructions with exact code snippets, yet the worker still failed identically. The worker appears to write the handoff signal immediately without reading or executing the direction.
 
-9. **Screening phase may be a failure amplifier**: Both failed iterations included a 2-month screening step before full benchmark. For iter3, eliminating screening and going directly to full benchmark reduces the number of steps the worker must execute.
+9. **The interaction feature hypothesis remains the right first experiment**: Pre-computed products of top-importance features (recent_hist_da, hist_da) with physical flow signals (expected_overload, prob_exceed_110, tail_concentration) should help tier 0/1 discrimination. This has been the plan since batch tier-fe-1 and remains untested.
 
 ## Technical Notes
 

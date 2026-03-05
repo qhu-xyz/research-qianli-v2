@@ -32,3 +32,16 @@
 - **Root cause**: Systematic worker failure. Two consecutive identical failures — worker writes handoff claiming completion but never runs benchmark or produces artifacts. Not a random timeout; likely a bug in the worker's execution flow where it writes the handoff signal before completing actual work.
 - **Result**: No data collected. All hypotheses remain UNTESTED after 2 iterations.
 - **Recovery**: Iter3 is the LAST iteration. Must simplify to absolute minimum: single hypothesis, explicit commands, no screening phase.
+
+## Iter 1 — WORKER FAILED (batch: tier-fe-2-20260304-225923, 2026-03-05)
+- **Planned**: Add 3 interaction features (overload_x_hist, prob110_x_recent_hist, tail_x_hist) to existing 34 → 37 features (Hyp A) vs add 3 + prune 4 → 33 features (Hyp B). Screen on 2022-06 (weak) and 2021-09 (strong). Required code change to `compute_interaction_features()` in features.py first.
+- **Status**: FAILED — identical failure mode to all previous iterations
+  - Worker wrote handoff `"status": "done"` with `artifact_path: registry/v0003/changes_summary.md`
+  - `registry/v0003/` does not exist (no metrics, no config, no changes_summary)
+  - No reports in `reports/tier-fe-2-20260304-225923/iter1/`
+  - No reviews generated
+  - No code changes made to features.py or config.py (git diff empty)
+  - Version counter leaked again: 3→4
+- **Root cause**: 3rd consecutive worker failure across 2 batches. Worker writes handoff before doing any actual work — no code edits, no benchmark runs, no artifacts. The worker is fundamentally not executing the direction.
+- **Result**: No data collected. Interaction feature hypotheses remain UNTESTED after 3 attempts.
+- **Recovery**: Iter2 — strip direction to absolute bare minimum. Single hypothesis, no screening, no A/B. Explicitly tell worker to NOT write handoff until benchmark completes.

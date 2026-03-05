@@ -19,3 +19,8 @@
 - **Rationale**: Two consecutive worker failures with identical symptoms (handoff written, no artifacts) suggests a systematic issue. The screening phase (2-month subset) may be contributing to failure complexity. Skipping screening and going directly to full benchmark is simpler and, since this is the last iteration, we need all 12 months anyway.
 - **Risk**: If the worker fails again, we end the batch with no iterations producing data. But we cannot simplify further than "add features, run benchmark."
 - **Outcome**: Pending — iter3 direction to be written
+
+## 2026-03-05: Iter 1 worker failure (batch tier-fe-2) — 3rd consecutive failure
+- **Decision**: Retry in iter2 with maximally simplified direction. Single hypothesis (add 3 interaction features). No screening. No A/B comparison. Explicit instruction to NOT write handoff until benchmark pipeline completes and artifacts are verified.
+- **Rationale**: 3 consecutive failures with identical symptoms across 2 batches. The worker is writing the handoff signal before doing any work — no code edits, no benchmark runs, no registry artifacts. Direction complexity is NOT the issue. The worker must be told in the strongest terms to (1) make code changes first, (2) run benchmark, (3) verify artifacts exist, (4) ONLY THEN write handoff.
+- **Risk**: If worker fails again, iter3 is the last chance. May need to flag systematic worker execution bug to human.

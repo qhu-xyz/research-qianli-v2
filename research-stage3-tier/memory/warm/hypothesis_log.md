@@ -23,6 +23,11 @@
 - **Result**: UNTESTED — worker failed
 - **Status**: DROPPED — no iterations remaining for A/B. Iter3 tests only H2a.
 
+### H3a: Add 3 interaction features → 37 features (tier-fe-2 iter1, UNTESTED — worker failed)
+- **Hypothesis**: Adding overload_x_hist, prob110_x_recent_hist, tail_x_hist to existing 34 features. These combine top-importance features (recent_hist_da 21.1%, hist_da 13.3%) with physical flow signals. Should help tier 0/1 discrimination and improve Tier-VC@100.
+- **Result**: UNTESTED — 3rd consecutive worker failure. Worker wrote handoff without executing any code changes or benchmark.
+- **Status**: RETRY in iter2 (same hypothesis, simplified direction)
+
 ## Candidate Hypotheses (untested, for future batches)
 
 1. **Increase tier 1 class weight** (5→15 or 20): Should improve Tier-Recall@1 from 0.098 [BLOCKED: FE-only batch]

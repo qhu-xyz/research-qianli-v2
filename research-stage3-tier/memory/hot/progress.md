@@ -1,19 +1,23 @@
 # Progress
 
 ## Current State
+- **Batch**: tier-fe-2-20260305-001606 (FE only, 3 iterations)
+- **Iteration**: 1 — orchestrator plan DONE, awaiting worker
 - **Champion**: v0 (baseline, unchanged)
 - **Iterations completed**: 0 successful (all prior failed due to infrastructure bug, now fixed)
 - **Version counter**: next_id=5 (leaked 4 times from failed iterations)
-- **Next batch**: tier-fe-2 (FE only, 3 iterations)
+
+## Iter 1 Plan
+
+- **Hypothesis A**: Add 3 interaction features (overload_x_hist, prob110_x_recent_hist, tail_x_hist) → 37 features
+- **Hypothesis B**: Add same 3 interactions + prune 5 lowest-importance features → 32 features
+- **Screen months**: 2022-06 (weak), 2021-09 (strong)
+- **Direction file**: `memory/direction_iter1.md`
 
 ## Root Cause of All Prior Failures
 
 ALL worker failures (tier-fe-1 iter1-2, tier-fe-2 iter1) had the same root cause:
 **Uncommitted changes to HUMAN-WRITE-ONLY files** caused the pre-merge guard to reject worker output.
-
-The guard in `run_single_iter.sh` (line 116-121) diffs main working tree vs worktree.
-If main has uncommitted edits to evaluate.py or gates.json, the worktree (branched from HEAD)
-has the old version, and the guard sees a diff → rejects the worker.
 
 **Fix**: All changes to evaluate.py, gates.json, and registry/v0/ are now committed to main (commit a2a38c5).
 

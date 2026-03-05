@@ -78,7 +78,7 @@ _V1_CLF_MONO_FOR_TIER: list[int] = [
     if f not in _DEAD_FEATURES
 ]
 
-# All 34 candidate features (same as stage-2 regressor)
+# All 37 candidate features (34 base + 3 interaction features)
 _ALL_TIER_FEATURES: list[str] = _V1_CLF_FOR_TIER + [
     "prob_exceed_85",
     "prob_exceed_80",
@@ -90,6 +90,9 @@ _ALL_TIER_FEATURES: list[str] = _V1_CLF_FOR_TIER + [
     "density_cv",
     "season_hist_da_3",
     "prob_below_85",
+    "overload_x_hist",
+    "prob110_x_recent_hist",
+    "tail_x_hist",
 ]
 
 _ALL_TIER_MONOTONE: list[int] = _V1_CLF_MONO_FOR_TIER + [
@@ -99,6 +102,7 @@ _ALL_TIER_MONOTONE: list[int] = _V1_CLF_MONO_FOR_TIER + [
     0, 0, 0,  # density_skewness, density_kurtosis, density_cv
     1,        # season_hist_da_3
     -1,       # prob_below_85
+    1, 1, 1,  # overload_x_hist, prob110_x_recent_hist, tail_x_hist
 ]
 
 # Default tier bins: match existing SPICE system

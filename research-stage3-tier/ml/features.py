@@ -30,6 +30,13 @@ def compute_interaction_features(df: pl.DataFrame) -> pl.DataFrame:
             .alias("sf_exceed_interaction"),
         (pl.col("hist_da_max_season") * pl.col("prob_band_100_105"))
             .alias("hist_seasonal_band"),
+        # Interaction features for tier discrimination
+        (pl.col("expected_overload") * pl.col("hist_da"))
+            .alias("overload_x_hist"),
+        (pl.col("prob_exceed_110") * pl.col("recent_hist_da"))
+            .alias("prob110_x_recent_hist"),
+        (pl.col("tail_concentration") * pl.col("hist_da"))
+            .alias("tail_x_hist"),
     ])
 
 

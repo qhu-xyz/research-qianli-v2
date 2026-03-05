@@ -29,7 +29,7 @@ def _make_sample_df(n: int = 5) -> pl.DataFrame:
 
 class TestPrepareFeatures:
     def test_shape_and_monotone_length(self):
-        """Output X has shape (n, 34) and monotone list has length 34."""
+        """Output X has shape (n, 37) and monotone list has length 37."""
         df = _make_sample_df(n=5)
         cfg = TierConfig()
         X, monotone = prepare_features(df, cfg)

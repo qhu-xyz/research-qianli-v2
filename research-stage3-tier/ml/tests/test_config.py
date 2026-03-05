@@ -16,10 +16,10 @@ from ml.config import GateConfig, PipelineConfig, TierConfig
 
 class TestTierConfig:
     def test_tier_config_defaults(self):
-        """Verify 34 features, monotone constraints, hyperparams, class_weights."""
+        """Verify 37 features, monotone constraints, hyperparams, class_weights."""
         cfg = TierConfig()
 
-        assert len(cfg.features) == 34
+        assert len(cfg.features) == 37
         assert len(cfg.monotone_constraints) == len(cfg.features)
 
         # hyperparams

@@ -35,10 +35,10 @@ class TestLoadSmokeData:
         assert val_df.shape[0] == 20
 
     def test_feature_columns_present(self, cfg: PipelineConfig, smoke_env: None) -> None:
-        """All 34 tier features must be present in both DataFrames."""
+        """All 37 tier features must be present in both DataFrames."""
         train_df, val_df = load_data(cfg, auction_month="2025-06", class_type="peak", period_type="monthly")
         expected_features = cfg.tier.features
-        assert len(expected_features) == 34
+        assert len(expected_features) == 37
 
         for col in expected_features:
             assert col in train_df.columns, f"Missing column {col} in train_df"

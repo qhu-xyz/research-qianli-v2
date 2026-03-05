@@ -3,24 +3,24 @@
 ## 2026-03-04: v0 baseline established
 - **Decision**: Use 5-tier multi-class XGBoost (multi:softprob) replacing two-stage pipeline
 - **Rationale**: Direct tier prediction eliminates error propagation between binary classifier and regressor
-- **Outcome**: v0 baseline established with 12-month benchmark. Tier-VC@100=0.075 (low), QWK=0.359 (moderate)
+- **Outcome**: v0 baseline established with 12-month benchmark. Tier-VC@100=0.0708, QWK=0.3698
 
 ## 2026-03-04: Gate calibration strategy
 - **Decision**: Set floors = v0 mean, tail floors = v0 min (zero offset)
 - **Rationale**: v0 is the first version; any improvement should pass gates. Zero offset means new versions must match or beat v0 on average.
 
-## 2026-03-05: Iter 1 worker failure — retry with simplified direction
-- **Decision**: Retry the same feature engineering hypotheses in iter2 with simplified worker instructions
-- **Rationale**: Worker failed to produce any artifacts despite claiming done. The hypotheses (interaction features + light pruning vs aggressive pruning) are still the right first experiments for this FE-only batch. Simplifying the direction to a single hypothesis reduces worker execution complexity and failure risk.
-- **Outcome**: FAILED — same failure mode as iter1. Worker wrote handoff claiming done but produced no artifacts.
+## 2026-03-05: Prior batch failures — root cause and fix
+- **Decision**: Commit all HUMAN-WRITE-ONLY changes before launching pipeline
+- **Rationale**: 4 consecutive worker failures caused by pre-merge guard rejecting worker output due to uncommitted changes to evaluate.py and gates.json
+- **Outcome**: Fixed in commit a2a38c5. Pipeline runs successfully now.
 
-## 2026-03-05: Iter 2 worker failure — last chance with iter3
-- **Decision**: Iter3 must use the simplest possible direction: single hypothesis, no screening phase, no A/B comparison. Just add the 3 interaction features directly and run the full 12-month benchmark.
-- **Rationale**: Two consecutive worker failures with identical symptoms (handoff written, no artifacts) suggests a systematic issue. The screening phase (2-month subset) may be contributing to failure complexity. Skipping screening and going directly to full benchmark is simpler and, since this is the last iteration, we need all 12 months anyway.
-- **Risk**: If the worker fails again, we end the batch with no iterations producing data. But we cannot simplify further than "add features, run benchmark."
-- **Outcome**: Pending — iter3 direction to be written
+## 2026-03-05: v0005 NOT promoted — Tier-VC@100 fails L1
+- **Decision**: Do not promote v0005. Tier-VC@100 mean 0.0746 fails L1 floor 0.0750 by 0.0004 (0.6%).
+- **Rationale**: Gate is binary. Despite improvements across all metrics with no regressions, the money metric (Tier-VC@100) is below floor. Cannot promote a version that fails the most important gate.
+- **Assessment**: v0005 is directionally positive. The interaction features (overload_x_hist, prob110_x_recent_hist, tail_x_hist) provide consistent small improvements. Bottom_2_mean improved 64%. But the improvement is insufficient to cross the floor.
+- **Implication**: Iter2 should build on v0005's feature set and add more FE improvements to close the 0.0004 gap.
 
-## 2026-03-05: Iter 1 worker failure (batch tier-fe-2) — 3rd consecutive failure
-- **Decision**: Retry in iter2 with maximally simplified direction. Single hypothesis (add 3 interaction features). No screening. No A/B comparison. Explicit instruction to NOT write handoff until benchmark pipeline completes and artifacts are verified.
-- **Rationale**: 3 consecutive failures with identical symptoms across 2 batches. The worker is writing the handoff signal before doing any work — no code edits, no benchmark runs, no registry artifacts. Direction complexity is NOT the issue. The worker must be told in the strongest terms to (1) make code changes first, (2) run benchmark, (3) verify artifacts exist, (4) ONLY THEN write handoff.
-- **Risk**: If worker fails again, iter3 is the last chance. May need to flag systematic worker execution bug to human.
+## 2026-03-05: Iter2 direction — add log transforms and more interactions
+- **Decision**: Build on v0005 (37 features) by adding log transforms (log1p_hist_da, log1p_expected_overload) and additional interactions (overload_x_recent_hist, prob_range_high) for 37→41 features.
+- **Rationale**: The 0.0004 gap is tiny. Log transforms compress long-tailed price/overload distributions, which should help the model discriminate at the high end of the ranking. Additional interactions extend the compound signal approach that showed consistent improvement in iter1.
+- **Risk**: Low — additive features only. XGBoost can ignore unhelpful features via low split gain.

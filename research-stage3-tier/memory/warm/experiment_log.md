@@ -5,43 +5,39 @@
 - **Class weights**: {0:10, 1:5, 2:2, 3:1, 4:0.5}
 - **Features**: 34 (11 flow prob + 7 distribution shape + 1 overload + 5 historical + 10 engineered)
 - **Results** (12-month mean):
-  - Tier-VC@100=0.075, Tier-VC@500=0.217, Tier-NDCG=0.767
-  - QWK=0.359, Macro-F1=0.369
-  - Tier-Recall@0=0.374, Tier-Recall@1=0.098
+  - Tier-VC@100=0.0708, Tier-VC@500=0.2296, Tier0-AP=0.3062, Tier01-AP=0.3110
+  - Tier-NDCG=0.7711, QWK=0.3698, Macro-F1=0.3560
+  - Tier-Recall@0=0.4389, Tier-Recall@1=0.0467
 - **Key finding**: Tier 4 has 0 samples in all months. Tier-Recall@1 catastrophically low.
 
-## Iter 1 — WORKER FAILED (batch: tier-fe-1-20260304-182037, 2026-03-05)
-- **Planned**: Feature swap — remove 3 low-importance features, add 3 interaction features (Hyp A) vs aggressive pruning 34→28 (Hyp B)
-- **Status**: FAILED — worker wrote handoff claiming "done" but produced NO artifacts
-  - `registry/v0001/` does not exist (no metrics, no config, no changes_summary)
-  - No reports generated in `reports/tier-fe-1-20260304-182037/iter1/`
-  - No reviews generated
-  - Version counter advanced to 2 (leaked side effect)
-- **Root cause**: Worker exited prematurely after writing handoff signal but before running benchmark or producing any registry artifacts. Likely a session timeout or crash during screening phase.
-- **Result**: No data collected. Hypotheses A and B remain UNTESTED.
-- **Recovery**: Retry with simplified direction in iter2 — same hypotheses but streamline worker instructions to reduce execution risk.
+## Prior Batch (tier-fe-1) — ALL 3 ITERATIONS FAILED
+- Root cause: Uncommitted changes to HUMAN-WRITE-ONLY files caused pre-merge guard to reject worker output
+- No data collected. All hypotheses untested. Fixed in commit a2a38c5.
 
-## Iter 2 — WORKER FAILED (batch: tier-fe-1-20260304-182037, 2026-03-05)
-- **Planned**: Add 3 interaction features (hist_physical_interaction, overload_exceedance_product, hist_seasonal_band) → 37 features (Hyp A) vs prune 6 + add 3 → 31 features (Hyp B). Screen on 2021-11 (weak) and 2021-09 (strong).
-- **Status**: FAILED — identical failure mode to iter1
-  - Worker wrote handoff `"status": "done"` with `artifact_path: registry/v0002/changes_summary.md`
-  - `registry/v0002/` does not exist (no metrics, no config, no changes_summary)
-  - No reports in `reports/tier-fe-1-20260304-182037/iter2/`
-  - No reviews generated
-  - Version counter leaked again: 2→3
-- **Root cause**: Systematic worker failure. Two consecutive identical failures — worker writes handoff claiming completion but never runs benchmark or produces artifacts. Not a random timeout; likely a bug in the worker's execution flow where it writes the handoff signal before completing actual work.
-- **Result**: No data collected. All hypotheses remain UNTESTED after 2 iterations.
-- **Recovery**: Iter3 is the LAST iteration. Must simplify to absolute minimum: single hypothesis, explicit commands, no screening phase.
+## Batch tier-fe-2 Iter 1 (previous attempt) — WORKER FAILED
+- Same root cause as tier-fe-1. Fixed before current batch.
 
-## Iter 1 — WORKER FAILED (batch: tier-fe-2-20260304-225923, 2026-03-05)
-- **Planned**: Add 3 interaction features (overload_x_hist, prob110_x_recent_hist, tail_x_hist) to existing 34 → 37 features (Hyp A) vs add 3 + prune 4 → 33 features (Hyp B). Screen on 2022-06 (weak) and 2021-09 (strong). Required code change to `compute_interaction_features()` in features.py first.
-- **Status**: FAILED — identical failure mode to all previous iterations
-  - Worker wrote handoff `"status": "done"` with `artifact_path: registry/v0003/changes_summary.md`
-  - `registry/v0003/` does not exist (no metrics, no config, no changes_summary)
-  - No reports in `reports/tier-fe-2-20260304-225923/iter1/`
-  - No reviews generated
-  - No code changes made to features.py or config.py (git diff empty)
-  - Version counter leaked again: 3→4
-- **Root cause**: 3rd consecutive worker failure across 2 batches. Worker writes handoff before doing any actual work — no code edits, no benchmark runs, no artifacts. The worker is fundamentally not executing the direction.
-- **Result**: No data collected. Interaction feature hypotheses remain UNTESTED after 3 attempts.
-- **Recovery**: Iter2 — strip direction to absolute bare minimum. Single hypothesis, no screening, no A/B. Explicitly tell worker to NOT write handoff until benchmark completes.
+## Batch tier-fe-2-20260305-001606, Iter 1 — v0005 (2026-03-05)
+- **Hypothesis**: A (add 3 interaction features 34→37) won screening over B (add 3 + prune 5 → 32)
+- **Screen results** (2 months: 2022-06 weak, 2021-09 strong):
+  - A: mean VC@100=0.1372, B: mean VC@100=0.1307 — A wins on primary criterion
+  - A advantage driven by 2022-06 (0.0255 vs 0.0112, 2.3x)
+- **Features added**: overload_x_hist, prob110_x_recent_hist, tail_x_hist (37 total)
+- **Code changes**: features.py (3 interactions), config.py (3 features + monotone), tests (34→37)
+- **Results** (12-month mean, delta vs v0):
+  - Tier-VC@100=0.0746 (+5.4%) — **FAILS L1** (floor 0.0750, gap 0.0004)
+  - Tier-VC@500=0.2329 (+1.5%) — PASS all layers
+  - Tier0-AP=0.3126 (+2.1%) — PASS all layers
+  - Tier01-AP=0.3132 (+0.7%) — PASS all layers
+  - Tier-NDCG=0.7751 (+0.5%) — PASS
+  - QWK=0.3706 (+0.2%) — PASS
+  - Macro-F1=0.3560 (unchanged) — FAIL L1 (structural)
+  - Tier-Recall@0=0.4403 (+0.3%) — PASS
+  - Tier-Recall@1=0.0447 (-4.3%) — FAIL L1 (structural)
+- **Gate assessment**: NOT PROMOTED. Tier-VC@100 is the sole blocking gate (0.0004 below floor).
+- **Per-month highlights**:
+  - Biggest VC@100 gain: 2022-12 (+0.023), 2020-11 (+0.009), 2022-03 (+0.008)
+  - Worst months unchanged: 2021-11 (0.0082), 2022-06 (0.0255)
+  - Bottom_2_mean improved 64%: 0.0103 → 0.0169 — interactions help weak months most
+  - VC@100 improved in 8/12 months (sign test p~0.19, Cohen's d~0.06 — not significant)
+- **Key learnings**: Interaction features provide modest but consistent improvement. The 0.0004 gap is within noise but gate is binary. FE ceiling reached for VC@100 without hyperparameter/class weight changes.

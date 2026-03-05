@@ -1,39 +1,33 @@
 # Progress
 
 ## Current State
-- **Batch**: tier-fe-2-20260305-001606 (FE only, 3 iterations)
-- **Iteration**: 1 — orchestrator plan DONE, awaiting worker
-- **Champion**: v0 (baseline, unchanged)
-- **Iterations completed**: 0 successful (all prior failed due to infrastructure bug, now fixed)
-- **Version counter**: next_id=5 (leaked 4 times from failed iterations)
+- **Batch**: tier-fe-2-20260305-001606 (FE only, 3 iterations max)
+- **Iteration**: 1 COMPLETE, awaiting iter2
+- **Champion**: v0 (baseline, unchanged — v0005 not promoted)
+- **Iterations completed**: 1 successful (v0005)
+- **Version counter**: next_id=6
 
-## Iter 1 Plan
+## Iter 1 Result — v0005 (NOT PROMOTED)
 
-- **Hypothesis A**: Add 3 interaction features (overload_x_hist, prob110_x_recent_hist, tail_x_hist) → 37 features
-- **Hypothesis B**: Add same 3 interactions + prune 5 lowest-importance features → 32 features
-- **Screen months**: 2022-06 (weak), 2021-09 (strong)
-- **Direction file**: `memory/direction_iter1.md`
+- **Hypothesis A won**: Add 3 interaction features (34→37)
+- **Features**: overload_x_hist, prob110_x_recent_hist, tail_x_hist
+- **VC@100**: 0.0746 (+5.4%) — **FAILS L1** by 0.0004 (floor 0.0750)
+- **All other Group A gates**: PASS all 3 layers
+- **All metrics improved**: No regressions anywhere
+- **Bottom_2_mean VC@100**: +64% (0.0103→0.0169) — interactions help weak months
+- **Tier-Recall@1**: Still catastrophic (0.045) — structural, FE cannot fix
 
-## Root Cause of All Prior Failures
+## Iter 2 Plan
 
-ALL worker failures (tier-fe-1 iter1-2, tier-fe-2 iter1) had the same root cause:
-**Uncommitted changes to HUMAN-WRITE-ONLY files** caused the pre-merge guard to reject worker output.
-
-**Fix**: All changes to evaluate.py, gates.json, and registry/v0/ are now committed to main (commit a2a38c5).
-
-## Metric Redesign (v2 gates) — COMMITTED
-
-**Group A (blocking)** — all tier-count invariant:
-- Tier-VC@100, Tier-VC@500, Tier0-AP (new), Tier01-AP (new)
-
-**Group B (monitor)** — no hard gates:
-- Tier-NDCG, QWK, Macro-F1, Value-QWK, Tier-Recall@0, Tier-Recall@1
-
-**Removed**: Tier-Accuracy, Adjacent-Accuracy
+- **Direction**: Build on v0005's 37 features, add 4 more (37→41)
+  - Log transforms: log1p_hist_da, log1p_expected_overload
+  - More interactions: overload_x_recent_hist, prob_range_high
+- **Goal**: Close the 0.0004 VC@100 gap
+- **Risk**: Low — additive features only
 
 ## Priority Improvement Areas
-1. Tier-VC@100 below floor (0.071 vs 0.075) — only Group A gate failing Layer 1
-2. Tier0-AP mean 0.306 — high variance (0.114 to 0.594), worst months late 2022
-3. Tier01-AP mean 0.311 — barely passing, worst months 2022-06 (0.195), 2022-12 (0.194)
-4. Tier-Recall@1 catastrophically low (0.047) — missing most strongly binding constraints
-5. High variance across months — 2022-06 is the worst month across most metrics
+1. **Tier-VC@100** below floor by 0.0004 — ONLY blocking gate (closing this promotes v0005+)
+2. Value-QWK barely passing (0.3918 vs 0.3914) — fragile, monitor
+3. Tier-Recall@1 catastrophic (0.045) — BLOCKED by FE-only constraint
+4. Macro-F1 structural failure — driven by Tier-Recall@1 collapse
+5. 2022-06 worst month across most metrics — likely needs non-FE improvements

@@ -128,6 +128,10 @@ class LTRConfig:
     # Backend: "lightgbm" (22x faster) or "xgboost"
     backend: str = "lightgbm"
 
+    # Label mode: "rank" (raw rank, ~600 levels — noisy for sparse labels)
+    #             "tiered" (4-level: 0=non-binding, 1/2/3=binding tiers)
+    label_mode: str = "tiered"
+
     # Shared hyperparams
     n_estimators: int = 100
     learning_rate: float = 0.05
@@ -184,6 +188,7 @@ class LTRConfig:
             "reg_alpha": self.reg_alpha,
             "reg_lambda": self.reg_lambda,
             "early_stopping_rounds": self.early_stopping_rounds,
+            "label_mode": self.label_mode,
         }
 
     @classmethod

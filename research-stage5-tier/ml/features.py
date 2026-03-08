@@ -7,11 +7,28 @@ import polars as pl
 from ml.config import LTRConfig
 
 
+def _add_derived_features(df: pl.DataFrame) -> pl.DataFrame:
+    """Add derived features that are computed from raw columns."""
+    if "v62b_formula_score" not in df.columns:
+        # V6.2B formula: rank_ori = 0.60*da + 0.30*dmix + 0.10*dori
+        has_cols = all(c in df.columns for c in
+                       ["da_rank_value", "density_mix_rank_value", "density_ori_rank_value"])
+        if has_cols:
+            df = df.with_columns(
+                (0.60 * pl.col("da_rank_value")
+                 + 0.30 * pl.col("density_mix_rank_value")
+                 + 0.10 * pl.col("density_ori_rank_value")
+                ).alias("v62b_formula_score")
+            )
+    return df
+
+
 def prepare_features(
     df: pl.DataFrame,
     cfg: LTRConfig,
 ) -> tuple[np.ndarray, list[int]]:
     """Extract feature matrix from df, fill nulls with 0."""
+    df = _add_derived_features(df)
     cols = list(cfg.features)
     missing = [c for c in cols if c not in df.columns]
     if missing:

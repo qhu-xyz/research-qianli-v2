@@ -46,12 +46,29 @@ Denominator is V6.1 universe only — NOT all market DA shadow price.
 - Biggest gain: VC@20 +26.3% — ML much better at identifying top binding constraints
 - LightGBM lambdarank, simple params (lr=0.05, 31 leaves, 100 trees)
 
+## Holdout Results (2025, 4 quarters)
+
+| Metric | v0 (formula) | v1 (ML) | Delta |
+|--------|-------------|---------|-------|
+| VC@20 | 0.1559 | **0.2152** | +38.0% |
+| VC@100 | 0.5784 | 0.5812 | +0.5% |
+| Recall@20 | 0.2500 | **0.3125** | +25.0% |
+| Recall@100 | 0.4675 | 0.4875 | +4.3% |
+| NDCG | 0.5043 | **0.5218** | +3.5% |
+| Spearman | 0.3872 | 0.3906 | +0.9% |
+| Tier0-AP | 0.5315 | 0.5426 | +2.1% |
+| Tier01-AP | 0.7012 | 0.6954 | -0.8% |
+
+- v1 beats v0 on 7/8 metrics on holdout — confirms in-sample findings generalize
+- Biggest holdout gain: VC@20 +38% (even stronger than in-sample +26%)
+- Note: 2025/aq4 has only 76/418 (18.2%) binding — likely partial/incomplete data
+
 ## Feature Sets
-- **Set A (v1)**: da_rank_value, density_mix_rank_value, density_ori_rank_value, mean_branch_max, mean_branch_max_fillna, ori_mean
+- **Set A (v1)**: shadow_price_da, mean_branch_max, ori_mean, mix_mean, density_mix_rank_value, density_ori_rank_value
 - **Set B (v2)**: Set A + prob_exceed_80/85/90/100/110
 
 ## Data
-- V6.1: `/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1`
+- V6.1: `/opt/data/xyz-dataset/signal_data/miso/constraints/Signal.MISO.SPICE_ANNUAL_V6.1`
 - Spice6 density: `/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density/`
 - Ground truth cache: `cache/ground_truth/` (28 parquet files, all pre-fetched)
 
@@ -59,5 +76,6 @@ Denominator is V6.1 universe only — NOT all market DA shadow price.
 - `registry/v0/` — V6.1 formula baseline
 - `registry/v1/` — LightGBM Set A (champion)
 - `registry/v2/` — LightGBM Set B
+- `registry/v1_holdout/` — v1 holdout (2025) results
 - `registry/gates.json` — calibrated from v0
 - `registry/champion.json` — currently v0 (needs promotion to v1)

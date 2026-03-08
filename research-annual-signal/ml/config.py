@@ -87,8 +87,8 @@ EVAL_SPLITS: dict[str, dict] = {
     "split1": {"train_years": ["2019-06", "2020-06", "2021-06"], "eval_year": "2022-06"},
     "split2": {"train_years": ["2019-06", "2020-06", "2021-06", "2022-06"], "eval_year": "2023-06"},
     "split3": {"train_years": ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06"], "eval_year": "2024-06"},
+    "holdout": {"train_years": ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06"], "eval_year": "2025-06"},
 }
-# 2025-06 held out for final validation
 
 SCREEN_EVAL_GROUPS: list[str] = [
     "2022-06/aq1", "2023-06/aq2", "2024-06/aq3", "2024-06/aq4",

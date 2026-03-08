@@ -56,12 +56,11 @@ Denominator is V6.1 universe only — NOT all market DA shadow price.
 | Recall@100 | 0.4675 | 0.4875 | +4.3% |
 | NDCG | 0.5043 | **0.5218** | +3.5% |
 | Spearman | 0.3872 | 0.3906 | +0.9% |
-| Tier0-AP | 0.5315 | 0.5426 | +2.1% |
-| Tier01-AP | 0.7012 | 0.6954 | -0.8% |
+| Tier0-AP | — | 0.3914 | — |
+| Tier01-AP | — | 0.5443 | — |
 
-- v1 beats v0 on 7/8 metrics on holdout — confirms in-sample findings generalize
-- Biggest holdout gain: VC@20 +38% (even stronger than in-sample +26%)
-- Note: 2025/aq4 has only 76/418 (18.2%) binding — likely partial/incomplete data
+- v1 beats v0 on VC@20 (+38%), Recall@20 (+25%), NDCG (+3.5%) on holdout
+- Note: 2025/aq4 has only 76/418 (18.2%) binding — likely partial/incomplete data (Mar-May 2026)
 
 ## Feature Sets
 - **Set A (v1)**: shadow_price_da, mean_branch_max, ori_mean, mix_mean, density_mix_rank_value, density_ori_rank_value
@@ -79,3 +78,8 @@ Denominator is V6.1 universe only — NOT all market DA shadow price.
 - `registry/v1_holdout/` — v1 holdout (2025) results
 - `registry/gates.json` — calibrated from v0
 - `registry/champion.json` — currently v0 (needs promotion to v1)
+
+## Caching
+- `cache/enriched/` — V6.1 + spice6 data per (year, aq), avoids re-scanning 18GB density parquet on NFS
+- `cache/ground_truth/` — realized DA shadow prices per (year, aq)
+- Benchmark trains once per eval year, evaluates 4 quarters — not 4 separate trains

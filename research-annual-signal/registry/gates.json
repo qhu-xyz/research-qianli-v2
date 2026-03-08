@@ -49,8 +49,8 @@
       "group": "B"
     },
     "Tier01-AP": {
-      "floor": 0.6163,
-      "tail_floor": 0.5508,
+      "floor": 0.5077,
+      "tail_floor": 0.4274,
       "direction": "higher",
       "group": "B"
     }

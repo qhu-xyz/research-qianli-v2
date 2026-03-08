@@ -11,10 +11,11 @@ import gc
 import json
 import resource
 from pathlib import Path
+from typing import Any
 
 from ml.config import PipelineConfig, SCREEN_EVAL_GROUPS, DEFAULT_EVAL_GROUPS
 from ml.evaluate import aggregate_months  # works for any groups, name is legacy
-from ml.pipeline import run_pipeline
+from ml.pipeline import train_for_year, evaluate_group
 
 
 def mem_mb():
@@ -34,23 +35,50 @@ def run_benchmark(
 
     print(f"[benchmark] {mode.upper()} MODE: {len(eval_groups)} eval groups")
 
+    # Group eval_groups by year so we train once per year
+    from collections import OrderedDict
+    year_groups: dict[str, list[str]] = OrderedDict()
+    for g in eval_groups:
+        year = g.split("/")[0]
+        year_groups.setdefault(year, []).append(g)
+
     per_group = {}
     skipped = []
-    for group_id in eval_groups:
-        print(f"\n[benchmark] === {group_id} === mem: {mem_mb():.0f} MB")
-        try:
-            result = run_pipeline(config=config, version_id=version_id, eval_group=group_id)
-            metrics = result.get("metrics", {})
-            if metrics:
-                per_group[group_id] = metrics
-            else:
+    model_cache: dict[str, Any] = {}  # year -> trained model
+
+    for year, groups_in_year in year_groups.items():
+        # Train once per year
+        if year not in model_cache:
+            print(f"\n[benchmark] Training model for eval_year={year} ... mem: {mem_mb():.0f} MB")
+            try:
+                model_cache[year] = train_for_year(config, year)
+            except Exception as e:
+                print(f"[benchmark] ERROR training for {year}: {e}")
+                import traceback
+                traceback.print_exc()
+                skipped.extend(groups_in_year)
+                continue
+
+        model = model_cache[year]
+
+        # Evaluate each quarter with the cached model
+        for group_id in groups_in_year:
+            print(f"\n[benchmark] === {group_id} === mem: {mem_mb():.0f} MB")
+            try:
+                metrics = evaluate_group(config, model, group_id)
+                if metrics:
+                    per_group[group_id] = metrics
+                else:
+                    skipped.append(group_id)
+            except Exception as e:
+                print(f"[benchmark] ERROR {group_id}: {e}")
+                import traceback
+                traceback.print_exc()
                 skipped.append(group_id)
-        except Exception as e:
-            print(f"[benchmark] ERROR {group_id}: {e}")
-            import traceback
-            traceback.print_exc()
-            skipped.append(group_id)
-        gc.collect()
+            gc.collect()
+
+    del model_cache
+    gc.collect()
 
     if skipped:
         print(f"\n[benchmark] Skipped {len(skipped)} groups: {skipped}")

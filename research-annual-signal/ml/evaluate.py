@@ -66,7 +66,12 @@ def tier_ap(
     n = len(actual)
     k = max(1, int(n * top_frac))
     threshold = np.sort(actual)[::-1][min(k - 1, n - 1)]
-    y_true = (actual >= threshold).astype(int)
+    if threshold <= 0:
+        # Not enough positive-value constraints to fill the tier bucket;
+        # fall back to "all binding constraints" as the positive class.
+        y_true = (actual > 0).astype(int)
+    else:
+        y_true = (actual >= threshold).astype(int)
     if y_true.sum() == 0:
         return 0.0
     return float(average_precision_score(y_true, scores))

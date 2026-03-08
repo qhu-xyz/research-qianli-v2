@@ -107,8 +107,22 @@ def load_spice6_density_annual(
     return density
 
 
+_CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "enriched"
+
+
 def load_v61_enriched(planning_year: str, aq_round: str) -> pl.DataFrame:
-    """Load V6.1 data enriched with spice6 density features."""
+    """Load V6.1 data enriched with spice6 density features.
+
+    Caches to local parquet after first load (avoids re-scanning 18 GB
+    density distribution on NFS).
+    """
+    cache_path = _CACHE_DIR / f"{planning_year}_{aq_round}.parquet"
+    if cache_path.exists():
+        df = pl.read_parquet(str(cache_path))
+        n_matched = len(df.filter(pl.col("prob_exceed_110") > 0))
+        print(f"[data_loader] loaded from cache: {cache_path.name} ({n_matched}/{len(df)} spice6)")
+        return df
+
     df = load_v61_group(planning_year, aq_round)
 
     spice6 = load_spice6_density_annual(planning_year, aq_round)
@@ -125,6 +139,9 @@ def load_v61_enriched(planning_year: str, aq_round: str) -> pl.DataFrame:
                      "prob_exceed_85", "prob_exceed_80", "constraint_limit"]:
             df = df.with_columns(pl.lit(0.0).alias(col))
 
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(str(cache_path))
+    print(f"[data_loader] cached to {cache_path.name}")
     return df
 
 

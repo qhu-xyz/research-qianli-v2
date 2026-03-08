@@ -67,6 +67,15 @@ For notebooks, use `%env RAY_ADDRESS=ray://10.8.0.36:10001` in the first cell in
 - See the `parallel-with-ray` skill for full patterns (composable functions, ObjectRef optimization, conversion procedure)
 - The Ray cluster address `ray://10.8.0.36:10001` is the standard dev cluster
 
+## Run Performance (MANDATORY)
+
+When runs are slow, always investigate and optimize:
+- **Profile first**: time each phase (data loading, training, evaluation) to find the real bottleneck
+- **Cache expensive I/O**: large NFS parquet scans should be cached locally after first load
+- **Avoid redundant work**: if multiple eval groups share training data, train once and reuse
+- **Verify correctness**: any speed optimization MUST produce bit-identical results vs the unoptimized version
+- **Never let long runs slide**: a 20-minute run that could be 5 minutes wastes iteration cycles
+
 ## Versioned Experiments (MANDATORY)
 
 When implementing a new version (e.g., bands v2, baseline v4):

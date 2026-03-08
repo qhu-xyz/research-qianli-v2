@@ -4,6 +4,9 @@ For each eval group (planning_year/aq_round):
 1. Train on all prior years (expanding window)
 2. Predict on eval group
 3. Evaluate against realized DA shadow prices
+
+Caches trained models per eval year so aq1-aq4 within the same year
+share one training pass.
 """
 from __future__ import annotations
 
@@ -36,64 +39,63 @@ def _get_train_groups(eval_group: str) -> list[str]:
     raise ValueError(f"No training split defined for eval group: {eval_group}")
 
 
-def run_pipeline(
+def train_for_year(
     config: PipelineConfig,
-    version_id: str,
-    eval_group: str,
-) -> dict[str, Any]:
-    """Run the annual LTR pipeline for a single eval group.
+    eval_year: str,
+) -> Any:
+    """Train a model for all groups sharing this eval year.
 
-    Returns dict with "metrics" key.
+    Returns the trained model. Callers should cache by eval_year.
     """
-    planning_year, aq_round = eval_group.split("/")
-    print(f"[pipeline] version={version_id} eval={eval_group}")
+    sample_group = f"{eval_year}/aq1"
+    train_groups = _get_train_groups(sample_group)
 
-    # Phase 1: Load train data
-    print(f"[phase 1] Loading train data ... (mem={mem_mb():.0f} MB)")
-    train_groups = _get_train_groups(eval_group)
+    print(f"[train_year] Loading {len(train_groups)} train groups for eval_year={eval_year} (mem={mem_mb():.0f} MB)")
     train_df = load_multiple_groups(train_groups)
 
-    # Add ground truth labels to train data
-    print(f"[phase 1b] Adding ground truth to train ... (mem={mem_mb():.0f} MB)")
+    print(f"[train_year] Adding ground truth ... (mem={mem_mb():.0f} MB)")
     train_parts = []
     for tg in train_groups:
         ty, tq = tg.split("/")
         part = train_df.filter(pl.col("query_group") == tg)
         part = get_ground_truth(ty, tq, part, cache=True)
         train_parts.append(part)
-    train_df = pl.concat(train_parts, how="diagonal")
+    train_df = pl.concat(train_parts, how="diagonal").sort("query_group")
 
-    # Phase 2: Load test data
-    print(f"[phase 2] Loading test data ... (mem={mem_mb():.0f} MB)")
-    test_df = load_v61_enriched(planning_year, aq_round)
-    test_df = test_df.with_columns(pl.lit(eval_group).alias("query_group"))
-    test_df = get_ground_truth(planning_year, aq_round, test_df, cache=True)
-
-    # Phase 3: Prepare features
-    print(f"[phase 3] Preparing features ... (mem={mem_mb():.0f} MB)")
-    train_df = train_df.sort("query_group")
     X_train, _ = prepare_features(train_df, config.ltr)
     y_train = train_df["realized_shadow_price"].to_numpy().astype(np.float64)
     groups_train = compute_query_groups(train_df)
 
-    X_test, _ = prepare_features(test_df, config.ltr)
-    actual_sp = test_df["realized_shadow_price"].to_numpy().astype(np.float64)
-
-    print(f"[phase 3] train={X_train.shape} groups={groups_train} test={X_test.shape} "
-          f"(mem={mem_mb():.0f} MB)")
-
+    print(f"[train_year] train={X_train.shape} groups={groups_train} (mem={mem_mb():.0f} MB)")
     del train_df
     gc.collect()
 
-    # Phase 4: Train
-    print(f"[phase 4] Training LTR model ({config.ltr.backend}) ... (mem={mem_mb():.0f} MB)")
+    print(f"[train_year] Training LTR model ({config.ltr.backend}) ... (mem={mem_mb():.0f} MB)")
     model = train_ltr_model(X_train, y_train, groups_train, config.ltr)
 
     del X_train, y_train, groups_train
     gc.collect()
+    return model
 
-    # Phase 5: Predict + Evaluate
-    print(f"[phase 5] Predicting and evaluating ... (mem={mem_mb():.0f} MB)")
+
+def evaluate_group(
+    config: PipelineConfig,
+    model: Any,
+    eval_group: str,
+) -> dict:
+    """Evaluate a pre-trained model on a single eval group.
+
+    Returns dict with per-group metrics.
+    """
+    planning_year, aq_round = eval_group.split("/")
+
+    test_df = load_v61_enriched(planning_year, aq_round)
+    test_df = test_df.with_columns(pl.lit(eval_group).alias("query_group"))
+    test_df = get_ground_truth(planning_year, aq_round, test_df, cache=True)
+
+    X_test, _ = prepare_features(test_df, config.ltr)
+    actual_sp = test_df["realized_shadow_price"].to_numpy().astype(np.float64)
+
     scores = predict_scores(model, X_test)
     metrics = evaluate_ltr(actual_sp, scores)
 
@@ -111,7 +113,6 @@ def run_pipeline(
     del X_test, scores, actual_sp, test_df
     gc.collect()
 
-    print(f"[pipeline] complete (mem={mem_mb():.0f} MB)")
     for key, value in metrics.items():
         if key.startswith("_"):
             continue
@@ -120,4 +121,28 @@ def run_pipeline(
         else:
             print(f"  {key}: {value}")
 
+    return metrics
+
+
+def run_pipeline(
+    config: PipelineConfig,
+    version_id: str,
+    eval_group: str,
+) -> dict[str, Any]:
+    """Run the annual LTR pipeline for a single eval group (no caching).
+
+    For batch runs, prefer train_for_year() + evaluate_group() instead.
+    """
+    planning_year, aq_round = eval_group.split("/")
+    print(f"[pipeline] version={version_id} eval={eval_group}")
+
+    model = train_for_year(config, planning_year)
+
+    print(f"[pipeline] Evaluating {eval_group} ... (mem={mem_mb():.0f} MB)")
+    metrics = evaluate_group(config, model, eval_group)
+
+    del model
+    gc.collect()
+
+    print(f"[pipeline] complete (mem={mem_mb():.0f} MB)")
     return {"metrics": metrics}

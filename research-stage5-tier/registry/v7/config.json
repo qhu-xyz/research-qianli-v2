@@ -1,0 +1,5 @@
+{
+  "method": "optimized_blend",
+  "formula": "-(0.85*da_rank_value + 0.0*density_mix_rank_value + 0.15*density_ori_rank_value)",
+  "rationale": "Grid search over 231 weight triplets on 12-month dev. Density mix has ~0 correlation with realized DA."
+}

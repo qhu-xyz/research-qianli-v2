@@ -1,0 +1,7 @@
+{
+  "method": "lightgbm_regression",
+  "features": "FEATURES_V1B + v7_formula_score (13f)",
+  "v7_formula": "0.85*da + 0.0*dmix + 0.15*dori",
+  "label_mode": "tiered",
+  "note": "v6b rebuilt with optimized v7 formula as feature instead of v62b formula"
+}

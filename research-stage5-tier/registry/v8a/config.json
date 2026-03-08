@@ -1,0 +1,6 @@
+{
+  "method": "lightgbm_regression",
+  "features": "FEATURES_V1B (12f)",
+  "label_mode": "tiered",
+  "note": "Same as v6a, re-evaluated on 36 months for comparison with v7 baseline"
+}

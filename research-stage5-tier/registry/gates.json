@@ -24,12 +24,6 @@
       "direction": "higher",
       "group": "A"
     },
-    "Recall@100": {
-      "floor": 0.2152,
-      "tail_floor": 0.16,
-      "direction": "higher",
-      "group": "A"
-    },
     "NDCG": {
       "floor": 0.3981,
       "tail_floor": 0.3022,
@@ -66,27 +60,28 @@
       "direction": "higher",
       "group": "B"
     },
+    "Recall@100": {
+      "floor": 0.2152,
+      "tail_floor": 0.16,
+      "direction": "higher",
+      "group": "B",
+      "_note": "Demoted from A: tie-contaminated when <100 binding constraints per month"
+    },
     "Spearman": {
       "floor": 0.1841,
       "tail_floor": 0.1303,
       "direction": "higher",
       "group": "B"
-    },
-    "Tier0-AP": {
-      "floor": 0.9,
-      "tail_floor": 1.0,
-      "direction": "higher",
-      "group": "B"
-    },
-    "Tier01-AP": {
-      "floor": 0.9,
-      "tail_floor": 1.0,
-      "direction": "higher",
-      "group": "B"
     }
+  },
+  "removed_metrics": {
+    "Tier0-AP": "Degenerate: always 1.0 when binding rate < 20% of constraints",
+    "Tier01-AP": "Degenerate: always 1.0 when binding rate < 40% of constraints"
   },
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
   "calibrated_from": "v0",
-  "calibrated_at": "2026-03-08T16:20:16.607724+00:00"
+  "calibrated_at": "2026-03-08T16:20:16.607724+00:00",
+  "updated_at": "2026-03-08",
+  "update_reason": "Fix codex audit: remove degenerate Tier-AP metrics, demote tie-contaminated Recall@100"
 }

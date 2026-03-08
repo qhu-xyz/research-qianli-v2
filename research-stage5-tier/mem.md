@@ -102,8 +102,25 @@ Results in `holdout/{version}/metrics.json`. Dev eval period was 2020-2023; this
 
 ---
 
+## Codex Audit Fixes (2026-03-08)
+
+External review (`codex-review/audit.md`) found 4 issues. Actions taken:
+- **Removed** Tier0-AP / Tier01-AP from `evaluate_ltr()` — always 1.0 (degenerate)
+- **Demoted** Recall@100 from gate group A → B in `gates.json` — tie-contaminated (<100 binding/mo)
+- **Updated** `champion.json` from v0 → v6b with dev + holdout metrics
+- **Acknowledged** FEATURES_V3 dead code — `mlpred_loader.py` exists but never called; not blocking
+
+## Production Migration Assessment
+
+See `production-migration/assessment.md`. Key findings:
+- **v0 reproduces 100% of production V6.2B signal** for f0 (`rank_ori` exact match, all consumed columns available)
+- **ML versions can produce same output format** — replace `rank_ori` with ML score, same tier/shadow_price/shadow_sign
+- **Gaps**: tier assignment (small), score normalization (small), output writer (medium), offpeak (medium)
+- pmodel consumes 4 columns: `shadow_price`, `shadow_sign`, `tier`, `rank_ori` + `constraint_id` as join key
+
 ## What's Next
 - Investigate 5-tier labels (0-4) vs current 4-tier (0-3)
 - Try different training window lengths (currently 8mo — try 12, 16)
 - Multi-period extension (f1, f2, f3)
 - Hybrid approach: regression for top-20, ranking for top-100
+- Production migration: implement tier assignment + output writer

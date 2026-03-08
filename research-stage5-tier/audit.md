@@ -2,7 +2,8 @@
 
 Comprehensive audit of the entire ML pipeline: design, data, leakage, mapping, labels, metrics, and score direction.
 
-**Result: 19/19 checks PASS. No leakage, no bugs, no wrong targets.**
+**Result: 19/19 checks PASS. No leakage, correct targets, correct score direction.**
+**Note**: Two monitoring metrics (Tier0-AP, Tier01-AP) were degenerate — removed after codex audit. See section 10.
 
 ---
 
@@ -10,7 +11,7 @@ Comprehensive audit of the entire ML pipeline: design, data, leakage, mapping, l
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| **1. Realized DA cache exists** | PASS | 48 months cached (2019-06 to 2023-05) |
+| **1. Realized DA cache exists** | PASS | 79 months cached (2019-06 to 2025-12) |
 | **2. Schema correct** | PASS | `{constraint_id: String, realized_sp: Float64}` |
 | **3. Only binding in cache** | PASS | All `realized_sp > 0`, zero/neg count = 0 |
 | **4. Non-binding get 0 via join** | PASS | Left join + `fill_null(0.0)` in `data_loader.py:88-89` |
@@ -112,7 +113,18 @@ predict_scores(model, X_test) → higher = more binding
 evaluate_ltr(actual_sp, scores) → VC@k, Recall@k, NDCG, Spearman
 ```
 
-## 10. Known Limitations
+## 10. External Codex Audit (2026-03-08)
+
+Independent review in `codex-review/audit.md`. Findings and fixes:
+
+| Finding | Status | Fix |
+|---------|--------|-----|
+| Tier0-AP / Tier01-AP degenerate (always 1.0) | FIXED | Removed from `evaluate_ltr()` and `gates.json` |
+| Recall@100 tie-contaminated (<100 binding/mo) | FIXED | Demoted from gate group A → B in `gates.json` |
+| FEATURES_V3 / ml_pred not wired | ACKNOWLEDGED | Dead code; not blocking (v6b uses V1B features) |
+| Governance artifacts stale | FIXED | `champion.json` updated to v6b with dev+holdout metrics |
+
+## 11. Known Limitations
 
 1. **Join coverage ~12%**: Only ~68-81 V6.2B constraints match DA per month (out of ~550-780). The other ~88% are non-binding (realized_sp=0). This is correct — most constraints don't bind.
 

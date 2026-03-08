@@ -94,8 +94,7 @@ def evaluate_ltr(
         "Recall@10": recall_at_k(actual_shadow_price, scores, 10),
         "Recall@50": recall_at_k(actual_shadow_price, scores, 50),
         "Spearman": spearman_corr(actual_shadow_price, scores),
-        "Tier0-AP": tier_ap(actual_shadow_price, scores, top_frac=0.2),
-        "Tier01-AP": tier_ap(actual_shadow_price, scores, top_frac=0.4),
+        # Tier0-AP and Tier01-AP removed: degenerate (always 1.0) when binding rate < 20%
         # Monitoring
         "n_samples": n,
     }

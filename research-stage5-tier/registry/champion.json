@@ -1,5 +1,25 @@
 {
-  "version": "v0",
-  "promoted_at": "2026-03-08T16:20:16.608391+00:00",
-  "reason": "initial baseline (V6.2B formula vs realized DA)"
+  "champion": "v6b",
+  "description": "LightGBM regression, 13 features (12 + formula score), tiered labels",
+  "dev_eval": {
+    "period": "2020-06 to 2023-05 (36 months)",
+    "VC@20": 0.3503,
+    "VC@100": 0.6241,
+    "Recall@20": 0.2375,
+    "NDCG": 0.5567,
+    "Spearman": 0.1712
+  },
+  "holdout": {
+    "period": "2024-01 to 2025-12 (24 months)",
+    "VC@20": 0.2709,
+    "VC@100": 0.5854,
+    "Recall@20": 0.1937,
+    "NDCG": 0.4462,
+    "Spearman": 0.1891
+  },
+  "runner_up": "v6c",
+  "runner_up_note": "Best VC@100 on dev (0.6313), v5 best VC@100 on holdout (0.6322)",
+  "baseline": "v0 (V6.2B formula)",
+  "updated_at": "2026-03-08",
+  "previous_champion": "v0 (initial baseline)"
 }

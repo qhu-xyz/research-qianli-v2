@@ -18,8 +18,8 @@ def _rank_transform_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
 
     LightGBM lambdarank requires integer relevance labels.
     Raw rank-transform preserves full ordering (~600 levels per group).
-    Cost: ~1.5s/iteration on this data size. With n_estimators=100 and
-    early_stopping=20, training takes ~30-150s per month.
+    WARNING: assigns distinct ranks to ties at 0, creating noise for non-binding
+    constraints. Use _tiered_labels() instead for cleaner signal.
     """
     y_rank = np.zeros(len(y), dtype=np.int32)
     offset = 0
@@ -28,6 +28,32 @@ def _rank_transform_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
         y_rank[offset : offset + g] = np.argsort(np.argsort(chunk))
         offset += g
     return y_rank
+
+
+def _tiered_labels(y: np.ndarray, groups: np.ndarray, n_tiers: int = 4) -> np.ndarray:
+    """Assign tiered relevance labels within each query group.
+
+    0 = non-binding (shadow_price = 0)
+    1..n_tiers = equal-frequency buckets of positive shadow prices
+
+    Avoids the rank-transform noise problem where ~58% of constraints
+    (non-binding, all sp=0) get distinct fake ranks.
+    """
+    y_tier = np.zeros(len(y), dtype=np.int32)
+    offset = 0
+    for g in groups:
+        chunk = y[offset : offset + g]
+        positive_mask = chunk > 0
+        n_pos = positive_mask.sum()
+        if n_pos > 0:
+            # Assign tiers 1..n_tiers to positive values using quantile buckets
+            positive_vals = chunk[positive_mask]
+            quantiles = np.percentile(positive_vals, np.linspace(0, 100, n_tiers + 1)[1:-1])
+            tiers = np.digitize(positive_vals, quantiles) + 1  # 1-based
+            y_tier[offset : offset + g][positive_mask] = tiers
+        # Non-binding stay at 0
+        offset += g
+    return y_tier
 
 
 def _train_lightgbm(
@@ -42,7 +68,11 @@ def _train_lightgbm(
     """Train LightGBM lambdarank model."""
     import lightgbm as lgb
 
-    y_rank = _rank_transform_labels(y_train, groups_train)
+    if cfg.label_mode == "tiered":
+        y_rank = _tiered_labels(y_train, groups_train)
+        print(f"[train] Using tiered labels: {len(np.unique(y_rank))} unique levels")
+    else:
+        y_rank = _rank_transform_labels(y_train, groups_train)
     max_label = int(y_rank.max())
     label_gain = list(range(max_label + 1))
 
@@ -68,6 +98,7 @@ def _train_lightgbm(
         "reg_lambda": cfg.reg_lambda,
         "label_gain": label_gain,
         "monotone_constraints": mono_str,
+        "num_threads": 4,
         "verbose": -1,
         "seed": 42,
     }
@@ -77,7 +108,10 @@ def _train_lightgbm(
     valid_names = []
 
     if X_val is not None and y_val is not None and groups_val is not None:
-        y_val_rank = _rank_transform_labels(y_val, groups_val)
+        if cfg.label_mode == "tiered":
+            y_val_rank = _tiered_labels(y_val, groups_val)
+        else:
+            y_val_rank = _rank_transform_labels(y_val, groups_val)
         max_val_label = int(y_val_rank.max())
         if max_val_label > max_label:
             label_gain = list(range(max_val_label + 1))

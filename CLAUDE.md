@@ -75,6 +75,8 @@ When runs are slow, always investigate and optimize:
 - **Avoid redundant work**: if multiple eval groups share training data, train once and reuse
 - **Verify correctness**: any speed optimization MUST produce bit-identical results vs the unoptimized version
 - **Never let long runs slide**: a 20-minute run that could be 5 minutes wastes iteration cycles
+- **Report walltimes**: always print walltime for every experiment run and do full auditing of results
+- **LightGBM num_threads**: This container has 64 CPUs. LightGBM auto-detects all 64 and creates massive thread contention on small data (57s → 0.1s with `num_threads=4`). **Always set `"num_threads": 4`** in LightGBM params. This applies to ALL LightGBM usage in the repo.
 
 ## Versioned Experiments (MANDATORY)
 

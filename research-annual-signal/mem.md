@@ -27,24 +27,33 @@ Denominator is V6.1 universe only — NOT all market DA shadow price.
 
 ## Results (12-group eval, 2022-2024)
 
-| Metric | v0 (formula) | v1 (ML, 6 feat) | v2 (ML, 11 feat) |
-|--------|-------------|-----------------|------------------|
-| VC@20 | 0.2323 | **0.2934** (+26.3%) | 0.2904 (+25.0%) |
-| VC@100 | 0.6518 | 0.6854 (+5.2%) | **0.6861** (+5.3%) |
-| Recall@20 | 0.2208 | **0.2708** (+22.6%) | 0.2667 (+20.8%) |
-| Recall@50 | 0.3783 | **0.4383** (+15.9%) | 0.4300 (+13.7%) |
-| Recall@100 | 0.5075 | **0.5292** (+4.3%) | 0.5208 (+2.6%) |
-| NDCG | 0.5925 | **0.6071** (+2.5%) | 0.5978 (+0.9%) |
-| Spearman | 0.3425 | **0.3642** (+6.3%) | 0.3604 (+5.2%) |
-| Tier0-AP | 0.4154 | 0.4564 (+9.9%) | **0.4567** (+9.9%) |
-| Tier01-AP | 0.6847 | **0.7041** (+2.8%) | 0.7037 (+2.8%) |
-| Gates | PASS | **PASS** | FAIL (Recall@100 tail) |
+| Metric | v0 (formula) | v1 (ML, 6f) | v2 (11f) | v3 (tiered) | v4 (+formula) | v5 (both) |
+|--------|-------------|-------------|----------|-------------|---------------|-----------|
+| VC@20 | 0.2323 | 0.2934 | 0.2904 | 0.2871 | 0.3030 | **0.3075** |
+| VC@100 | 0.6518 | **0.6854** | 0.6861 | 0.6697 | 0.6686 | 0.6792 |
+| Recall@20 | 0.2208 | 0.2708 | 0.2667 | 0.2875 | 0.3042 | **0.3208** |
+| Recall@50 | 0.3783 | 0.4383 | 0.4300 | **0.4417** | 0.4233 | 0.4367 |
+| Recall@100 | 0.5075 | **0.5292** | 0.5208 | 0.5225 | 0.5133 | 0.5200 |
+| NDCG | 0.5925 | 0.6071 | 0.5978 | 0.6078 | 0.6024 | **0.6098** |
+| Spearman | 0.3425 | 0.3642 | 0.3604 | 0.3678 | 0.3641 | **0.3695** |
+| Tier0-AP | 0.4154 | 0.4564 | 0.4567 | 0.4566 | 0.4531 | **0.4628** |
+| Tier01-AP | 0.5641 | **0.5860** | 0.5843 | 0.5885 | 0.5805 | 0.5865 |
+
+### Version Descriptions
+- **v0**: V6.1 formula baseline (rank_ori = 0.60*da_rank + 0.30*density_mix + 0.10*density_ori)
+- **v1**: LightGBM lambdarank, 6 V6.1 features, raw rank labels
+- **v2**: v1 + spice6 density features (11 features)
+- **v3**: v1 with tiered labels (0=non-binding, 1-4=quantile buckets)
+- **v4**: v1 + rank_ori as 7th feature (formula-as-feature), raw rank labels
+- **v5**: v4 with tiered labels (both improvements combined)
 
 ### Key Findings
-- **v1 is champion**: 6 V6.1 features with ML-learned weights beats formula on ALL metrics
-- **v2 (+ spice6 density) doesn't help**: marginal difference, fails Recall@100 tail gate
-- Biggest gain: VC@20 +26.3% — ML much better at identifying top binding constraints
-- LightGBM lambdarank, simple params (lr=0.05, 31 leaves, 100 trees)
+- **v5 is new champion**: tiered labels + formula-as-feature, best on VC@20, Recall@20, NDCG, Spearman, Tier0-AP
+- **Formula-as-feature** is the bigger contributor: +3.3% VC@20, +12.3% Recall@20 individually
+- **Tiered labels** alone hurt VC@20 (-2.1%) but help Recall@20 (+6.2%) — sharper top-k focus
+- **Combined effect is additive**: Recall@20 +18.5% vs v1
+- VC@100 and Recall@100 slightly down — tradeoff for sharper top-k precision
+- LightGBM lambdarank, simple params (lr=0.05, 31 leaves, 100 trees), walltime ~3s per 12-group run
 
 ## Holdout Results (2025, 4 quarters)
 

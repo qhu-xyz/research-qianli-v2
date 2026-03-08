@@ -22,11 +22,13 @@ SPICE_DATA_BASE = "/opt/data/xyz-dataset/spice_data/miso"
 # NOTE: da_rank_value and shadow_price_da are HISTORICAL (60-month lookback),
 # NOT realized DA. They are legitimate features. See stage5-handoff.md.
 _LEAKY_FEATURES: set[str] = {
-    "rank", "rank_ori", "tier",          # derived output columns
+    "rank", "tier",                      # derived output columns
     "shadow_sign", "shadow_price",       # target-adjacent
     "density_mix_rank",                  # integer duplicate of density_mix_rank_value
     "mean_branch_max_fillna",            # redundant with mean_branch_max
 }
+# NOTE: rank_ori removed — it's the V6.1 formula output (fixed weights on
+# historical features), NOT a target-derived column. Legitimate as a feature.
 
 # -- Feature Set A: V6.1 base (6 features) --
 _V61_FEATURES: list[str] = [
@@ -56,9 +58,16 @@ _STRUCTURAL_FEATURES: list[str] = [
 ]
 _STRUCTURAL_MONOTONE: list[int] = [0, 0]
 
+# -- Formula feature (rank_ori = V6.1 formula output) --
+_FORMULA_FEATURES: list[str] = ["rank_ori"]
+_FORMULA_MONOTONE: list[int] = [-1]  # lower rank_ori = more binding
+
 # -- Composite feature lists --
 SET_A_FEATURES = list(_V61_FEATURES)
 SET_A_MONOTONE = list(_V61_MONOTONE)
+
+SET_AF_FEATURES = _V61_FEATURES + _FORMULA_FEATURES  # Set A + formula
+SET_AF_MONOTONE = _V61_MONOTONE + _FORMULA_MONOTONE
 
 SET_B_FEATURES = _V61_FEATURES + _SPICE6_FEATURES
 SET_B_MONOTONE = _V61_MONOTONE + _SPICE6_MONOTONE
@@ -139,6 +148,7 @@ class LTRConfig:
     reg_alpha: float = 1.0
     reg_lambda: float = 1.0
     early_stopping_rounds: int = 20
+    label_mode: str = "rank"  # "rank" (raw rank transform) or "tiered" (0=non-binding, 1-4=quantile buckets)
 
     def __post_init__(self) -> None:
         if len(self.monotone_constraints) != len(self.features):
@@ -173,6 +183,7 @@ class LTRConfig:
             "colsample_bytree": self.colsample_bytree,
             "reg_alpha": self.reg_alpha,
             "reg_lambda": self.reg_lambda,
+            "label_mode": self.label_mode,
         }
 
     @classmethod

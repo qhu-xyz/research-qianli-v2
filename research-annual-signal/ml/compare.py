@@ -361,9 +361,9 @@ def build_three_layer_detail(
 def run_comparison(
     batch_id: str,
     iteration: int,
-    registry_dir: str = "registry",
-    gates_path: str = "registry/gates.json",
-    champion_path: str = "registry/champion.json",
+    registry_dir: str = str(Path(__file__).resolve().parent.parent / "registry"),
+    gates_path: str = str(Path(__file__).resolve().parent.parent / "registry" / "gates.json"),
+    champion_path: str = str(Path(__file__).resolve().parent.parent / "registry" / "champion.json"),
     output_path: str | None = None,
 ) -> dict:
     """Run full comparison: load versions, check gates, build table, write outputs."""

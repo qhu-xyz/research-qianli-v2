@@ -18,7 +18,10 @@ from ml.ground_truth import get_ground_truth
 import numpy as np
 
 
-def run_v0_baseline(eval_groups: list[str], registry_dir: str = "registry") -> dict:
+_DEFAULT_REGISTRY = str(Path(__file__).resolve().parent.parent / "registry")
+
+
+def run_v0_baseline(eval_groups: list[str], registry_dir: str = _DEFAULT_REGISTRY) -> dict:
     per_group = {}
 
     for group_id in eval_groups:

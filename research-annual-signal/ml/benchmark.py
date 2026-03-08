@@ -24,7 +24,7 @@ def mem_mb():
 def run_benchmark(
     version_id: str,
     eval_groups: list[str],
-    registry_dir: str = "registry",
+    registry_dir: str = str(Path(__file__).resolve().parent.parent / "registry"),
     config: PipelineConfig | None = None,
     mode: str = "eval",
 ) -> dict:

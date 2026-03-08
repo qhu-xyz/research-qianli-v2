@@ -11,6 +11,7 @@ from ml.config import (
 from ml.compare import run_comparison
 
 import argparse
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--screen", action="store_true")
@@ -43,5 +44,5 @@ run_benchmark(
 run_comparison(
     batch_id="annual",
     iteration=1,
-    output_path="reports/v1_comparison.md",
+    output_path=str(Path(__file__).resolve().parent.parent / "reports" / "v1_comparison.md"),
 )

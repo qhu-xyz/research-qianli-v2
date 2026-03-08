@@ -17,9 +17,15 @@ CLI:
 import argparse
 import gc
 import json
+import multiprocessing
 import resource
 import statistics
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+
+# Use "spawn" context to avoid fork+LightGBM threading deadlock.
+# LightGBM initializes a thread pool; fork copies the broken lock state to children.
+_MP_CTX = multiprocessing.get_context("spawn")
 
 from ml.config import PipelineConfig, _SCREEN_EVAL_MONTHS, _DEFAULT_EVAL_MONTHS, _FULL_EVAL_MONTHS
 from ml.evaluate import aggregate_months
@@ -97,6 +103,9 @@ def run_benchmark(
 
     per_month = {}
     skipped = []
+
+    # Sequential is fastest: spawn overhead + NFS contention makes parallelism slower.
+    # Data: ~5k rows × 12 features, training <1s — bottleneck is NFS reads (~9s/month).
     for month in eval_months:
         metrics = _eval_single_month(month, class_type, period_type, config, version_id)
         if metrics is None:

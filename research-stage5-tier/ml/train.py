@@ -12,6 +12,10 @@ import numpy as np
 
 from ml.config import LTRConfig
 
+# LightGBM deadlocks with auto-detected thread count (64) in this container.
+# Cap at 4 threads — fast enough for our data size (~5k rows).
+_LGB_NUM_THREADS = 4
+
 
 def _rank_transform_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
     """Rank-transform continuous labels to integers within each query group.
@@ -30,6 +34,37 @@ def _rank_transform_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
     return y_rank
 
 
+def _tiered_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    """Convert continuous labels to tiered relevance within each query group.
+
+    Tiers (per group):
+      0 = non-binding (realized_sp == 0)  — ~88% of constraints
+      1 = binding (realized_sp > 0, bottom 50% of binding)
+      2 = strongly binding (top 50% of binding)
+      3 = highly binding (top 20% of binding)
+
+    This avoids the raw rank problem where 528 non-binding constraints
+    get 528 distinct labels, causing LightGBM to learn noise.
+    """
+    y_tier = np.zeros(len(y), dtype=np.int32)
+    offset = 0
+    for g in groups:
+        chunk = y[offset : offset + g]
+        binding_mask = chunk > 0
+        n_binding = binding_mask.sum()
+        if n_binding > 0:
+            binding_vals = chunk[binding_mask]
+            p50 = np.percentile(binding_vals, 50)
+            p80 = np.percentile(binding_vals, 80)
+            tier = np.zeros(g, dtype=np.int32)
+            tier[binding_mask] = 1
+            tier[binding_mask & (chunk >= p50)] = 2
+            tier[binding_mask & (chunk >= p80)] = 3
+            y_tier[offset : offset + g] = tier
+        offset += g
+    return y_tier
+
+
 def _train_lightgbm(
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -42,7 +77,10 @@ def _train_lightgbm(
     """Train LightGBM lambdarank model."""
     import lightgbm as lgb
 
-    y_rank = _rank_transform_labels(y_train, groups_train)
+    if cfg.label_mode == "tiered":
+        y_rank = _tiered_labels(y_train, groups_train)
+    else:
+        y_rank = _rank_transform_labels(y_train, groups_train)
     max_label = int(y_rank.max())
     label_gain = list(range(max_label + 1))
 
@@ -70,6 +108,7 @@ def _train_lightgbm(
         "monotone_constraints": mono_str,
         "verbose": -1,
         "seed": 42,
+        "num_threads": _LGB_NUM_THREADS,
     }
 
     callbacks = []
@@ -77,7 +116,10 @@ def _train_lightgbm(
     valid_names = []
 
     if X_val is not None and y_val is not None and groups_val is not None:
-        y_val_rank = _rank_transform_labels(y_val, groups_val)
+        if cfg.label_mode == "tiered":
+            y_val_rank = _tiered_labels(y_val, groups_val)
+        else:
+            y_val_rank = _rank_transform_labels(y_val, groups_val)
         max_val_label = int(y_val_rank.max())
         if max_val_label > max_label:
             label_gain = list(range(max_val_label + 1))
@@ -137,6 +179,66 @@ def _train_xgboost(
     return model
 
 
+def _train_lightgbm_regression(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    groups_train: np.ndarray,
+    cfg: LTRConfig,
+    X_val: np.ndarray | None = None,
+    y_val: np.ndarray | None = None,
+    groups_val: np.ndarray | None = None,
+) -> Any:
+    """Train LightGBM regressor — predict realized_sp, rank by predicted value."""
+    import lightgbm as lgb
+
+    mono_str = ",".join(str(m) for m in cfg.monotone_constraints)
+
+    train_data = lgb.Dataset(
+        X_train,
+        label=y_train,
+        feature_name=cfg.features,
+    )
+
+    params = {
+        "objective": "regression",
+        "metric": "rmse",
+        "num_leaves": cfg.num_leaves,
+        "learning_rate": cfg.learning_rate,
+        "min_data_in_leaf": cfg.min_child_weight,
+        "subsample": cfg.subsample,
+        "colsample_bytree": cfg.colsample_bytree,
+        "reg_alpha": cfg.reg_alpha,
+        "reg_lambda": cfg.reg_lambda,
+        "monotone_constraints": mono_str,
+        "verbose": -1,
+        "seed": 42,
+        "num_threads": _LGB_NUM_THREADS,
+    }
+
+    callbacks = []
+    valid_sets = []
+    valid_names = []
+
+    if X_val is not None and y_val is not None:
+        val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
+        valid_sets = [val_data]
+        valid_names = ["val"]
+        if cfg.early_stopping_rounds > 0:
+            callbacks.append(lgb.early_stopping(cfg.early_stopping_rounds, verbose=False))
+
+    model = lgb.train(
+        params,
+        train_data,
+        num_boost_round=cfg.n_estimators,
+        valid_sets=valid_sets,
+        valid_names=valid_names,
+        callbacks=callbacks if callbacks else None,
+    )
+
+    print(f"[train] LightGBM regression: {model.current_iteration()} iterations")
+    return model
+
+
 def train_ltr_model(
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -166,6 +268,8 @@ def train_ltr_model(
     """
     if cfg.backend == "lightgbm":
         return _train_lightgbm(X_train, y_train, groups_train, cfg, X_val, y_val, groups_val)
+    elif cfg.backend == "lightgbm_regression":
+        return _train_lightgbm_regression(X_train, y_train, groups_train, cfg, X_val, y_val, groups_val)
     elif cfg.backend == "xgboost":
         return _train_xgboost(X_train, y_train, groups_train, cfg, X_val, y_val, groups_val)
     else:

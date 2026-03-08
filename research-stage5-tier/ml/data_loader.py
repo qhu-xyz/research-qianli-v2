@@ -22,6 +22,16 @@ def mem_mb() -> float:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 
+# In-memory cache: {(month, ptype, ctype): DataFrame}
+# Adjacent eval months share 7/8 training months — caching cuts NFS reads by ~87%.
+_MONTH_CACHE: dict[tuple[str, str, str], pl.DataFrame] = {}
+
+
+def clear_month_cache() -> None:
+    """Clear the month data cache (call between unrelated benchmark runs)."""
+    _MONTH_CACHE.clear()
+
+
 def load_v62b_month(
     auction_month: str,
     period_type: str = "f0",
@@ -43,6 +53,11 @@ def load_v62b_month(
     pl.DataFrame
         V6.2B data enriched with spice6 density features and realized_sp column.
     """
+    cache_key = (auction_month, period_type, class_type)
+    if cache_key in _MONTH_CACHE:
+        print(f"[data_loader] cache hit: {auction_month}")
+        return _MONTH_CACHE[cache_key]
+
     path = Path(V62B_SIGNAL_BASE) / auction_month / period_type / class_type
     if not path.exists():
         raise FileNotFoundError(f"V6.2B data not found: {path}")
@@ -78,6 +93,7 @@ def load_v62b_month(
 
     # NO _add_engineered_features() — those 37 features are useless
 
+    _MONTH_CACHE[cache_key] = df
     return df
 
 

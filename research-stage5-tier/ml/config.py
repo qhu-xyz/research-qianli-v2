@@ -13,9 +13,8 @@ from typing import Any
 
 
 # ── Leakage guard ──────────────────────────────────────────────────────────────
-# The V6.2B parquet includes columns derived from realized DA shadow prices.
-# V6.2B formula: rank_ori = 0.60*da_rank_value + 0.30*density_mix_rank_value + 0.10*density_ori_rank_value
-# The 60% da_rank_value component is pure leakage.
+# da_rank_value is a historical 60-month lookback, legitimate as a feature.
+# What IS leaky: rank, rank_ori, tier (derived formula outputs).
 _LEAKY_FEATURES: set[str] = {
     # Composite outputs derived from formula (don't use as features)
     "rank",              # = dense_rank(rank_ori), output of formula
@@ -60,21 +59,34 @@ _SPICE6_MONOTONE: list[int] = [
     0,   # constraint_limit
 ]
 
-# ── Engineered features (computed in data_loader) ──
-_ENGINEERED_FEATURES: list[str] = [
-    "flow_utilization",     # ori_mean / constraint_limit
-    "mix_utilization",      # mix_mean / constraint_limit
-    "branch_utilization",   # mean_branch_max / constraint_limit
-    "prob_exceed_max",      # max of all prob_exceed_* thresholds
+# ── Group C: Historical DA signal (from V6.2B parquet) ──
+_HIST_DA_FEATURES: list[str] = ["da_rank_value"]
+_HIST_DA_MONOTONE: list[int] = [-1]  # lower rank_value = more binding
+
+# ── Group D: ML predictions (from ml_pred/final_results.parquet) ──
+_MLPRED_FEATURES: list[str] = [
+    "predicted_shadow_price",
+    "binding_probability",
+    "binding_probability_scaled",
 ]
-_ENGINEERED_MONOTONE: list[int] = [1, 1, 1, 1]
-# All positive: higher utilization or exceedance = more binding
+_MLPRED_MONOTONE: list[int] = [1, 1, 1]
 
-_ALL_FEATURES: list[str] = _V62B_FEATURES + _SPICE6_FEATURES
-_ALL_MONOTONE: list[int] = _V62B_MONOTONE + _SPICE6_MONOTONE
+# ── Composed feature sets ──
+# v1: Groups A+B (11 features) — pure forecasts, no historical DA
+FEATURES_V1: list[str] = _V62B_FEATURES + _SPICE6_FEATURES
+MONOTONE_V1: list[int] = _V62B_MONOTONE + _SPICE6_MONOTONE
 
-_FULL_FEATURES: list[str] = _V62B_FEATURES + _SPICE6_FEATURES + _ENGINEERED_FEATURES
-_FULL_MONOTONE: list[int] = _V62B_MONOTONE + _SPICE6_MONOTONE + _ENGINEERED_MONOTONE
+# v1b: Groups A+B+C (12 features) — add historical DA signal
+FEATURES_V1B: list[str] = _V62B_FEATURES + _SPICE6_FEATURES + _HIST_DA_FEATURES
+MONOTONE_V1B: list[int] = _V62B_MONOTONE + _SPICE6_MONOTONE + _HIST_DA_MONOTONE
+
+# v3: Groups A+B+C+D (15 features) — add ML predictions
+FEATURES_V3: list[str] = FEATURES_V1B + _MLPRED_FEATURES
+MONOTONE_V3: list[int] = MONOTONE_V1B + _MLPRED_MONOTONE
+
+# Default = v1 (Groups A+B)
+_ALL_FEATURES: list[str] = FEATURES_V1
+_ALL_MONOTONE: list[int] = MONOTONE_V1
 
 # ── Eval months ──
 # Screen: 4 months (fast hypothesis test, ~12s with LightGBM)
@@ -101,8 +113,9 @@ _FULL_EVAL_MONTHS: list[str] = [
 # ── Data paths ──
 V62B_SIGNAL_BASE = "/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1"
 SPICE6_DENSITY_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density"
-SPICE6_SF_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/sf"
+SPICE6_MLPRED_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/ml_pred"
 SPICE6_CI_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/constraint_info"
+REALIZED_DA_CACHE = "data/realized_da"
 
 
 @dataclass
@@ -183,8 +196,8 @@ class PipelineConfig:
     """Full pipeline configuration."""
 
     ltr: LTRConfig = field(default_factory=LTRConfig)
-    train_months: int = 6
-    val_months: int = 2
+    train_months: int = 8
+    val_months: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {

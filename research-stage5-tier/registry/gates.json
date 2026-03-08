@@ -1,0 +1,92 @@
+{
+  "gates": {
+    "VC@20": {
+      "floor": 0.2535,
+      "tail_floor": 0.0251,
+      "direction": "higher",
+      "group": "A"
+    },
+    "VC@100": {
+      "floor": 0.5407,
+      "tail_floor": 0.2876,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@20": {
+      "floor": 0.165,
+      "tail_floor": 0.0,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@50": {
+      "floor": 0.207,
+      "tail_floor": 0.14,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@100": {
+      "floor": 0.2152,
+      "tail_floor": 0.16,
+      "direction": "higher",
+      "group": "A"
+    },
+    "NDCG": {
+      "floor": 0.3981,
+      "tail_floor": 0.3022,
+      "direction": "higher",
+      "group": "A"
+    },
+    "VC@10": {
+      "floor": 0.1705,
+      "tail_floor": 0.02,
+      "direction": "higher",
+      "group": "B"
+    },
+    "VC@25": {
+      "floor": 0.29,
+      "tail_floor": 0.0336,
+      "direction": "higher",
+      "group": "B"
+    },
+    "VC@50": {
+      "floor": 0.4188,
+      "tail_floor": 0.1883,
+      "direction": "higher",
+      "group": "B"
+    },
+    "VC@200": {
+      "floor": 0.7384,
+      "tail_floor": 0.6765,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Recall@10": {
+      "floor": 0.1725,
+      "tail_floor": 0.0,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Spearman": {
+      "floor": 0.1841,
+      "tail_floor": 0.1303,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Tier0-AP": {
+      "floor": 0.9,
+      "tail_floor": 1.0,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Tier01-AP": {
+      "floor": 0.9,
+      "tail_floor": 1.0,
+      "direction": "higher",
+      "group": "B"
+    }
+  },
+  "noise_tolerance": 0.02,
+  "tail_max_failures": 1,
+  "calibrated_from": "v0",
+  "calibrated_at": "2026-03-08T16:20:16.607724+00:00"
+}

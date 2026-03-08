@@ -1,0 +1,143 @@
+{
+  "importance_type": "gain",
+  "model": "ltr_ranker",
+  "n_months": 4,
+  "per_month": {
+    "2020-12": {
+      "da_rank_value": 389.02799193095416,
+      "prob_exceed_110": 200.08898064337052,
+      "constraint_limit": 58.527311300771544,
+      "density_ori_rank_value": 34.21803460572846,
+      "prob_exceed_100": 24.880175510726986,
+      "prob_exceed_80": 3.780640033600548,
+      "ori_mean": 1.7826474905014038,
+      "prob_exceed_85": 0.4341587107628584,
+      "prob_exceed_90": 0.14398304768837988,
+      "mean_branch_max": 0.024954600259661674,
+      "density_mix_rank_value": 0.0015782800037413836,
+      "mix_mean": 0.0003249990113545209
+    },
+    "2021-09": {
+      "da_rank_value": 360.30548168373934,
+      "prob_exceed_100": 98.24660357134417,
+      "prob_exceed_110": 73.14982121018693,
+      "density_ori_rank_value": 68.56475417385809,
+      "constraint_limit": 22.848081192069003,
+      "prob_exceed_90": 10.436540777329355,
+      "prob_exceed_80": 0.43165930081158876,
+      "prob_exceed_85": 0.37421199679374695,
+      "ori_mean": 0.1269412012770772,
+      "mean_branch_max": 0.0,
+      "mix_mean": 0.0,
+      "density_mix_rank_value": 0.0
+    },
+    "2022-06": {
+      "da_rank_value": 345.40415788833343,
+      "prob_exceed_110": 89.6387385387352,
+      "constraint_limit": 45.29540209856714,
+      "prob_exceed_80": 28.772015045056833,
+      "prob_exceed_100": 26.401640542550012,
+      "prob_exceed_85": 22.585022213985212,
+      "prob_exceed_90": 21.69753066638077,
+      "ori_mean": 1.2769794682972133,
+      "mix_mean": 0.6996549963951111,
+      "density_ori_rank_value": 0.5464779618196189,
+      "mean_branch_max": 0.0,
+      "density_mix_rank_value": 0.0
+    },
+    "2023-03": {
+      "da_rank_value": 208.02515156241134,
+      "prob_exceed_110": 205.03930405166466,
+      "prob_exceed_100": 89.9288612420205,
+      "constraint_limit": 61.5774971931105,
+      "ori_mean": 9.961547328101005,
+      "density_ori_rank_value": 2.975140861235559,
+      "prob_exceed_85": 1.9080581958405674,
+      "prob_exceed_80": 1.0735098738223314,
+      "mix_mean": 0.5805956821423024,
+      "prob_exceed_90": 0.30257769441232085,
+      "mean_branch_max": 0.0,
+      "density_mix_rank_value": 0.0
+    }
+  },
+  "aggregate": {
+    "mean": {
+      "da_rank_value": 325.69069576635957,
+      "prob_exceed_110": 141.97921111098933,
+      "constraint_limit": 47.06207294612955,
+      "density_ori_rank_value": 26.576101900660433,
+      "prob_exceed_100": 59.86432021666042,
+      "prob_exceed_80": 8.514456063322825,
+      "ori_mean": 3.287028872044175,
+      "prob_exceed_85": 6.325362779345596,
+      "prob_exceed_90": 8.145158046452707,
+      "mean_branch_max": 0.006238650064915419,
+      "density_mix_rank_value": 0.0003945700009353459,
+      "mix_mean": 0.320143919387192
+    },
+    "std": {
+      "da_rank_value": 80.50589496261209,
+      "prob_exceed_110": 70.3096262257088,
+      "constraint_limit": 17.621840181509,
+      "density_ori_rank_value": 31.91651996260568,
+      "prob_exceed_100": 39.66828125997984,
+      "prob_exceed_80": 13.582795414307418,
+      "ori_mean": 4.5032881562185025,
+      "prob_exceed_85": 10.862958248535447,
+      "prob_exceed_90": 10.237872604335285,
+      "mean_branch_max": 0.012477300129830837,
+      "density_mix_rank_value": 0.0007891400018706918,
+      "mix_mean": 0.37266609238696696
+    }
+  },
+  "ranked": [
+    [
+      "da_rank_value",
+      325.69069576635957
+    ],
+    [
+      "prob_exceed_110",
+      141.97921111098933
+    ],
+    [
+      "prob_exceed_100",
+      59.86432021666042
+    ],
+    [
+      "constraint_limit",
+      47.06207294612955
+    ],
+    [
+      "density_ori_rank_value",
+      26.576101900660433
+    ],
+    [
+      "prob_exceed_80",
+      8.514456063322825
+    ],
+    [
+      "prob_exceed_90",
+      8.145158046452707
+    ],
+    [
+      "prob_exceed_85",
+      6.325362779345596
+    ],
+    [
+      "ori_mean",
+      3.287028872044175
+    ],
+    [
+      "mix_mean",
+      0.320143919387192
+    ],
+    [
+      "mean_branch_max",
+      0.006238650064915419
+    ],
+    [
+      "density_mix_rank_value",
+      0.0003945700009353459
+    ]
+  ]
+}

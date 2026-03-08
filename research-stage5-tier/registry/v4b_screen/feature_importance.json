@@ -1,0 +1,63 @@
+{
+  "importance_type": "gain",
+  "model": "ltr_ranker",
+  "n_months": 4,
+  "per_month": {
+    "2020-12": {
+      "v62b_formula_score": 208.7531912325726,
+      "da_rank_value": 110.04268012967077,
+      "density_ori_rank_value": 37.953133279428585,
+      "density_mix_rank_value": 0.0
+    },
+    "2021-09": {
+      "v62b_formula_score": 150.4399240303319,
+      "da_rank_value": 80.09631432820424,
+      "density_ori_rank_value": 29.90555803796451,
+      "density_mix_rank_value": 0.29311539605259895
+    },
+    "2022-06": {
+      "v62b_formula_score": 153.01962618995458,
+      "da_rank_value": 124.98501367331482,
+      "density_ori_rank_value": 20.838929158323026,
+      "density_mix_rank_value": 0.0
+    },
+    "2023-03": {
+      "da_rank_value": 123.78398890032258,
+      "v62b_formula_score": 102.28631339105777,
+      "density_ori_rank_value": 19.485806551254427,
+      "density_mix_rank_value": 0.054990259231999516
+    }
+  },
+  "aggregate": {
+    "mean": {
+      "v62b_formula_score": 153.6247637109792,
+      "da_rank_value": 109.7269992578781,
+      "density_ori_rank_value": 27.045856756742637,
+      "density_mix_rank_value": 0.08702641382114962
+    },
+    "std": {
+      "v62b_formula_score": 43.5327057029746,
+      "da_rank_value": 20.88446875490559,
+      "density_ori_rank_value": 8.618330887932679,
+      "density_mix_rank_value": 0.13981675770235188
+    }
+  },
+  "ranked": [
+    [
+      "v62b_formula_score",
+      153.6247637109792
+    ],
+    [
+      "da_rank_value",
+      109.7269992578781
+    ],
+    [
+      "density_ori_rank_value",
+      27.045856756742637
+    ],
+    [
+      "density_mix_rank_value",
+      0.08702641382114962
+    ]
+  ]
+}

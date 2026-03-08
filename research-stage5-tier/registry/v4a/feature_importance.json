@@ -1,0 +1,93 @@
+{
+  "importance_type": "gain",
+  "model": "ltr_ranker",
+  "n_months": 12,
+  "per_month": {
+    "2020-09": {
+      "density_ori_rank_value": 143.6264552850771,
+      "da_rank_value": 79.67667647730559,
+      "density_mix_rank_value": 5.159614054355188
+    },
+    "2020-12": {
+      "density_ori_rank_value": 150.2461896665759,
+      "da_rank_value": 98.94590273220092,
+      "density_mix_rank_value": 36.26972031639889
+    },
+    "2021-03": {
+      "density_ori_rank_value": 176.14214947466098,
+      "da_rank_value": 90.6257431981794,
+      "density_mix_rank_value": 2.1616185549646616
+    },
+    "2021-06": {
+      "density_ori_rank_value": 148.1158985101997,
+      "da_rank_value": 90.46209627695498,
+      "density_mix_rank_value": 10.518020352348685
+    },
+    "2021-09": {
+      "density_ori_rank_value": 161.6848565825494,
+      "da_rank_value": 93.22969858977012,
+      "density_mix_rank_value": 1.8804192186653381
+    },
+    "2021-12": {
+      "density_ori_rank_value": 129.71728601245889,
+      "da_rank_value": 113.4080278784968,
+      "density_mix_rank_value": 0.8516181905579288
+    },
+    "2022-03": {
+      "density_ori_rank_value": 123.54050179858666,
+      "da_rank_value": 121.57646210322855,
+      "density_mix_rank_value": 1.5910290264291689
+    },
+    "2022-06": {
+      "da_rank_value": 85.27771904533438,
+      "density_ori_rank_value": 81.75346097542933,
+      "density_mix_rank_value": 3.914387777360389
+    },
+    "2022-09": {
+      "da_rank_value": 114.27391273510875,
+      "density_ori_rank_value": 91.90199909609646,
+      "density_mix_rank_value": 2.8067765282467008
+    },
+    "2022-12": {
+      "density_ori_rank_value": 113.87535365218855,
+      "da_rank_value": 76.09781579626724,
+      "density_mix_rank_value": 0.04562677978537977
+    },
+    "2023-03": {
+      "density_ori_rank_value": 106.51438897271873,
+      "da_rank_value": 69.6087131225504,
+      "density_mix_rank_value": 0.6745707571972162
+    },
+    "2023-05": {
+      "density_ori_rank_value": 115.89944906617166,
+      "da_rank_value": 48.721570656169206,
+      "density_mix_rank_value": 3.1566852173709776
+    }
+  },
+  "aggregate": {
+    "mean": {
+      "density_ori_rank_value": 128.58483242439277,
+      "da_rank_value": 90.15869488429719,
+      "density_mix_rank_value": 5.752507231140044
+    },
+    "std": {
+      "density_ori_rank_value": 28.387200843173556,
+      "da_rank_value": 20.597549625231853,
+      "density_mix_rank_value": 10.003337266600548
+    }
+  },
+  "ranked": [
+    [
+      "density_ori_rank_value",
+      128.58483242439277
+    ],
+    [
+      "da_rank_value",
+      90.15869488429719
+    ],
+    [
+      "density_mix_rank_value",
+      5.752507231140044
+    ]
+  ]
+}

@@ -115,7 +115,7 @@ V62B_SIGNAL_BASE = "/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST
 SPICE6_DENSITY_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density"
 SPICE6_MLPRED_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/ml_pred"
 SPICE6_CI_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/constraint_info"
-REALIZED_DA_CACHE = "data/realized_da"
+REALIZED_DA_CACHE = str(Path(__file__).resolve().parent.parent / "data" / "realized_da")
 
 
 @dataclass

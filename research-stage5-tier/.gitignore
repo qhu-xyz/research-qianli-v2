@@ -1,0 +1,2 @@
+# Cached data (large parquets, fetched via Ray)
+data/realized_da/*.parquet

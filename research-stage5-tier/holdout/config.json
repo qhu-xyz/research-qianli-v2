@@ -1,0 +1,22 @@
+{
+  "description": "One-time holdout test on unseen 2024-2025 data. Results are immutable.",
+  "eval_months": [
+    "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06",
+    "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12",
+    "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06",
+    "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12"
+  ],
+  "n_eval_months": 24,
+  "train_months": 8,
+  "val_months": 0,
+  "period_type": "f0",
+  "class_type": "onpeak",
+  "dev_eval_period": "2020-06 to 2023-05 (36 months)",
+  "holdout_period": "2024-01 to 2025-12 (24 months)",
+  "created": "2026-03-08",
+  "rules": [
+    "Results are written once and never modified",
+    "No model tuning based on holdout results",
+    "Each champion version gets exactly one entry"
+  ]
+}

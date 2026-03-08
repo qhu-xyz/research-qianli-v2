@@ -1,8 +1,9 @@
 # Stage 5 — Working Memory
 
-## Status: v6b Best Overall, 36-Month Validated (2026-03-08)
+## Status: v6b Best on VC@20, Holdout-Confirmed (2026-03-08)
 
 Full audit: see `audit.md` (19/19 checks PASS, no leakage, no bugs).
+Holdout test: see `holdout/` (2024-2025 one-time test, immutable results).
 
 ## VERIFICATION CHECKPOINTS
 
@@ -10,7 +11,7 @@ Full audit: see `audit.md` (19/19 checks PASS, no leakage, no bugs).
 - `shadow_price_da` in V6.2B parquet is a HISTORICAL 60-month lookback feature
 - Ground truth = realized DA shadow prices: `abs(sum(shadow_price))` per constraint_id
 - Fetched via `MisoApTools().tools.get_da_shadow_by_peaktype()`
-- Cached in `data/realized_da/{YYYY-MM}.parquet` (48 months, 2019-06 to 2023-05)
+- Cached in `data/realized_da/{YYYY-MM}.parquet` (79 months, 2019-06 to 2025-12)
 - Spearman(shadow_price_da, realized_sp) = 0.22 — confirms NOT leaked
 
 ### da_rank_value Is NOT Leaky
@@ -75,6 +76,29 @@ v6 legend: reg=LightGBM regression, rank=LightGBM lambdarank, 13f=12 features + 
 - ~68-81 V6.2B constraints match DA per month (out of ~550-780)
 - ~200-250 DA binding constraints NOT in V6.2B signal universe (coverage gap)
 - Average ~72 binding constraints per month (11-13% of V6.2B)
+
+---
+
+## Holdout Test: 2024-2025 (24 months, one-time, immutable)
+
+Results in `holdout/{version}/metrics.json`. Dev eval period was 2020-2023; this is fully unseen.
+
+| Metric | v0 (formula) | v5 (rank,12f) | v6b (reg,13f) | v6c (rank,13f) |
+|--------|-------------|---------------|---------------|----------------|
+| VC@20 | 0.1835 | 0.2160 (+18%) | **0.2709** (+48%) | 0.2100 (+14%) |
+| VC@100 | 0.5924 | **0.6322** (+7%) | 0.5854 (-1%) | 0.6040 (+2%) |
+| Recall@20 | 0.1500 | 0.1854 (+24%) | **0.1937** (+29%) | 0.1792 (+19%) |
+| Recall@100 | 0.2421 | **0.2571** (+6%) | 0.2525 (+4%) | 0.2554 (+5%) |
+| NDCG | 0.4224 | **0.4580** (+8%) | 0.4462 (+6%) | 0.4550 (+8%) |
+| Spearman | **0.1946** | 0.1834 (-6%) | 0.1891 (-3%) | 0.1789 (-8%) |
+
+### Holdout Key Findings
+- **v6b VC@20 advantage holds on holdout**: +48% over formula (vs +5% on dev 36mo)
+- **All metrics lower than dev eval** — expected: 2024-2025 is harder (more constraints per month)
+- **v5 best on VC@100, NDCG, Recall@100** — ranking objective generalizes better for broader coverage
+- **v6b best on VC@20 and Recall@20** — regression still best for top-k precision
+- **Spearman: formula still wins** — consistent with dev eval finding
+- **v6c underperforms on holdout** — formula-as-feature helps regression more than ranking on new data
 
 ---
 

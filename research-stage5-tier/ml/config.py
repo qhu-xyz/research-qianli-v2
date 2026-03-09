@@ -117,6 +117,54 @@ SPICE6_MLPRED_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/ml_pred"
 SPICE6_CI_BASE = "/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/constraint_info"
 REALIZED_DA_CACHE = str(Path(__file__).resolve().parent.parent / "data" / "realized_da")
 
+# ── MISO Auction Schedule ──
+# Determines which period types exist for each calendar month.
+# Source: iso_configs.py. May/Jun = f0 only; Jul/Aug/Nov = most types.
+MISO_AUCTION_SCHEDULE: dict[int, list[str]] = {
+    1: ["f0", "f1", "q4"],
+    2: ["f0", "f1", "f2", "f3"],
+    3: ["f0", "f1", "f2"],
+    4: ["f0", "f1"],
+    5: ["f0"],
+    6: ["f0"],
+    7: ["f0", "f1", "q2", "q3", "q4"],
+    8: ["f0", "f1", "f2", "f3"],
+    9: ["f0", "f1", "f2"],
+    10: ["f0", "f1", "q3", "q4"],
+    11: ["f0", "f1", "f2", "f3"],
+    12: ["f0", "f1", "f2"],
+}
+
+
+def period_offset(period_type: str) -> int:
+    """f0→0, f1→1, f2→2, f3→3. Only valid for monthly types (f0-f3)."""
+    if not period_type.startswith("f"):
+        raise ValueError(f"period_offset only supports monthly types (f0-f3), got '{period_type}'")
+    return int(period_type[1:])
+
+
+def delivery_month(auction_month: str, period_type: str) -> str:
+    """Compute delivery month from auction month and period type."""
+    import pandas as pd
+    offset = period_offset(period_type)
+    if offset == 0:
+        return auction_month
+    dt = pd.Timestamp(auction_month) + pd.DateOffset(months=offset)
+    return dt.strftime("%Y-%m")
+
+
+def has_period_type(auction_month: str, period_type: str) -> bool:
+    """Check if period type exists for a given auction month."""
+    import pandas as pd
+    month_num = pd.Timestamp(auction_month).month
+    return period_type in MISO_AUCTION_SCHEDULE.get(month_num, ["f0"])
+
+
+def f1_eval_months(full: bool = False) -> list[str]:
+    """Return eval months that have f1 data, from _FULL_EVAL_MONTHS or _DEFAULT_EVAL_MONTHS."""
+    source = _FULL_EVAL_MONTHS if full else _DEFAULT_EVAL_MONTHS
+    return [m for m in source if has_period_type(m, "f1")]
+
 
 @dataclass
 class LTRConfig:

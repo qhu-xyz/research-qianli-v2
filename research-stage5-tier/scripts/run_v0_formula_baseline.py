@@ -33,12 +33,14 @@ def mem_mb() -> float:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 
-def evaluate_month(month: str, class_type: str = "onpeak") -> dict:
+def evaluate_month(month: str, class_type: str = "onpeak", period_type: str = "f0") -> dict:
     """Evaluate V6.2B formula on one month against realized DA."""
-    path = Path(V62B_SIGNAL_BASE) / month / "f0" / class_type
+    from ml.config import delivery_month as _delivery_month
+    path = Path(V62B_SIGNAL_BASE) / month / period_type / class_type
     df = pl.read_parquet(str(path))
 
-    realized = load_realized_da(month, peak_type=class_type)
+    gt_month = _delivery_month(month, period_type)
+    realized = load_realized_da(gt_month, peak_type=class_type)
     df = df.join(realized, on="constraint_id", how="left")
     df = df.with_columns(pl.col("realized_sp").fill_null(0.0))
 
@@ -112,18 +114,24 @@ def main() -> None:
     parser.add_argument("--class-type", default="onpeak", choices=["onpeak", "offpeak"])
     parser.add_argument("--full", action="store_true", help="Use all 36 months instead of 12")
     parser.add_argument("--holdout", action="store_true", help="Also run on 2024-2025 holdout")
+    parser.add_argument("--ptype", default="f0", help="Period type (f0, f1, f2, f3)")
     args = parser.parse_args()
     class_type = args.class_type
 
-    HOLDOUT_MONTHS = [f"{y:04d}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
+    from ml.config import has_period_type
+    period_type = args.ptype
 
-    print(f"[v0] Starting V6.2B formula baseline ({class_type}), mem: {mem_mb():.0f} MB")
+    HOLDOUT_MONTHS = [f"{y:04d}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
+    HOLDOUT_MONTHS = [m for m in HOLDOUT_MONTHS if has_period_type(m, period_type)]
+
+    print(f"[v0] Starting V6.2B formula baseline ({period_type}/{class_type}), mem: {mem_mb():.0f} MB")
     eval_months = _FULL_EVAL_MONTHS if args.full else _DEFAULT_EVAL_MONTHS
+    eval_months = [m for m in eval_months if has_period_type(m, period_type)]
     print(f"[v0] Eval months ({len(eval_months)}): {eval_months}")
 
     per_month: dict[str, dict] = {}
     for month in eval_months:
-        per_month[month] = evaluate_month(month, class_type=class_type)
+        per_month[month] = evaluate_month(month, class_type=class_type, period_type=period_type)
 
     agg = aggregate_months(per_month)
 
@@ -138,7 +146,7 @@ def main() -> None:
         print(f"  {metric:<15} {m:>8.4f} {mn:>8.4f} {mx:>8.4f}")
 
     # ── Check against expected numbers (onpeak only) ──
-    if class_type == "onpeak":
+    if class_type == "onpeak" and period_type == "f0":
         expected = {"VC@20": 0.2817, "VC@100": 0.6008, "Spearman": 0.2045}
         print("\n[v0] Validation against expected (tolerance=0.01):")
         all_ok = True
@@ -157,7 +165,7 @@ def main() -> None:
     # ── Save to registry/f0/{class_type}/v0/ ──
     base_registry = Path(__file__).resolve().parent.parent / "registry"
     version_id = "v0"
-    v0_dir = registry_root("f0", class_type, base_dir=base_registry) / version_id
+    v0_dir = registry_root(period_type, class_type, base_dir=base_registry) / version_id
     v0_dir.mkdir(parents=True, exist_ok=True)
 
     # metrics.json (v2 format: per_month + aggregate)
@@ -165,7 +173,7 @@ def main() -> None:
         "eval_config": {
             "eval_months": eval_months,
             "class_type": class_type,
-            "period_type": "f0",
+            "period_type": period_type,
             "mode": "eval",
         },
         "per_month": per_month,
@@ -198,22 +206,21 @@ def main() -> None:
     with open(v0_dir / "meta.json", "w") as f:
         json.dump(meta_out, f, indent=2)
 
-    # ── Gates (only recalibrate for onpeak) ──
-    slice_dir = registry_root("f0", class_type, base_dir=base_registry)
-    if class_type == "onpeak":
-        gates_data = build_gates(agg)
-        with open(slice_dir / "gates.json", "w") as f:
-            json.dump(gates_data, f, indent=2)
-        print(f"[v0] Wrote {slice_dir / 'gates.json'}")
+    # ── Gates (calibrate for every slice) ──
+    slice_dir = registry_root(period_type, class_type, base_dir=base_registry)
+    gates_data = build_gates(agg)
+    with open(slice_dir / "gates.json", "w") as f:
+        json.dump(gates_data, f, indent=2)
+    print(f"[v0] Wrote {slice_dir / 'gates.json'}")
 
-        champion_data = {
-            "version": "v0",
-            "promoted_at": datetime.now(timezone.utc).isoformat(),
-            "reason": "initial baseline (V6.2B formula vs realized DA)",
-        }
-        with open(slice_dir / "champion.json", "w") as f:
-            json.dump(champion_data, f, indent=2)
-        print(f"[v0] Wrote {slice_dir / 'champion.json'}")
+    champion_data = {
+        "version": "v0",
+        "promoted_at": datetime.now(timezone.utc).isoformat(),
+        "reason": f"initial baseline (V6.2B formula vs realized DA, {period_type}/{class_type})",
+    }
+    with open(slice_dir / "champion.json", "w") as f:
+        json.dump(champion_data, f, indent=2)
+    print(f"[v0] Wrote {slice_dir / 'champion.json'}")
 
     # ── Holdout ──
     if args.holdout:
@@ -221,7 +228,7 @@ def main() -> None:
         ho_per_month: dict[str, dict] = {}
         for month in HOLDOUT_MONTHS:
             try:
-                ho_per_month[month] = evaluate_month(month, class_type=class_type)
+                ho_per_month[month] = evaluate_month(month, class_type=class_type, period_type=period_type)
             except FileNotFoundError:
                 print(f"  {month}: SKIP (not found)")
         ho_agg = aggregate_months(ho_per_month)
@@ -231,11 +238,11 @@ def main() -> None:
             print(f"  {metric:<12} {ho_means.get(metric, 0):.4f}")
 
         base_holdout = Path(__file__).resolve().parent.parent / "holdout"
-        holdout_dir = holdout_root("f0", class_type, base_dir=base_holdout) / version_id
+        holdout_dir = holdout_root(period_type, class_type, base_dir=base_holdout) / version_id
         holdout_dir.mkdir(parents=True, exist_ok=True)
         ho_out = {
             "eval_config": {"eval_months": HOLDOUT_MONTHS, "class_type": class_type,
-                            "period_type": "f0", "mode": "holdout"},
+                            "period_type": period_type, "mode": "holdout"},
             "per_month": ho_per_month, "aggregate": ho_agg,
             "n_months": len(ho_per_month),
         }

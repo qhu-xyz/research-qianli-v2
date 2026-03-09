@@ -1,0 +1,8 @@
+{
+  "formula": "rank_ori = 1.00*da_rank_value + 0.00*density_mix_rank_value + 0.00*density_ori_rank_value",
+  "alpha": 1.0,
+  "beta": 0.0,
+  "gamma": 0.0,
+  "score": "1 - rank_ori (inverted so higher = more binding)",
+  "note": "Best formula weights from grid search over alpha/beta."
+}

@@ -1,73 +1,73 @@
 {
   "gates": {
     "VC@20": {
-      "floor": 0.2724,
-      "tail_floor": 0.1321,
+      "floor": 0.3221,
+      "tail_floor": 0.0505,
       "direction": "higher",
       "group": "A"
     },
     "VC@100": {
-      "floor": 0.5667,
-      "tail_floor": 0.4799,
+      "floor": 0.6249,
+      "tail_floor": 0.4615,
       "direction": "higher",
       "group": "A"
     },
     "Recall@20": {
-      "floor": 0.2,
+      "floor": 0.1905,
       "tail_floor": 0.05,
       "direction": "higher",
       "group": "A"
     },
     "Recall@50": {
-      "floor": 0.208,
+      "floor": 0.2178,
       "tail_floor": 0.14,
       "direction": "higher",
       "group": "A"
     },
     "Recall@100": {
-      "floor": 0.232,
+      "floor": 0.2196,
       "tail_floor": 0.13,
       "direction": "higher",
       "group": "A"
     },
     "NDCG": {
-      "floor": 0.3931,
+      "floor": 0.3907,
       "tail_floor": 0.2842,
       "direction": "higher",
       "group": "A"
     },
     "VC@10": {
-      "floor": 0.1937,
-      "tail_floor": 0.0997,
+      "floor": 0.2257,
+      "tail_floor": 0.0505,
       "direction": "higher",
       "group": "B"
     },
     "VC@25": {
-      "floor": 0.2986,
-      "tail_floor": 0.1321,
+      "floor": 0.3485,
+      "tail_floor": 0.0533,
       "direction": "higher",
       "group": "B"
     },
     "VC@50": {
-      "floor": 0.4096,
-      "tail_floor": 0.2084,
+      "floor": 0.4678,
+      "tail_floor": 0.1191,
       "direction": "higher",
       "group": "B"
     },
     "VC@200": {
-      "floor": 0.7057,
-      "tail_floor": 0.6386,
+      "floor": 0.7534,
+      "tail_floor": 0.6032,
       "direction": "higher",
       "group": "B"
     },
     "Recall@10": {
-      "floor": 0.2,
+      "floor": 0.177,
       "tail_floor": 0.1,
       "direction": "higher",
       "group": "B"
     },
     "Spearman": {
-      "floor": 0.1763,
+      "floor": 0.179,
       "tail_floor": 0.0893,
       "direction": "higher",
       "group": "B"
@@ -76,5 +76,5 @@
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
   "calibrated_from": "v0",
-  "calibrated_at": "2026-03-09T18:44:04.522830+00:00"
+  "calibrated_at": "2026-03-09T18:54:33.539788+00:00"
 }

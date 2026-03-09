@@ -240,11 +240,15 @@ def main() -> None:
         base_holdout = Path(__file__).resolve().parent.parent / "holdout"
         holdout_dir = holdout_root(period_type, class_type, base_dir=base_holdout) / version_id
         holdout_dir.mkdir(parents=True, exist_ok=True)
+        actual_ho_months = sorted(ho_per_month.keys())
+        skipped_ho = sorted(set(HOLDOUT_MONTHS) - set(actual_ho_months))
         ho_out = {
-            "eval_config": {"eval_months": HOLDOUT_MONTHS, "class_type": class_type,
+            "eval_config": {"eval_months": actual_ho_months, "class_type": class_type,
                             "period_type": period_type, "mode": "holdout"},
             "per_month": ho_per_month, "aggregate": ho_agg,
             "n_months": len(ho_per_month),
+            "n_months_requested": len(HOLDOUT_MONTHS),
+            "skipped_months": skipped_ho,
         }
         with open(holdout_dir / "metrics.json", "w") as f:
             json.dump(ho_out, f, indent=2)

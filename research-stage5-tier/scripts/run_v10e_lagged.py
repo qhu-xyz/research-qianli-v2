@@ -246,19 +246,45 @@ def run_variant(
 def save_results(
     label: str, per_month: dict, eval_months: list[str], dest_dir: Path,
     class_type: str = "onpeak", lag: int = 1, period_type: str = "f0",
+    blend_weights: tuple[float, float, float] | None = None,
+    features: list[str] | None = None,
 ) -> None:
     clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in per_month.items()}
     agg = aggregate_months(clean)
     d = dest_dir / label
     d.mkdir(parents=True, exist_ok=True)
+
+    # Record actual evaluated months (not requested), to avoid metadata lies
+    actual_months = sorted(clean.keys())
+    skipped = sorted(set(eval_months) - set(actual_months))
+
     result = {
-        "eval_config": {"eval_months": eval_months, "class_type": class_type,
+        "eval_config": {"eval_months": actual_months, "class_type": class_type,
                         "period_type": period_type, "lag": lag,
                         "note": f"{lag}-month production lag applied"},
         "per_month": clean, "aggregate": agg, "n_months": len(clean),
+        "n_months_requested": len(eval_months),
+        "skipped_months": skipped,
     }
     with open(d / "metrics.json", "w") as f:
         json.dump(result, f, indent=2)
+
+    # Finding 4: persist config.json for reproducibility
+    config = {
+        "method": "lightgbm_regression_tiered",
+        "features": features or list(V10E_FEATURES),
+        "lag": lag,
+        "period_type": period_type,
+        "class_type": class_type,
+        "label_mode": "tiered",
+        "train_months": 8,
+        "backend": "lightgbm_regression",
+    }
+    if blend_weights:
+        config["blend_weights"] = {"da": blend_weights[0], "dmix": blend_weights[1], "dori": blend_weights[2]}
+    with open(d / "config.json", "w") as f:
+        json.dump(config, f, indent=2)
+
     print(f"  Saved to {d}/")
 
 
@@ -334,12 +360,15 @@ def main() -> None:
 
     # ── Dev ──
     dev_pm = run_variant(version_id, dev_eval, bs, lag=lag, class_type=class_type, period_type=period_type)
-    save_results(version_id, dev_pm, dev_eval, reg_slice, class_type=class_type, lag=lag, period_type=period_type)
+    bw = BLEND_WEIGHTS.get(period_type, BLEND_WEIGHTS["f0"])
+    save_results(version_id, dev_pm, dev_eval, reg_slice, class_type=class_type, lag=lag,
+                 period_type=period_type, blend_weights=bw, features=list(V10E_FEATURES))
 
     # ── Holdout ──
     if not args.dev_only:
         holdout_pm = run_variant(f"{version_id}-holdout", holdout_eval, bs, lag=lag, class_type=class_type, period_type=period_type)
-        save_results(version_id, holdout_pm, holdout_eval, ho_slice, class_type=class_type, lag=lag, period_type=period_type)
+        save_results(version_id, holdout_pm, holdout_eval, ho_slice, class_type=class_type, lag=lag,
+                     period_type=period_type, blend_weights=bw, features=list(V10E_FEATURES))
 
     # ── Comparison ──
     v0_path = reg_slice / "v0" / "metrics.json"

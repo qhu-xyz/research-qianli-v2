@@ -566,5 +566,7 @@
       "n_samples": 322.0
     }
   },
-  "n_months": 30
+  "n_months": 30,
+  "n_months_requested": 30,
+  "skipped_months": []
 }

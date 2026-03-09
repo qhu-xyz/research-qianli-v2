@@ -27,10 +27,12 @@ REALIZED_DA_DIR = ROOT / "data" / "realized_da"
 HOLDOUT_MONTHS = [f"{y:04d}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
 
 
-def _has_gt(auction_month: str, period_type: str) -> bool:
+def _has_gt(auction_month: str, period_type: str, class_type: str = "onpeak") -> bool:
     """Check if realized DA ground truth exists for this auction_month + period_type."""
     gt_month = delivery_month(auction_month, period_type)
-    return (REALIZED_DA_DIR / f"{gt_month}.parquet").exists()
+    if class_type == "onpeak":
+        return (REALIZED_DA_DIR / f"{gt_month}.parquet").exists()
+    return (REALIZED_DA_DIR / f"{gt_month}_{class_type}.parquet").exists()
 
 
 def search_blend(eval_months: list[str], period_type: str = "f1", class_type: str = "onpeak"):
@@ -101,9 +103,9 @@ def main():
 
     # Filter eval months (must have period type AND realized DA ground truth)
     dev_months = [m for m in _FULL_EVAL_MONTHS
-                  if has_period_type(m, period_type) and _has_gt(m, period_type)]
+                  if has_period_type(m, period_type) and _has_gt(m, period_type, class_type)]
     holdout_months = [m for m in HOLDOUT_MONTHS
-                      if has_period_type(m, period_type) and _has_gt(m, period_type)]
+                      if has_period_type(m, period_type) and _has_gt(m, period_type, class_type)]
     print(f"[v1] Blend search for {period_type}/{class_type}: {len(dev_months)} dev, {len(holdout_months)} holdout")
 
     # Grid search on dev

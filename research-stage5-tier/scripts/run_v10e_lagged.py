@@ -40,10 +40,13 @@ HOLDOUT = ROOT / "holdout"
 
 V7_DA, V7_DMIX, V7_DORI = 0.85, 0.00, 0.15  # f0 default
 
-# Per-period-type blend weights (from blend search experiments)
-BLEND_WEIGHTS: dict[str, tuple[float, float, float]] = {
-    "f0": (0.85, 0.00, 0.15),
-    "f1": (0.70, 0.00, 0.30),
+# Per-(period_type, class_type) blend weights from blend search experiments.
+# Key: (period_type, class_type). Falls back to ptype-only then f0 default.
+BLEND_WEIGHTS: dict[tuple[str, str], tuple[float, float, float]] = {
+    ("f0", "onpeak"): (0.85, 0.00, 0.15),
+    ("f0", "offpeak"): (0.85, 0.00, 0.15),
+    ("f1", "onpeak"): (0.70, 0.00, 0.30),
+    ("f1", "offpeak"): (0.80, 0.00, 0.20),
 }
 
 V10E_FEATURES = [
@@ -138,7 +141,7 @@ def run_variant(
     class_type: str = "onpeak",
     period_type: str = "f0",
 ) -> dict[str, dict]:
-    blend = BLEND_WEIGHTS.get(period_type, (V7_DA, V7_DMIX, V7_DORI))
+    blend = BLEND_WEIGHTS.get((period_type, class_type), (V7_DA, V7_DMIX, V7_DORI))
     print(f"\n[{label}] 9f, {len(eval_months)} months, lag={lag}, ptype={period_type}, "
           f"class_type={class_type}, blend={blend}")
 
@@ -360,7 +363,7 @@ def main() -> None:
 
     # ── Dev ──
     dev_pm = run_variant(version_id, dev_eval, bs, lag=lag, class_type=class_type, period_type=period_type)
-    bw = BLEND_WEIGHTS.get(period_type, BLEND_WEIGHTS["f0"])
+    bw = BLEND_WEIGHTS.get((period_type, class_type), (V7_DA, V7_DMIX, V7_DORI))
     save_results(version_id, dev_pm, dev_eval, reg_slice, class_type=class_type, lag=lag,
                  period_type=period_type, blend_weights=bw, features=list(V10E_FEATURES))
 

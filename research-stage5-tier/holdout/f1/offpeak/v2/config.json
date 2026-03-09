@@ -18,8 +18,8 @@
   "train_months": 8,
   "backend": "lightgbm",
   "blend_weights": {
-    "da": 0.7,
+    "da": 0.8,
     "dmix": 0.0,
-    "dori": 0.3
+    "dori": 0.2
   }
 }

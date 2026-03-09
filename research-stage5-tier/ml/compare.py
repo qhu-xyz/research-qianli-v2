@@ -379,21 +379,33 @@ def run_comparison(
     gp = slice_root / "gates.json"
     cp = slice_root / "champion.json"
 
-    with open(gp) as f:
-        gates_data = json.load(f)
-    gates = gates_data["gates"]
-    noise_tolerance = gates_data.get("noise_tolerance", 0.02)
-    tail_max_failures = gates_data.get("tail_max_failures", 1)
+    # Load gates
+    if gp.exists():
+        with open(gp) as f:
+            gates_data = json.load(f)
+        gates = gates_data["gates"]
+        noise_tolerance = gates_data.get("noise_tolerance", 0.02)
+        tail_max_failures = gates_data.get("tail_max_failures", 1)
+    else:
+        print(f"[compare] No gates.json at {gp} — skipping gate checks")
+        gates = {}
+        noise_tolerance = 0.02
+        tail_max_failures = 1
 
+    # Load champion
     champion_metrics = None
-    with open(cp) as f:
-        champion_data = json.load(f)
-    champion_version = champion_data.get("version")
-    if champion_version:
-        champ_metrics_path = slice_root / champion_version / "metrics.json"
-        if champ_metrics_path.exists():
-            with open(champ_metrics_path) as f:
-                champion_metrics = json.load(f)
+    champion_version = None
+    if cp.exists():
+        with open(cp) as f:
+            champion_data = json.load(f)
+        champion_version = champion_data.get("version")
+        if champion_version:
+            champ_metrics_path = slice_root / champion_version / "metrics.json"
+            if champ_metrics_path.exists():
+                with open(champ_metrics_path) as f:
+                    champion_metrics = json.load(f)
+    else:
+        print(f"[compare] No champion.json at {cp} — no champion set")
 
     versions = load_all_versions(registry_dir, period_type, class_type)
     table = build_comparison_table(

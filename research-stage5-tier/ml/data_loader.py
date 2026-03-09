@@ -83,13 +83,17 @@ def load_v62b_month(
                      "prob_exceed_85", "prob_exceed_80", "constraint_limit"]:
             df = df.with_columns(pl.lit(0.0).alias(col))
 
-    # Join realized DA ground truth (peak_type matches class_type)
-    realized = load_realized_da(auction_month, peak_type=class_type)
+    # Join realized DA ground truth
+    # For fN, ground truth = realized DA for delivery_month (= auction_month + N)
+    from ml.config import delivery_month as _delivery_month
+    gt_month = _delivery_month(auction_month, period_type)
+    realized = load_realized_da(gt_month, peak_type=class_type)
     df = df.join(realized, on="constraint_id", how="left")
     df = df.with_columns(pl.col("realized_sp").fill_null(0.0))
 
     n_binding = len(df.filter(pl.col("realized_sp") > 0))
-    print(f"[data_loader] realized DA: {n_binding}/{len(df)} binding for {auction_month}")
+    print(f"[data_loader] realized DA: {n_binding}/{len(df)} binding for {auction_month} "
+          f"(gt_month={gt_month})")
 
     # NO _add_engineered_features() — those 37 features are useless
 

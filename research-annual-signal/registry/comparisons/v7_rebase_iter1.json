@@ -1,0 +1,1273 @@
+{
+  "batch_id": "v7_rebase",
+  "iteration": 1,
+  "timestamp": "2026-03-09T16:05:53.522468+00:00",
+  "champion": "v0",
+  "noise_tolerance": 0.02,
+  "versions": {
+    "v0": {
+      "VC@20": {
+        "mean_value": 0.2329,
+        "mean_passed": false,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.1066,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "VC@100": {
+        "mean_value": 0.6573,
+        "mean_passed": true,
+        "tail_failures": 3,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4359,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@20": {
+        "mean_value": 0.2167,
+        "mean_passed": false,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.075,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@50": {
+        "mean_value": 0.3817,
+        "mean_passed": false,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.26,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@100": {
+        "mean_value": 0.5117,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.475,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "NDCG": {
+        "mean_value": 0.5889,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.432,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Spearman": {
+        "mean_value": 0.3392,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2637,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4185,
+        "mean_passed": false,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.3167,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": false
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5568,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4656,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v0b": {
+      "VC@20": {
+        "mean_value": 0.2997,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1589,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6879,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.498,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@20": {
+        "mean_value": 0.3208,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.175,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.46,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.36,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.5208,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.425,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.6028,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.5067,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Spearman": {
+        "mean_value": 0.3678,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2843,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4673,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.379,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.579,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4804,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v0c": {
+      "VC@20": {
+        "mean_value": 0.2997,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1589,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6879,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.498,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@20": {
+        "mean_value": 0.3208,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.175,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.46,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.36,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.5208,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.425,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.6028,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.5067,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Spearman": {
+        "mean_value": 0.3678,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2843,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4673,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.379,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.579,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4804,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v1": {
+      "VC@20": {
+        "mean_value": 0.2934,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1356,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6854,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4996,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@20": {
+        "mean_value": 0.2708,
+        "mean_passed": false,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@50": {
+        "mean_value": 0.4383,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.34,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.5292,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.455,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "NDCG": {
+        "mean_value": 0.6071,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4432,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Spearman": {
+        "mean_value": 0.3642,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2964,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4564,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3584,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.586,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4899,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v1_holdout": {
+      "VC@20": {
+        "mean_value": 0.2152,
+        "mean_passed": false,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1426,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "VC@100": {
+        "mean_value": 0.5812,
+        "mean_passed": false,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.534,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@20": {
+        "mean_value": 0.3125,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.175,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.415,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.34,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.4875,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.435,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "NDCG": {
+        "mean_value": 0.5218,
+        "mean_passed": false,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4482,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Spearman": {
+        "mean_value": 0.3906,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3654,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.3914,
+        "mean_passed": false,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3728,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": false
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5443,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4785,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v2": {
+      "VC@20": {
+        "mean_value": 0.2904,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1454,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6861,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4704,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@20": {
+        "mean_value": 0.2667,
+        "mean_passed": false,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@50": {
+        "mean_value": 0.43,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.3,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@100": {
+        "mean_value": 0.5208,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.44,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.5978,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4262,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Spearman": {
+        "mean_value": 0.3604,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2895,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4567,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3534,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5843,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.492,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v3": {
+      "VC@20": {
+        "mean_value": 0.2871,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1356,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6697,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.494,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@20": {
+        "mean_value": 0.2875,
+        "mean_passed": false,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.125,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@50": {
+        "mean_value": 0.4417,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.33,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.5225,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.42,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.6078,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4484,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Spearman": {
+        "mean_value": 0.3678,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.295,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4566,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3588,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5885,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4905,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v4": {
+      "VC@20": {
+        "mean_value": 0.303,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1368,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6686,
+        "mean_passed": true,
+        "tail_failures": 3,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4654,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@20": {
+        "mean_value": 0.3042,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.4233,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.5133,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.45,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.6024,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4355,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Spearman": {
+        "mean_value": 0.3641,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2935,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4531,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3459,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5805,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4937,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v5": {
+      "VC@20": {
+        "mean_value": 0.3075,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1593,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6792,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4866,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@20": {
+        "mean_value": 0.3208,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.175,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.4367,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.3,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@100": {
+        "mean_value": 0.52,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.445,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.6098,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4412,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Spearman": {
+        "mean_value": 0.3695,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2899,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4628,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3706,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5865,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.5021,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v7a": {
+      "VC@20": {
+        "mean_value": 0.3024,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1328,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6708,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4641,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@20": {
+        "mean_value": 0.3125,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.125,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.44,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.32,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.5133,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.435,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.6043,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4414,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Spearman": {
+        "mean_value": 0.3612,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2817,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4582,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3469,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5788,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4725,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v7b": {
+      "VC@20": {
+        "mean_value": 0.3072,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1355,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.669,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4613,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@20": {
+        "mean_value": 0.3208,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.125,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.4433,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.34,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.5133,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.435,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.6012,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4344,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Spearman": {
+        "mean_value": 0.3643,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2896,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4611,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.351,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5803,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4763,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v7c": {
+      "VC@20": {
+        "mean_value": 0.3025,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1562,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6928,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.5061,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@20": {
+        "mean_value": 0.3208,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.15,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.4583,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.35,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.5233,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.435,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.6026,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4332,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Spearman": {
+        "mean_value": 0.3704,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2842,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4611,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.3496,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5767,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4697,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    },
+    "v7d": {
+      "VC@20": {
+        "mean_value": 0.3033,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1323,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "VC@100": {
+        "mean_value": 0.6797,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4691,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Recall@20": {
+        "mean_value": 0.3125,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@50": {
+        "mean_value": 0.46,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.37,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Recall@100": {
+        "mean_value": 0.52,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.435,
+        "tail_regression_passed": false,
+        "group": "A",
+        "overall_passed": false
+      },
+      "NDCG": {
+        "mean_value": 0.5997,
+        "mean_passed": true,
+        "tail_failures": 2,
+        "tail_passed": false,
+        "bottom_2_mean": 0.4319,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Spearman": {
+        "mean_value": 0.3697,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2832,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.4607,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.349,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.5762,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.4674,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      }
+    }
+  },
+  "pass_summary": {
+    "v0": {
+      "group_a_passed": false,
+      "group_b_passed": false,
+      "overall_passed": false
+    },
+    "v0b": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v0c": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v1": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v1_holdout": {
+      "group_a_passed": false,
+      "group_b_passed": false,
+      "overall_passed": false
+    },
+    "v2": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v3": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v4": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v5": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v7a": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v7b": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v7c": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    },
+    "v7d": {
+      "group_a_passed": false,
+      "group_b_passed": true,
+      "overall_passed": false
+    }
+  },
+  "table": "| Version | VC@20 | VC@100 | Recall@20 | Recall@50 | Recall@100 | NDCG | Spearman | Tier0-AP | Tier01-AP | Pass |\n|---------|--------|--------|--------|--------|--------|--------|--------|--------|--------|------|\n| v0 | 0.2329 F | 0.6573 F | 0.2167 F | 0.3817 F | 0.5117 P | 0.5889 F | 0.3392 P | 0.4185 F | 0.5568 P | NO |\n| v0b | 0.2997 P | 0.6879 P | 0.3208 P | 0.4600 P | 0.5208 F | 0.6028 P | 0.3678 P | 0.4673 P | 0.5790 P | NO |\n| v0c | 0.2997 P | 0.6879 P | 0.3208 P | 0.4600 P | 0.5208 F | 0.6028 P | 0.3678 P | 0.4673 P | 0.5790 P | NO |\n| v1 | 0.2934 P | 0.6854 P | 0.2708 F | 0.4383 P | 0.5292 P | 0.6071 P | 0.3642 P | 0.4564 P | 0.5860 P | NO |\n| v1_holdout | 0.2152 F | 0.5812 F | 0.3125 P | 0.4150 P | 0.4875 P | 0.5218 F | 0.3906 P | 0.3914 F | 0.5443 P | NO |\n| v2 | 0.2904 P | 0.6861 F | 0.2667 F | 0.4300 F | 0.5208 F | 0.5978 F | 0.3604 P | 0.4567 P | 0.5843 P | NO |\n| v3 | 0.2871 P | 0.6697 P | 0.2875 F | 0.4417 P | 0.5225 F | 0.6078 P | 0.3678 P | 0.4566 P | 0.5885 P | NO |\n| v4 | 0.3030 P | 0.6686 F | 0.3042 P | 0.4233 P | 0.5133 F | 0.6024 F | 0.3641 P | 0.4531 P | 0.5805 P | NO |\n| v5 | 0.3075 P | 0.6792 P | 0.3208 P | 0.4367 F | 0.5200 F | 0.6098 P | 0.3695 P | 0.4628 P | 0.5865 P | NO |\n| v7a | 0.3024 P | 0.6708 F | 0.3125 P | 0.4400 P | 0.5133 F | 0.6043 F | 0.3612 P | 0.4582 P | 0.5788 P | NO |\n| v7b | 0.3072 P | 0.6690 F | 0.3208 P | 0.4433 P | 0.5133 F | 0.6012 F | 0.3643 P | 0.4611 P | 0.5803 P | NO |\n| v7c | 0.3025 P | 0.6928 P | 0.3208 P | 0.4583 P | 0.5233 F | 0.6026 F | 0.3704 P | 0.4611 P | 0.5767 P | NO |\n| v7d | 0.3033 P | 0.6797 F | 0.3125 P | 0.4600 P | 0.5200 F | 0.5997 F | 0.3697 P | 0.4607 P | 0.5762 P | NO |"
+}

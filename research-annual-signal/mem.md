@@ -44,37 +44,39 @@ Denominator is V6.1 universe only — NOT all market DA shadow price.
 
 ## Results (12-group eval, 2022-2024)
 
-| Metric | v0 (formula) | v0b (pure DA) | v1 (ML, 6f) | v5 (best ML) |
-|--------|-------------|--------------|-------------|-------------|
-| VC@20 | 0.2329 | **0.2997** | 0.2934 | **0.3075** |
-| VC@100 | 0.6573 | 0.6879 | 0.6854 | 0.6792 |
-| Recall@20 | 0.2167 | **0.3208** | 0.2708 | **0.3208** |
-| Recall@50 | 0.3817 | **0.4600** | 0.4383 | 0.4367 |
-| Recall@100 | 0.5117 | 0.5208 | **0.5292** | 0.5200 |
-| NDCG | 0.5889 | **0.6028** | 0.6071 | **0.6098** |
-| Spearman | 0.3392 | **0.3678** | 0.3642 | **0.3695** |
+| Metric | v0 (formula) | v0b (pure DA) | v5 (best ML) | blend_v7d_a70 |
+|--------|-------------|--------------|-------------|---------------|
+| VC@20 | 0.2329 | 0.2997 | 0.3075 | **0.3113** |
+| VC@100 | 0.6573 | 0.6879 | 0.6792 | **0.6935** |
+| Recall@20 | 0.2167 | 0.3208 | 0.3208 | **0.3417** |
+| Recall@50 | 0.3817 | **0.4600** | 0.4367 | 0.4533 |
+| Recall@100 | 0.5117 | 0.5208 | 0.5200 | **0.5308** |
+| NDCG | 0.5889 | 0.6028 | **0.6098** | 0.5987 |
+| Spearman | 0.3392 | 0.3678 | 0.3695 | **0.3715** |
 
-### Version Descriptions
-- **v0**: V6.1 formula baseline (rank_ori = 0.60*da_rank + 0.30*density_mix + 0.10*density_ori)
-- **v0b**: Pure da_rank_value (alpha=1.0, beta=0.0, gamma=0.0) — **best formula from grid search**
-- **v0c**: Raw shadow_price_da (identical to v0b — monotonic transform of da_rank_value)
-- **v1**: LightGBM lambdarank, 6 V6.1 features (Set A), raw rank labels
-- **v2**: v1 + spice6 density features (11 features, Set B), raw rank labels
-- **v3**: v1 with tiered labels (0=non-binding, 1-4=quantile buckets)
-- **v4**: v1 + rank_ori as 7th feature (formula-as-feature, Set AF), raw rank labels
-- **v5**: v4 with tiered labels (both improvements combined) — **best ML**
+### ML Variant Results (v7 rebase)
 
-### Key Findings (Baseline Recalibration, 2026-03-09)
-- **Density features actively hurt**: Grid search found optimal weights are alpha=1.0 (pure da_rank_value). Density_mix and density_ori add noise.
-- **v0b (+28.7% VC@20 vs v0)**: Simply dropping density components nearly matches v1 ML (+26.0% vs v0)
-- **ML marginal value is much smaller than thought**: v5 vs v0b is only +2.6% VC@20 (was +32% vs v0)
-- **v5 still best overall** but the gap over a properly-tuned formula is narrow
-- **Recall@100 tradeoff**: v0b's worst-case Recall@100 (0.42) is worse than v0's (0.475) — sharper head, weaker tail
+| Version | Features | VC@20 | vs v0b |
+|---------|----------|-------|--------|
+| v0b | Pure da_rank_value | 0.2997 | baseline |
+| v7a | Set A (6f), tiered | 0.3024 | +0.9% |
+| v7b | Lean (4f), tiered | 0.3072 | +2.5% |
+| v7c | Lean+da_rank (5f) | 0.3025 | +0.9% |
+| v7d | Set A+da_rank (7f) | 0.3033 | +1.2% |
+| v5 | Set AF (7f), tiered | 0.3075 | +2.6% |
+| **blend_v7d_a70** | **70% v7d + 30% v0b** | **0.3113** | **+3.9%** |
 
-### Gate Status (v0-calibrated gates)
-- After Recall@100 tie-breaking fix, NO version passes all v0 gates (Recall@100 tail gate too tight)
-- With v0b-calibrated gates: still NO version passes all gates (Recall@100 L3 tail regression)
-- Root cause: sharpening top-k rankings sacrifices worst-case Recall@100 — fundamental tradeoff
+### Key Findings
+
+1. **Density features hurt in formula**: Grid search found pure da_rank_value (alpha=1.0) optimal. Density_mix/ori add noise (-28.7% VC@20).
+2. **ML marginal value is small**: Best ML (v5) = +2.6% VC@20 over v0b. Best blend = +3.9%. Original claim of +32% vs v0 was misleading.
+3. **Feature count doesn't matter**: v7b (4 lean features) matches v5 (7 features) at 0.3072 vs 0.3075.
+4. **Score blending is best strategy**: 70% ML + 30% v0b gives best VC@20 (0.3113) and Recall@20 (0.3417).
+5. **Recall@100 tradeoff is fundamental**: All versions that sharpen top-k sacrifice worst-case Recall@100.
+6. **No version passes all v0b gates**: Recall@100 L3 tail regression is the blocker.
+
+### Recommendation
+Use v0b (pure da_rank_value) as primary signal. ML adds at most +3.9% via blending — marginal given complexity. Density components should be removed from annual formula.
 
 ---
 
@@ -124,12 +126,13 @@ Denominator is V6.1 universe only — NOT all market DA shadow price.
 - Recall@100 tie-breaking fix: cap true set to positive-value rows only
 - Ground truth mapping fix committed (partition-filtered, was already cached correctly)
 - Gate recalibration from v0b: no version passes all gates due to Recall@100 tail tradeoff
+- ML rebase (v7a-v7d): tested lean/full features with tiered labels against v0b
+- Blending experiments: score blend, rank blend, RRF — best is score_blend_v7d_a70 (+3.9%)
 
 ### Remaining
-- Re-run ML (v1-v5) with v0b as the baseline feature (rank_ori = pure da_rank_value)
-- Blending: score blend, rank blend, RRF between ML and formula
+- Test blend_v7d_a70 on holdout (2025) to confirm dev-eval gains hold
 - Consider relaxing Recall@100 tail gate (fundamental top-k vs breadth tradeoff)
-- Test on holdout with v0b baseline
+- Communicate finding: annual formula density components should be removed/downweighted
 
 ---
 
@@ -160,14 +163,12 @@ rank_ori = 0.60 * da_rank_value + 0.30 * density_mix_rank_value + 0.10 * density
 - Enriched cache: `cache/enriched/` (V6.1 + spice6 per (year, aq))
 
 ## Registry
-- `registry/v0/` — V6.1 formula baseline (0.60/0.30/0.10 weights, calibrates original gates)
-- `registry/v0b/` — Pure da_rank_value (alpha=1.0) — **best formula from grid search**
+- `registry/v0/` — V6.1 formula baseline (0.60/0.30/0.10 weights)
+- `registry/v0b/` — Pure da_rank_value (alpha=1.0) — **best formula**
 - `registry/v0c/` — Raw shadow_price_da (identical to v0b)
-- `registry/v1/` — LightGBM Set A
-- `registry/v2/` — LightGBM Set B
-- `registry/v3/` — Tiered labels
-- `registry/v4/` — Formula-as-feature
-- `registry/v5/` — Both improvements (best ML)
+- `registry/v1/`..`v5/` — ML experiments (see version descriptions above)
+- `registry/v7a/`..`v7d/` — ML rebase experiments (lean/full features)
+- `registry/v7_blending/` — Blending experiment results (score/rank/RRF)
 - `registry/v1_holdout/` — v1 holdout (2025) results
 - `registry/gates.json` — calibrated from v0
 - `registry/gates_v0b.json` — calibrated from v0b (stricter)

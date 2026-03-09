@@ -22,7 +22,7 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from ml.config import V62B_SIGNAL_BASE, _DEFAULT_EVAL_MONTHS, REALIZED_DA_CACHE
+from ml.config import V62B_SIGNAL_BASE, _DEFAULT_EVAL_MONTHS, _FULL_EVAL_MONTHS, REALIZED_DA_CACHE
 from ml.evaluate import aggregate_months, evaluate_ltr
 from ml.realized_da import load_realized_da
 from ml.v62b_formula import v62b_score
@@ -109,11 +109,15 @@ def main() -> None:
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--class-type", default="onpeak", choices=["onpeak", "offpeak"])
+    parser.add_argument("--full", action="store_true", help="Use all 36 months instead of 12")
+    parser.add_argument("--holdout", action="store_true", help="Also run on 2024-2025 holdout")
     args = parser.parse_args()
     class_type = args.class_type
 
+    HOLDOUT_MONTHS = [f"{y:04d}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
+
     print(f"[v0] Starting V6.2B formula baseline ({class_type}), mem: {mem_mb():.0f} MB")
-    eval_months = _DEFAULT_EVAL_MONTHS
+    eval_months = _FULL_EVAL_MONTHS if args.full else _DEFAULT_EVAL_MONTHS
     print(f"[v0] Eval months ({len(eval_months)}): {eval_months}")
 
     per_month: dict[str, dict] = {}
@@ -209,6 +213,33 @@ def main() -> None:
         with open(registry_dir / "champion.json", "w") as f:
             json.dump(champion_data, f, indent=2)
         print(f"[v0] Wrote {registry_dir / 'champion.json'}")
+
+    # ── Holdout ──
+    if args.holdout:
+        print(f"\n[v0] Running holdout ({len(HOLDOUT_MONTHS)} months)...")
+        ho_per_month: dict[str, dict] = {}
+        for month in HOLDOUT_MONTHS:
+            try:
+                ho_per_month[month] = evaluate_month(month, class_type=class_type)
+            except FileNotFoundError:
+                print(f"  {month}: SKIP (not found)")
+        ho_agg = aggregate_months(ho_per_month)
+        ho_means = ho_agg["mean"]
+        print(f"\n[v0] Holdout aggregate ({len(ho_per_month)} months):")
+        for metric in ["VC@20", "VC@50", "VC@100", "Recall@20", "NDCG", "Spearman"]:
+            print(f"  {metric:<12} {ho_means.get(metric, 0):.4f}")
+
+        holdout_dir = Path(__file__).resolve().parent.parent / "holdout" / version_id
+        holdout_dir.mkdir(parents=True, exist_ok=True)
+        ho_out = {
+            "eval_config": {"eval_months": HOLDOUT_MONTHS, "class_type": class_type,
+                            "period_type": "f0", "mode": "holdout"},
+            "per_month": ho_per_month, "aggregate": ho_agg,
+            "n_months": len(ho_per_month),
+        }
+        with open(holdout_dir / "metrics.json", "w") as f:
+            json.dump(ho_out, f, indent=2)
+        print(f"[v0] Wrote {holdout_dir / 'metrics.json'}")
 
     print(f"\n[v0] Done, mem: {mem_mb():.0f} MB")
 

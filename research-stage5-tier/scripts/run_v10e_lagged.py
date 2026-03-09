@@ -28,8 +28,8 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ml.registry_paths import registry_root, holdout_root
-from ml.config import REALIZED_DA_CACHE, LTRConfig, PipelineConfig, _FULL_EVAL_MONTHS
-from ml.data_loader import load_train_val_test, load_v62b_month
+from ml.config import REALIZED_DA_CACHE, LTRConfig, PipelineConfig, _FULL_EVAL_MONTHS, collect_usable_months
+from ml.data_loader import load_v62b_month
 from ml.evaluate import aggregate_months, evaluate_ltr
 from ml.features import compute_query_groups, prepare_features
 from ml.train import predict_scores, train_ltr_model
@@ -126,8 +126,9 @@ def run_variant(
     bs: dict[str, set[str]],
     lag: int,
     class_type: str = "onpeak",
+    period_type: str = "f0",
 ) -> dict[str, dict]:
-    print(f"\n[{label}] 9f, {len(eval_months)} months, lag={lag}, class_type={class_type}")
+    print(f"\n[{label}] 9f, {len(eval_months)} months, lag={lag}, ptype={period_type}, class_type={class_type}")
 
     cfg = PipelineConfig(
         ltr=LTRConfig(
@@ -149,35 +150,31 @@ def run_variant(
     for m in eval_months:
         t0 = time.time()
 
-        eval_ts = pd.Timestamp(m)
+        train_month_strs = collect_usable_months(m, period_type, n_months=8)
+        if not train_month_strs:
+            print(f"  {m}: SKIP (insufficient training history, need ≥6 usable months)")
+            continue
+        train_month_strs = list(reversed(train_month_strs))  # chronological order
 
-        # Shifted training: load as if eval is M-lag, giving us M-(8+lag)..M-(1+lag)
-        shifted_eval = (eval_ts - pd.DateOffset(months=lag)).strftime("%Y-%m")
-        train_df, _, _ = load_train_val_test(shifted_eval, cfg.train_months, cfg.val_months, "f0", class_type)
-
-        # Training month strings for enrichment
-        train_month_strs = [
-            (eval_ts - pd.DateOffset(months=i)).strftime("%Y-%m")
-            for i in range(8 + lag, lag, -1)
-        ]
-
-        # Load test month directly
-        test_df = load_v62b_month(m, "f0", class_type)
-        test_df = test_df.with_columns(pl.lit(m).alias("query_month"))
-
-        # Enrich training months — bf always uses lag=1 (decision-time cutoff)
-        # Row inclusion is controlled by the training window (shifted by `lag`)
+        # Load each training month individually (script owns month selection)
         BF_LAG = 1  # binding_freq cutoff = decision timing, always 1
         parts = []
         for tm in train_month_strs:
-            part = train_df.filter(pl.col("query_month") == tm)
-            if len(part) > 0:
+            try:
+                part = load_v62b_month(tm, period_type, class_type)
+                part = part.with_columns(pl.lit(tm).alias("query_month"))
                 part = enrich_df(part, tm, bs, lag=BF_LAG)
                 parts.append(part)
+            except FileNotFoundError:
+                print(f"    {tm}: missing V6.2B data, skip")
         if not parts:
             print(f"  {m}: SKIP (no training data)")
             continue
         train_df = pl.concat(parts)
+
+        # Load test month
+        test_df = load_v62b_month(m, period_type, class_type)
+        test_df = test_df.with_columns(pl.lit(m).alias("query_month"))
         test_df = enrich_df(test_df, m, bs, lag=BF_LAG)
 
         train_df = train_df.sort("query_month")
@@ -232,7 +229,7 @@ def run_variant(
 
 def save_results(
     label: str, per_month: dict, eval_months: list[str], dest_dir: Path,
-    class_type: str = "onpeak", lag: int = 1,
+    class_type: str = "onpeak", lag: int = 1, period_type: str = "f0",
 ) -> None:
     clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in per_month.items()}
     agg = aggregate_months(clean)
@@ -240,7 +237,7 @@ def save_results(
     d.mkdir(parents=True, exist_ok=True)
     result = {
         "eval_config": {"eval_months": eval_months, "class_type": class_type,
-                        "period_type": "f0", "lag": lag,
+                        "period_type": period_type, "lag": lag,
                         "note": f"{lag}-month production lag applied"},
         "per_month": clean, "aggregate": agg, "n_months": len(clean),
     }

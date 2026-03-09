@@ -166,6 +166,51 @@ def f1_eval_months(full: bool = False) -> list[str]:
     return [m for m in source if has_period_type(m, "f1")]
 
 
+def collect_usable_months(
+    target_auction_month: str,
+    period_type: str,
+    n_months: int = 8,
+    min_months: int = 6,
+    max_lookback: int = 24,
+) -> list[str]:
+    """Walk backward from target, collect n_months usable training auction months.
+
+    A month is "usable" if:
+      1. The period_type exists for that month (per MISO auction schedule)
+      2. delivery_month(month, period_type) <= last_full_known
+
+    last_full_known = target_auction_month - 2 (last complete realized DA at decision time).
+
+    For f0, this returns the same months as a contiguous 8-month window.
+    For f1+, it skips months where fN doesn't exist (May/Jun for f1).
+
+    Returns most-recent-first order. Caller should reverse for chronological.
+    Returns empty list if fewer than min_months are available (caller should skip).
+    """
+    import pandas as pd
+
+    target_ts = pd.Timestamp(target_auction_month)
+    # At decision time (~mid target-1), last complete realized DA = target - 2
+    last_full_known = (target_ts - pd.DateOffset(months=2)).strftime("%Y-%m")
+
+    usable = []
+    for i in range(1, max_lookback + 1):
+        candidate = (target_ts - pd.DateOffset(months=i)).strftime("%Y-%m")
+        if not has_period_type(candidate, period_type):
+            continue
+        dm = delivery_month(candidate, period_type)
+        if dm > last_full_known:
+            continue
+        usable.append(candidate)
+        if len(usable) >= n_months:
+            break
+
+    if len(usable) < min_months:
+        return []  # not enough history — caller should skip this eval month
+
+    return usable
+
+
 @dataclass
 class LTRConfig:
     """Learning-to-rank configuration (LightGBM lambdarank or XGBoost rank:pairwise)."""

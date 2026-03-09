@@ -1,5 +1,5 @@
 {
-  "method": "lightgbm_regression_tiered",
+  "method": "lightgbm_lambdarank_tiered",
   "features": [
     "binding_freq_1",
     "binding_freq_3",
@@ -16,7 +16,7 @@
   "class_type": "offpeak",
   "label_mode": "tiered",
   "train_months": 8,
-  "backend": "lightgbm_regression",
+  "backend": "lightgbm",
   "blend_weights": {
     "da": 0.7,
     "dmix": 0.0,

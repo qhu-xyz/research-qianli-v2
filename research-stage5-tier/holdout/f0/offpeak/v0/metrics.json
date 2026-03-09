@@ -469,5 +469,7 @@
       "n_samples": 479.0
     }
   },
-  "n_months": 24
+  "n_months": 24,
+  "n_months_requested": 24,
+  "skipped_months": []
 }

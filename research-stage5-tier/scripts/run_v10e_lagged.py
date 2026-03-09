@@ -271,14 +271,14 @@ def save_results(
 
     # Finding 4: persist config.json for reproducibility
     config = {
-        "method": "lightgbm_regression_tiered",
+        "method": "lightgbm_lambdarank_tiered",
         "features": features or list(V10E_FEATURES),
         "lag": lag,
         "period_type": period_type,
         "class_type": class_type,
         "label_mode": "tiered",
         "train_months": 8,
-        "backend": "lightgbm_regression",
+        "backend": "lightgbm",
     }
     if blend_weights:
         config["blend_weights"] = {"da": blend_weights[0], "dmix": blend_weights[1], "dori": blend_weights[2]}

@@ -398,7 +398,7 @@ def run_comparison(
     if cp.exists():
         with open(cp) as f:
             champion_data = json.load(f)
-        champion_version = champion_data.get("version")
+        champion_version = champion_data.get("version") or champion_data.get("champion")
         if champion_version:
             champ_metrics_path = slice_root / champion_version / "metrics.json"
             if champ_metrics_path.exists():

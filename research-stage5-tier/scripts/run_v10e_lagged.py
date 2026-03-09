@@ -38,7 +38,13 @@ ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "registry"
 HOLDOUT = ROOT / "holdout"
 
-V7_DA, V7_DMIX, V7_DORI = 0.85, 0.00, 0.15
+V7_DA, V7_DMIX, V7_DORI = 0.85, 0.00, 0.15  # f0 default
+
+# Per-period-type blend weights (from blend search experiments)
+BLEND_WEIGHTS: dict[str, tuple[float, float, float]] = {
+    "f0": (0.85, 0.00, 0.15),
+    "f1": (0.70, 0.00, 0.30),
+}
 
 V10E_FEATURES = [
     "binding_freq_1", "binding_freq_3", "binding_freq_6", "binding_freq_12",
@@ -93,7 +99,10 @@ def prev_month(m: str) -> str:
     return (ts - pd.DateOffset(months=1)).strftime("%Y-%m")
 
 
-def enrich_df(df: pl.DataFrame, month: str, bs: dict[str, set[str]], lag: int = 1) -> pl.DataFrame:
+def enrich_df(
+    df: pl.DataFrame, month: str, bs: dict[str, set[str]],
+    lag: int = 1, blend_weights: tuple[float, float, float] | None = None,
+) -> pl.DataFrame:
     """Add features. lag=1 means bf cutoff = prev_month(month), i.e., through M-2.
 
     This lag should ALWAYS be 1 (decision-time cutoff). The training window shift
@@ -104,11 +113,12 @@ def enrich_df(df: pl.DataFrame, month: str, bs: dict[str, set[str]], lag: int = 
     for _ in range(lag):
         cutoff = prev_month(cutoff)
 
+    w_da, w_dmix, w_dori = blend_weights or (V7_DA, V7_DMIX, V7_DORI)
     cids = df["constraint_id"].to_list()
     df = df.with_columns(
-        (V7_DA * pl.col("da_rank_value")
-         + V7_DMIX * pl.col("density_mix_rank_value")
-         + V7_DORI * pl.col("density_ori_rank_value")
+        (w_da * pl.col("da_rank_value")
+         + w_dmix * pl.col("density_mix_rank_value")
+         + w_dori * pl.col("density_ori_rank_value")
         ).alias("v7_formula_score")
     )
     for lb in [1, 3, 6, 12, 15]:
@@ -128,7 +138,9 @@ def run_variant(
     class_type: str = "onpeak",
     period_type: str = "f0",
 ) -> dict[str, dict]:
-    print(f"\n[{label}] 9f, {len(eval_months)} months, lag={lag}, ptype={period_type}, class_type={class_type}")
+    blend = BLEND_WEIGHTS.get(period_type, (V7_DA, V7_DMIX, V7_DORI))
+    print(f"\n[{label}] 9f, {len(eval_months)} months, lag={lag}, ptype={period_type}, "
+          f"class_type={class_type}, blend={blend}")
 
     cfg = PipelineConfig(
         ltr=LTRConfig(
@@ -163,7 +175,7 @@ def run_variant(
             try:
                 part = load_v62b_month(tm, period_type, class_type)
                 part = part.with_columns(pl.lit(tm).alias("query_month"))
-                part = enrich_df(part, tm, bs, lag=BF_LAG)
+                part = enrich_df(part, tm, bs, lag=BF_LAG, blend_weights=blend)
                 parts.append(part)
             except FileNotFoundError:
                 print(f"    {tm}: missing V6.2B data, skip")
@@ -173,9 +185,13 @@ def run_variant(
         train_df = pl.concat(parts)
 
         # Load test month
-        test_df = load_v62b_month(m, period_type, class_type)
+        try:
+            test_df = load_v62b_month(m, period_type, class_type)
+        except FileNotFoundError:
+            print(f"  {m}: SKIP (no GT data for delivery month)")
+            continue
         test_df = test_df.with_columns(pl.lit(m).alias("query_month"))
-        test_df = enrich_df(test_df, m, bs, lag=BF_LAG)
+        test_df = enrich_df(test_df, m, bs, lag=BF_LAG, blend_weights=blend)
 
         train_df = train_df.sort("query_month")
         X_train, _ = prepare_features(train_df, cfg.ltr)
@@ -302,7 +318,10 @@ def main() -> None:
 
     bs = load_all_binding_sets(peak_type=class_type)
 
-    version_id = f"v10e-lag{lag}"
+    if period_type == "f0":
+        version_id = f"v10e-lag{lag}"  # preserve f0 naming
+    else:
+        version_id = "v2"  # clean version ladder for f1+
 
     # Compute slice directories for this (period_type, class_type)
     reg_slice = registry_root(period_type, class_type, base_dir=ROOT / "registry")

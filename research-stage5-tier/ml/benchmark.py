@@ -30,6 +30,7 @@ _MP_CTX = multiprocessing.get_context("spawn")
 from ml.config import PipelineConfig, _SCREEN_EVAL_MONTHS, _DEFAULT_EVAL_MONTHS, _FULL_EVAL_MONTHS
 from ml.evaluate import aggregate_months
 from ml.pipeline import run_pipeline
+from ml.registry_paths import registry_root
 
 
 def mem_mb():
@@ -143,13 +144,13 @@ def run_benchmark(
     }
 
     # Register in registry
-    registry_path = Path(registry_dir)
-    version_dir = registry_path / version_id
-    version_dir.mkdir(parents=True, exist_ok=True)
+    slice_dir = registry_root(period_type, class_type, base_dir=registry_dir)
+    version_path = slice_dir / version_id
+    version_path.mkdir(parents=True, exist_ok=True)
 
-    with open(version_dir / "metrics.json", "w") as f:
+    with open(version_path / "metrics.json", "w") as f:
         json.dump(result, f, indent=2)
-    print(f"[benchmark] Wrote metrics to {version_dir / 'metrics.json'}")
+    print(f"[benchmark] Wrote metrics to {version_path / 'metrics.json'}")
 
     if importance_per_month:
         all_features = list(next(iter(importance_per_month.values())).keys())
@@ -171,9 +172,9 @@ def run_benchmark(
             },
             "ranked": sorted(mean_imp.items(), key=lambda x: x[1], reverse=True),
         }
-        with open(version_dir / "feature_importance.json", "w") as f:
+        with open(version_path / "feature_importance.json", "w") as f:
             json.dump(fi_data, f, indent=2)
-        print(f"[benchmark] Wrote feature importance to {version_dir / 'feature_importance.json'}")
+        print(f"[benchmark] Wrote feature importance to {version_path / 'feature_importance.json'}")
 
     config_out = {
         "ltr": config.ltr.to_dict(),
@@ -183,11 +184,11 @@ def run_benchmark(
         },
         "eval_config": result["eval_config"],
     }
-    with open(version_dir / "config.json", "w") as f:
+    with open(version_path / "config.json", "w") as f:
         json.dump(config_out, f, indent=2)
 
     meta = {"n_months": len(per_month), "version_id": version_id}
-    with open(version_dir / "meta.json", "w") as f:
+    with open(version_path / "meta.json", "w") as f:
         json.dump(meta, f, indent=2)
 
     skip_msg = f", {len(skipped)} skipped" if skipped else ""

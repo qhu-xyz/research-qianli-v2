@@ -20,16 +20,22 @@ import resource
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ml.registry_paths import registry_root
+
 
 def mem_mb():
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 
-def load_all_versions(registry_dir: str | Path) -> dict[str, dict]:
-    """Read all registry/v*/metrics.json files."""
-    registry = Path(registry_dir)
+def load_all_versions(
+    registry_dir: str | Path,
+    period_type: str = "f0",
+    class_type: str = "onpeak",
+) -> dict[str, dict]:
+    """Read all registry/{ptype}/{ctype}/v*/metrics.json files."""
+    root = registry_root(period_type, class_type, base_dir=registry_dir)
     versions = {}
-    for metrics_path in sorted(registry.glob("v*/metrics.json")):
+    for metrics_path in sorted(root.glob("v*/metrics.json")):
         version_id = metrics_path.parent.name
         with open(metrics_path) as f:
             versions[version_id] = json.load(f)
@@ -362,30 +368,34 @@ def run_comparison(
     batch_id: str,
     iteration: int,
     registry_dir: str = "registry",
-    gates_path: str = "registry/gates.json",
-    champion_path: str = "registry/champion.json",
+    period_type: str = "f0",
+    class_type: str = "onpeak",
     output_path: str | None = None,
 ) -> dict:
     """Run full comparison: load versions, check gates, build table, write outputs."""
     print(f"[compare] mem at start: {mem_mb():.0f} MB")
 
-    with open(gates_path) as f:
+    slice_root = registry_root(period_type, class_type, base_dir=registry_dir)
+    gp = slice_root / "gates.json"
+    cp = slice_root / "champion.json"
+
+    with open(gp) as f:
         gates_data = json.load(f)
     gates = gates_data["gates"]
     noise_tolerance = gates_data.get("noise_tolerance", 0.02)
     tail_max_failures = gates_data.get("tail_max_failures", 1)
 
     champion_metrics = None
-    with open(champion_path) as f:
+    with open(cp) as f:
         champion_data = json.load(f)
     champion_version = champion_data.get("version")
     if champion_version:
-        champ_metrics_path = Path(registry_dir) / champion_version / "metrics.json"
+        champ_metrics_path = slice_root / champion_version / "metrics.json"
         if champ_metrics_path.exists():
             with open(champ_metrics_path) as f:
                 champion_metrics = json.load(f)
 
-    versions = load_all_versions(registry_dir)
+    versions = load_all_versions(registry_dir, period_type, class_type)
     table = build_comparison_table(
         versions, gates, champion_metrics, noise_tolerance, tail_max_failures
     )
@@ -445,7 +455,7 @@ def run_comparison(
             f.write(report)
         print(f"[compare] wrote report to {output_path}")
 
-    comparisons_dir = Path(registry_dir) / "comparisons"
+    comparisons_dir = slice_root / "comparisons"
     comparisons_dir.mkdir(parents=True, exist_ok=True)
     json_path = comparisons_dir / f"{batch_id}_iter{iteration}.json"
     with open(json_path, "w") as f:
@@ -462,14 +472,14 @@ def main():
     parser.add_argument("--iteration", type=int, required=True, help="Iteration number")
     parser.add_argument("--output", default=None, help="Path for Markdown report")
     parser.add_argument("--registry-dir", default="registry", help="Registry directory")
-    parser.add_argument("--gates-path", default="registry/gates.json", help="Gates JSON path")
-    parser.add_argument("--champion-path", default="registry/champion.json", help="Champion JSON path")
+    parser.add_argument("--ptype", default="f0", help="Period type")
+    parser.add_argument("--class-type", default="onpeak", help="Class type")
     args = parser.parse_args()
 
     run_comparison(
         batch_id=args.batch_id, iteration=args.iteration,
-        registry_dir=args.registry_dir, gates_path=args.gates_path,
-        champion_path=args.champion_path, output_path=args.output,
+        registry_dir=args.registry_dir, period_type=args.ptype,
+        class_type=args.class_type, output_path=args.output,
     )
 
 

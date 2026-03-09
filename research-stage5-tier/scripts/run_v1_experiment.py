@@ -1,4 +1,6 @@
-"""v1: LTR with Groups A+B (11 features, no historical DA signal)."""
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+v1: LTR with Groups A+B (11 features, no historical DA signal)."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

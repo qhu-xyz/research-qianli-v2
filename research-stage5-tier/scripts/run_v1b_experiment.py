@@ -1,4 +1,6 @@
-"""v1b: LTR with Groups A+B+C (12 features, adds da_rank_value)."""
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+v1b: LTR with Groups A+B+C (12 features, adds da_rank_value)."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

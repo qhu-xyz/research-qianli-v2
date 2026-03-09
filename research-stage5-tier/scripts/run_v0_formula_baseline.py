@@ -22,6 +22,7 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from ml.registry_paths import registry_root, holdout_root
 from ml.config import V62B_SIGNAL_BASE, _DEFAULT_EVAL_MONTHS, _FULL_EVAL_MONTHS, REALIZED_DA_CACHE
 from ml.evaluate import aggregate_months, evaluate_ltr
 from ml.realized_da import load_realized_da
@@ -153,11 +154,10 @@ def main() -> None:
             print("\n[v0] ERROR: Numbers differ by more than 0.01. Investigate before proceeding.")
             sys.exit(1)
 
-    # ── Save to registry/v0/ or registry/v0-offpeak/ ──
-    registry_dir = Path(__file__).resolve().parent.parent / "registry"
-    suffix = "" if class_type == "onpeak" else f"-{class_type}"
-    version_id = f"v0{suffix}"
-    v0_dir = registry_dir / version_id
+    # ── Save to registry/f0/{class_type}/v0/ ──
+    base_registry = Path(__file__).resolve().parent.parent / "registry"
+    version_id = "v0"
+    v0_dir = registry_root("f0", class_type, base_dir=base_registry) / version_id
     v0_dir.mkdir(parents=True, exist_ok=True)
 
     # metrics.json (v2 format: per_month + aggregate)
@@ -199,20 +199,21 @@ def main() -> None:
         json.dump(meta_out, f, indent=2)
 
     # ── Gates (only recalibrate for onpeak) ──
+    slice_dir = registry_root("f0", class_type, base_dir=base_registry)
     if class_type == "onpeak":
         gates_data = build_gates(agg)
-        with open(registry_dir / "gates.json", "w") as f:
+        with open(slice_dir / "gates.json", "w") as f:
             json.dump(gates_data, f, indent=2)
-        print(f"[v0] Wrote {registry_dir / 'gates.json'}")
+        print(f"[v0] Wrote {slice_dir / 'gates.json'}")
 
         champion_data = {
             "version": "v0",
             "promoted_at": datetime.now(timezone.utc).isoformat(),
             "reason": "initial baseline (V6.2B formula vs realized DA)",
         }
-        with open(registry_dir / "champion.json", "w") as f:
+        with open(slice_dir / "champion.json", "w") as f:
             json.dump(champion_data, f, indent=2)
-        print(f"[v0] Wrote {registry_dir / 'champion.json'}")
+        print(f"[v0] Wrote {slice_dir / 'champion.json'}")
 
     # ── Holdout ──
     if args.holdout:
@@ -229,7 +230,8 @@ def main() -> None:
         for metric in ["VC@20", "VC@50", "VC@100", "Recall@20", "NDCG", "Spearman"]:
             print(f"  {metric:<12} {ho_means.get(metric, 0):.4f}")
 
-        holdout_dir = Path(__file__).resolve().parent.parent / "holdout" / version_id
+        base_holdout = Path(__file__).resolve().parent.parent / "holdout"
+        holdout_dir = holdout_root("f0", class_type, base_dir=base_holdout) / version_id
         holdout_dir.mkdir(parents=True, exist_ok=True)
         ho_out = {
             "eval_config": {"eval_months": HOLDOUT_MONTHS, "class_type": class_type,

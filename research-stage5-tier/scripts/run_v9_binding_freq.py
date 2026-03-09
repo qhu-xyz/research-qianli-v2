@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-"""V9 experiment: binding frequency feature.
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+V9 experiment: binding frequency feature.
 
 binding_freq_6 = count(months constraint was binding in prior 6 months) / 6
 

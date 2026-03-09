@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-"""V10 experiment: pruned features + multi-window binding frequency.
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+V10 experiment: pruned features + multi-window binding frequency.
 
 v10: 6 features — bf_3, bf_6, bf_12, v7_formula, prob_exceed_110, constraint_limit
 v10b: 8 features — v10 + da_rank_value + prob_exceed_100 (check if pruning hurt)

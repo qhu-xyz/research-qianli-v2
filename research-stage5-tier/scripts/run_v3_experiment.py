@@ -1,4 +1,6 @@
-"""v3: LTR with ONLY the 3 formula inputs (da_rank_value, density_mix_rank_value, density_ori_rank_value).
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+v3: LTR with ONLY the 3 formula inputs (da_rank_value, density_mix_rank_value, density_ori_rank_value).
 
 If ML can't beat v0 formula with the EXACT SAME 3 features, something is wrong.
 """

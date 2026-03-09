@@ -1,4 +1,6 @@
-"""v4: Fix the label noise bug + add formula score as feature.
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+v4: Fix the label noise bug + add formula score as feature.
 
 Two changes from v3:
   1. Tiered labels (0/1/2/3) instead of raw rank (~600 levels).

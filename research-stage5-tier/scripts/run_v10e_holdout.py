@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-"""V10e holdout: run on 2024-2025 (24 months) and save to holdout/v10e/."""
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+V10e holdout: run on 2024-2025 (24 months) and save to holdout/v10e/."""
 from __future__ import annotations
 
 import gc

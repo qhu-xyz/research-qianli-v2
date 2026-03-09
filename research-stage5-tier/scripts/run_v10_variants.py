@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-"""V10 variants: find a feature set that beats v9 on ALL metrics.
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+V10 variants: find a feature set that beats v9 on ALL metrics.
 
 v10 (6f) beats v9 on VC@50+, Spearman, NDCG but loses on VC@20 by 3%.
 Goal: sharpen top-k precision while keeping broader gains.

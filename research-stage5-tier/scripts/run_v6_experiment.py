@@ -1,4 +1,6 @@
-"""v6: Regression vs ranking comparison.
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+v6: Regression vs ranking comparison.
 
 Tests:
   v6a: LightGBM regression on raw realized_sp (12 features = v1b set)

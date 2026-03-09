@@ -27,6 +27,7 @@ import polars as pl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from ml.registry_paths import registry_root, holdout_root
 from ml.config import REALIZED_DA_CACHE, LTRConfig, PipelineConfig, _FULL_EVAL_MONTHS
 from ml.data_loader import load_train_val_test, load_v62b_month
 from ml.evaluate import aggregate_months, evaluate_ltr
@@ -281,23 +282,25 @@ def main() -> None:
 
     bs = load_all_binding_sets(peak_type=class_type)
 
-    # Version label includes class_type suffix for offpeak
-    suffix = "" if class_type == "onpeak" else f"-{class_type}"
-    version_id = f"v10e-lag{lag}{suffix}"
+    version_id = f"v10e-lag{lag}"
+
+    # Compute slice directories for this (period_type, class_type)
+    reg_slice = registry_root("f0", class_type, base_dir=ROOT / "registry")
+    ho_slice = holdout_root("f0", class_type, base_dir=ROOT / "holdout")
 
     # ── Dev (36 months) ──
     dev_pm = run_variant(version_id, _FULL_EVAL_MONTHS, bs, lag=lag, class_type=class_type)
-    save_results(version_id, dev_pm, _FULL_EVAL_MONTHS, REGISTRY, class_type=class_type, lag=lag)
+    save_results(version_id, dev_pm, _FULL_EVAL_MONTHS, reg_slice, class_type=class_type, lag=lag)
 
     # ── Holdout (24 months) ──
     if not args.dev_only:
         holdout_pm = run_variant(f"{version_id}-holdout", HOLDOUT_MONTHS, bs, lag=lag, class_type=class_type)
-        save_results(version_id, holdout_pm, HOLDOUT_MONTHS, HOLDOUT, class_type=class_type, lag=lag)
+        save_results(version_id, holdout_pm, HOLDOUT_MONTHS, ho_slice, class_type=class_type, lag=lag)
 
     # ── Comparison (only for onpeak where we have baselines) ──
     if class_type == "onpeak":
-        v0_dev = json.load(open(REGISTRY / "v0" / "metrics.json"))["aggregate"]["mean"]
-        v10e_dev = json.load(open(REGISTRY / "v10e" / "metrics.json"))["aggregate"]["mean"]
+        v0_dev = json.load(open(reg_slice / "v0" / "metrics.json"))["aggregate"]["mean"]
+        v10e_dev = json.load(open(reg_slice / "v10e" / "metrics.json"))["aggregate"]["mean"]
         lag1_dev_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in dev_pm.items()}
         lag1_dev = aggregate_months(lag1_dev_clean)["mean"]
 
@@ -307,8 +310,8 @@ def main() -> None:
         )
 
         if not args.dev_only:
-            v0_ho = json.load(open(HOLDOUT / "v0" / "metrics.json"))["aggregate"]["mean"]
-            v10e_ho = json.load(open(HOLDOUT / "v10e" / "metrics.json"))["aggregate"]["mean"]
+            v0_ho = json.load(open(ho_slice / "v0" / "metrics.json"))["aggregate"]["mean"]
+            v10e_ho = json.load(open(ho_slice / "v10e" / "metrics.json"))["aggregate"]["mean"]
             lag1_ho_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in holdout_pm.items()}
             lag1_ho = aggregate_months(lag1_ho_clean)["mean"]
 
@@ -317,18 +320,18 @@ def main() -> None:
                 "HOLDOUT COMPARISON (24 months)"
             )
     else:
-        # For offpeak, we need v0-offpeak baseline first
-        v0_offpeak_path = REGISTRY / f"v0{suffix}" / "metrics.json"
-        if v0_offpeak_path.exists():
-            v0_dev = json.load(open(v0_offpeak_path))["aggregate"]["mean"]
+        # For offpeak, we need v0 baseline in the same slice
+        v0_path = reg_slice / "v0" / "metrics.json"
+        if v0_path.exists():
+            v0_dev = json.load(open(v0_path))["aggregate"]["mean"]
             lag1_dev_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in dev_pm.items()}
             lag1_dev = aggregate_months(lag1_dev_clean)["mean"]
             print_comparison(
-                {f"v0{suffix}": v0_dev, version_id: lag1_dev},
+                {"v0": v0_dev, version_id: lag1_dev},
                 f"DEV COMPARISON ({class_type}, 36 months)"
             )
         else:
-            print(f"\n[main] No v0{suffix} baseline found — run v0 for {class_type} first to compare")
+            print(f"\n[main] No v0 baseline found in {reg_slice} — run v0 for {class_type} first to compare")
 
     print(f"\n[main] Done in {time.time() - t_start:.1f}s, mem={mem_mb():.0f} MB")
 

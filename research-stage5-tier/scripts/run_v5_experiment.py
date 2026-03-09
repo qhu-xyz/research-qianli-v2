@@ -1,4 +1,6 @@
-"""v5: Full feature set (A+B+C = 12 features) with tiered labels.
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+v5: Full feature set (A+B+C = 12 features) with tiered labels.
 
 Same features as v1b but with the label noise fix (tiered labels).
 This isolates the label fix effect on the best previous feature set.

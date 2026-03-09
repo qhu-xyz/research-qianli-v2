@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-"""V7+ experiments: optimized blend baseline + ML rebuilds.
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
+
+V7+ experiments: optimized blend baseline + ML rebuilds.
 
 v7:  Optimized formula blend (85/0/15) — new baseline
 v8a: ML regression, 12f, tiered labels (same as v6a, measured against v7)

@@ -5,11 +5,14 @@ constraint_limit. Returns one row per (constraint_id, flow_direction).
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import polars as pl
 
-from ml.config import SPICE6_DENSITY_BASE
+from ml.config import SPICE6_DENSITY_BASE, delivery_month as _delivery_month
+
+logger = logging.getLogger(__name__)
 
 
 def load_spice6_density(
@@ -23,7 +26,7 @@ def load_spice6_density(
     auction_month : str
         Month in YYYY-MM format.
     period_type : str
-        "f0" uses market_round=1.
+        Period type (f0, f1, etc.). Determines market_month = delivery_month.
 
     Returns
     -------
@@ -31,11 +34,13 @@ def load_spice6_density(
         Columns: constraint_id, flow_direction, prob_exceed_110, prob_exceed_100,
         prob_exceed_90, prob_exceed_85, prob_exceed_80, constraint_limit.
     """
-    market_round = "1" if period_type == "f0" else "1"
+    market_month = _delivery_month(auction_month, period_type)
+    logger.info("spice6 density: auction=%s ptype=%s market_month=%s", auction_month, period_type, market_month)
+    market_round = "1"
     base = (
         Path(SPICE6_DENSITY_BASE)
         / f"auction_month={auction_month}"
-        / f"market_month={auction_month}"
+        / f"market_month={market_month}"
         / f"market_round={market_round}"
     )
 

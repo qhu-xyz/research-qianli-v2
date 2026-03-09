@@ -1,0 +1,61 @@
+{
+  "gates": {
+    "VC@20": {
+      "floor": 0.2697,
+      "tail_floor": 0.134,
+      "direction": "higher",
+      "group": "A"
+    },
+    "VC@100": {
+      "floor": 0.6191,
+      "tail_floor": 0.4821,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@20": {
+      "floor": 0.2888,
+      "tail_floor": 0.1,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@50": {
+      "floor": 0.414,
+      "tail_floor": 0.32,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@100": {
+      "floor": 0.4688,
+      "tail_floor": 0.42,
+      "direction": "higher",
+      "group": "A"
+    },
+    "NDCG": {
+      "floor": 0.5425,
+      "tail_floor": 0.4907,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Spearman": {
+      "floor": 0.331,
+      "tail_floor": 0.2591,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Tier0-AP": {
+      "floor": 0.4206,
+      "tail_floor": 0.3505,
+      "direction": "higher",
+      "group": "B"
+    },
+    "Tier01-AP": {
+      "floor": 0.5211,
+      "tail_floor": 0.403,
+      "direction": "higher",
+      "group": "B"
+    }
+  },
+  "noise_tolerance": 0.02,
+  "tail_max_failures": 1,
+  "calibrated_from": "v0b"
+}

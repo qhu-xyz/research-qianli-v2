@@ -272,69 +272,86 @@ def print_comparison(labels: dict[str, dict], title: str) -> None:
 
 def main() -> None:
     import argparse
+    from ml.config import period_offset, has_period_type
+
     parser = argparse.ArgumentParser(description="V10e with production lag")
     parser.add_argument("--class-type", default="onpeak", choices=["onpeak", "offpeak"])
-    parser.add_argument("--lag", type=int, default=1)
+    parser.add_argument("--ptype", default="f0", help="Period type (f0, f1, f2, f3)")
+    parser.add_argument("--lag", type=int, default=None,
+                        help="Production lag for f0 only (default: 1). Ignored for f1+ "
+                             "(collect_usable_months handles row selection).")
     parser.add_argument("--dev-only", action="store_true", help="Skip holdout")
     args = parser.parse_args()
 
     class_type = args.class_type
-    lag = args.lag
+    period_type = args.ptype
+
+    # For f0, lag controls the old shifted_eval logic (backward compat)
+    # For f1+, lag is metadata only — collect_usable_months owns row selection
+    effective_lag = period_offset(period_type) + 1
+    if period_type == "f0":
+        lag = args.lag if args.lag is not None else 1
+    else:
+        lag = effective_lag  # metadata only
+        if args.lag is not None:
+            print(f"[main] WARNING: --lag ignored for {period_type} "
+                  f"(collect_usable_months handles row selection, effective_lag={effective_lag})")
+
     t_start = time.time()
-    print(f"[main] V10e lag={lag}, class_type={class_type}, mem={mem_mb():.0f} MB")
+    print(f"[main] V10e ptype={period_type}, lag={lag}, class_type={class_type}, mem={mem_mb():.0f} MB")
 
     bs = load_all_binding_sets(peak_type=class_type)
 
     version_id = f"v10e-lag{lag}"
 
     # Compute slice directories for this (period_type, class_type)
-    reg_slice = registry_root("f0", class_type, base_dir=ROOT / "registry")
-    ho_slice = holdout_root("f0", class_type, base_dir=ROOT / "holdout")
+    reg_slice = registry_root(period_type, class_type, base_dir=ROOT / "registry")
+    ho_slice = holdout_root(period_type, class_type, base_dir=ROOT / "holdout")
 
-    # ── Dev (36 months) ──
-    dev_pm = run_variant(version_id, _FULL_EVAL_MONTHS, bs, lag=lag, class_type=class_type)
-    save_results(version_id, dev_pm, _FULL_EVAL_MONTHS, reg_slice, class_type=class_type, lag=lag)
+    # Filter eval months to those where period_type exists
+    dev_eval = [m for m in _FULL_EVAL_MONTHS if has_period_type(m, period_type)]
+    holdout_eval = [m for m in HOLDOUT_MONTHS if has_period_type(m, period_type)]
+    print(f"[main] {period_type}: {len(dev_eval)} dev months, {len(holdout_eval)} holdout months")
 
-    # ── Holdout (24 months) ──
+    # ── Dev ──
+    dev_pm = run_variant(version_id, dev_eval, bs, lag=lag, class_type=class_type, period_type=period_type)
+    save_results(version_id, dev_pm, dev_eval, reg_slice, class_type=class_type, lag=lag, period_type=period_type)
+
+    # ── Holdout ──
     if not args.dev_only:
-        holdout_pm = run_variant(f"{version_id}-holdout", HOLDOUT_MONTHS, bs, lag=lag, class_type=class_type)
-        save_results(version_id, holdout_pm, HOLDOUT_MONTHS, ho_slice, class_type=class_type, lag=lag)
+        holdout_pm = run_variant(f"{version_id}-holdout", holdout_eval, bs, lag=lag, class_type=class_type, period_type=period_type)
+        save_results(version_id, holdout_pm, holdout_eval, ho_slice, class_type=class_type, lag=lag, period_type=period_type)
 
-    # ── Comparison (only for onpeak where we have baselines) ──
-    if class_type == "onpeak":
-        v0_dev = json.load(open(reg_slice / "v0" / "metrics.json"))["aggregate"]["mean"]
-        v10e_dev = json.load(open(reg_slice / "v10e" / "metrics.json"))["aggregate"]["mean"]
-        lag1_dev_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in dev_pm.items()}
-        lag1_dev = aggregate_months(lag1_dev_clean)["mean"]
+    # ── Comparison ──
+    v0_path = reg_slice / "v0" / "metrics.json"
+    if v0_path.exists():
+        v0_dev = json.load(open(v0_path))["aggregate"]["mean"]
+        lag_dev_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in dev_pm.items()}
+        lag_dev = aggregate_months(lag_dev_clean)["mean"]
+        labels = {"v0 (formula)": v0_dev, version_id: lag_dev}
 
-        print_comparison(
-            {"v0 (formula)": v0_dev, "v10e (no lag)": v10e_dev, version_id: lag1_dev},
-            "DEV COMPARISON (36 months)"
-        )
+        # Optionally add no-lag baseline if it exists
+        nolag_path = reg_slice / "v10e" / "metrics.json"
+        if nolag_path.exists():
+            labels["v10e (no lag)"] = json.load(open(nolag_path))["aggregate"]["mean"]
+
+        print_comparison(labels, f"DEV COMPARISON ({period_type}/{class_type}, {len(dev_eval)} months)")
 
         if not args.dev_only:
-            v0_ho = json.load(open(ho_slice / "v0" / "metrics.json"))["aggregate"]["mean"]
-            v10e_ho = json.load(open(ho_slice / "v10e" / "metrics.json"))["aggregate"]["mean"]
-            lag1_ho_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in holdout_pm.items()}
-            lag1_ho = aggregate_months(lag1_ho_clean)["mean"]
+            v0_ho_path = ho_slice / "v0" / "metrics.json"
+            if v0_ho_path.exists():
+                v0_ho = json.load(open(v0_ho_path))["aggregate"]["mean"]
+                lag_ho_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in holdout_pm.items()}
+                lag_ho = aggregate_months(lag_ho_clean)["mean"]
+                ho_labels = {"v0 (formula)": v0_ho, version_id: lag_ho}
 
-            print_comparison(
-                {"v0 (formula)": v0_ho, "v10e (no lag)": v10e_ho, version_id: lag1_ho},
-                "HOLDOUT COMPARISON (24 months)"
-            )
+                nolag_ho = ho_slice / "v10e" / "metrics.json"
+                if nolag_ho.exists():
+                    ho_labels["v10e (no lag)"] = json.load(open(nolag_ho))["aggregate"]["mean"]
+
+                print_comparison(ho_labels, f"HOLDOUT COMPARISON ({period_type}/{class_type}, {len(holdout_eval)} months)")
     else:
-        # For offpeak, we need v0 baseline in the same slice
-        v0_path = reg_slice / "v0" / "metrics.json"
-        if v0_path.exists():
-            v0_dev = json.load(open(v0_path))["aggregate"]["mean"]
-            lag1_dev_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in dev_pm.items()}
-            lag1_dev = aggregate_months(lag1_dev_clean)["mean"]
-            print_comparison(
-                {"v0": v0_dev, version_id: lag1_dev},
-                f"DEV COMPARISON ({class_type}, 36 months)"
-            )
-        else:
-            print(f"\n[main] No v0 baseline found in {reg_slice} — run v0 for {class_type} first to compare")
+        print(f"\n[main] No v0 baseline in {reg_slice} — run v0 for {period_type}/{class_type} first")
 
     print(f"\n[main] Done in {time.time() - t_start:.1f}s, mem={mem_mb():.0f} MB")
 

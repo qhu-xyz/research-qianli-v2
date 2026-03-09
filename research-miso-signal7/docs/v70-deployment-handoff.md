@@ -15,8 +15,8 @@ The current production signal is **V6.2B**, which uses a formula:
 
 ```
 rank_ori = 0.60 * da_rank_value + 0.30 * density_mix_rank_value + 0.10 * density_ori_rank_value
-rank     = dense_rank(rank_ori) / n
-tier     = qcut(rank, 5) -> 0,1,2,3,4
+rank     = dense_rank(rank_ori) / K          # K = number of unique dense ranks, NOT row count n
+tier     = floor(rank * 5), clamped to 0..4  # quintile bucket
 ```
 
 - `da_rank_value`: historical DA shadow price percentile (60-month lookback, lower = more binding)
@@ -36,14 +36,17 @@ per constraint, which gets converted to rank/tier in the same format as V6.2B.
 
 ### Why this matters (performance)
 
-Holdout evaluation (2024-2025, fully out-of-sample):
+Holdout evaluation (2024-2025, walk-forward retrain -- each eval month trains a fresh
+model on trailing 8 months, so no data from the eval month or later is used):
 
-| Slice | v0 (formula) VC@20 | ML VC@20 | Delta |
-|-------|-------------------|----------|-------|
-| f0/onpeak | 0.1835 | 0.3529 | +92% |
-| f0/offpeak | 0.2488 | 0.3561 | +43% |
-| f1/onpeak | 0.1803 | 0.3290 | +82% |
-| f1/offpeak | 0.2457 | 0.3561 | +45% |
+| Slice | v0 (formula) VC@20 | ML VC@20 | Delta | Months |
+|-------|-------------------|----------|-------|--------|
+| f0/onpeak | 0.1835 | 0.3529 | +92% | 24 |
+| f0/offpeak | 0.2075 | 0.3780 | +82% | 24 |
+| f1/onpeak | 0.2209 | 0.3677 | +66% | 19 |
+| f1/offpeak | 0.2492 | 0.3561 | +43% | 19 |
+
+Source: `research-stage5-tier/holdout/{ptype}/{ctype}/{version}/metrics.json`
 
 VC@20 = value capture at top 20 constraints (what fraction of total binding value is
 captured by the top 20 ranked constraints). Higher is better. These gains are
@@ -134,17 +137,25 @@ V7.0 uses ML for f0 and f1. Everything else is V6.2B passthrough.
 For period type fN, the signal for auction month M is submitted **~mid of month M-1**.
 At submission time, only realized DA through month **M-2** is complete (M-1 is partial).
 
-This means any feature derived from realized DA must be lagged:
+This means any feature derived from realized DA must be lagged. There are two separate
+mechanisms, and they are easy to confuse:
 
-- **Training window**: `collect_usable_months(M, fN, n_months=8)` walks backward from M,
-  only including months whose delivery month has complete realized DA (delivery_month <= M-2).
-- **Binding freq cutoff**: bf features for any row use realized DA strictly before
-  `month - (N+1)`. For f0 (N=0) targeting month M: bf uses months < M-1.
-  For f1 (N=1) targeting month M: bf uses months < M-2.
-- **Target month**: does NOT need realized DA. The target is what we're scoring (inference
-  only). Ground truth for the target is not available at decision time.
+**1. Training row selection** (which auction months to include as training data):
+`collect_usable_months(M, fN, n_months=8)` walks backward from M and only includes
+months whose delivery month has complete realized DA. For f0, delivery_month = auction_month,
+so the latest training month is M-2. For f1, delivery_month = auction_month + 1, so the
+latest training month is M-3 (because its delivery month M-2 must have complete DA).
 
-Without this lag, results are inflated by 6-20%. The production-safe versions are
+**2. Binding freq cutoff** (per-row feature, same for both f0 and f1):
+`BF_LAG = 1` always. For any row with auction month T, bf features use realized DA
+strictly before `prev_month(T)`, i.e., months < T-1. This is the decision-time cutoff
+(at ~mid of T-1, only DA through T-2 is complete). The lag is 1 for BOTH f0 and f1 --
+it is keyed on auction month, not delivery month.
+
+**3. Target month**: does NOT need realized DA. The target is what we're scoring (inference
+only). Ground truth for the target is not available at decision time.
+
+Without these lags, results are inflated by 6-20%. The production-safe versions are
 v10e-lag1 (f0) and v2 (f1).
 
 ---
@@ -303,25 +314,36 @@ def compute_rank_tier(scores: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
     Higher ML score = more binding = lower rank value (matches V6.2B convention
     where lower rank = more binding).
+
+    Rank normalization: divide by K (number of unique dense ranks), NOT by n (row count).
+    This matches the verified V6.2B behavior in v62b_formula.py:dense_rank_normalized().
+    When scores tie (K < n), rank values are in (0, 1] but not uniformly spaced at 1/n.
     """
     # Negate scores: dense_rank gives 1..K for sorted values,
     # and we want lower rank for higher scores
-    rank = dense_rank_normalized(-scores)
+    rank = dense_rank_normalized(-scores)  # returns dense_rank / K, values in (0, 1]
 
-    # tier = quintile. Tier 0 = lowest rank values = most binding.
+    # tier = quintile bucket. Tier 0 = lowest rank values = most binding.
+    # floor(rank * 5), clamped to [0, 4].
     tier = np.minimum((rank * 5).astype(int), 4)
 
     return rank, tier
 ```
 
-`dense_rank_normalized` already exists in `ml/v62b_formula.py`. It returns
-`dense_rank(values) / max_dense_rank`, giving values in (0, 1] with uniform spacing at 1/K.
+**Important**: `dense_rank_normalized` (in `ml/v62b_formula.py`) divides by `K` (the
+number of unique score values), not by `n` (the row count). This is the verified V6.2B
+behavior. When ties exist (K < n), dividing by `n` would compress the rank scale and
+produce different tier assignments.
 
-V6.2B verified: ranks are uniformly spaced at 1/n, tiers are exact quintiles of rank.
+The tier formula `floor(rank * 5)` is equivalent to V6.2B's tier assignment for the
+rank values this function produces. However, this must be validated against a sample
+of actual V6.2B outputs during implementation -- if V6.2B uses a different bucketing
+method (e.g., pandas `qcut` which handles edge cases differently), the tier formula
+must be adjusted to match.
 
 ### Effort
 
-Trivial (~10 lines).
+Small (~15 lines of code, but requires validation against V6.2B tier outputs).
 
 ---
 
@@ -574,9 +596,10 @@ Before declaring V7.0 ready:
 1. **Schema match**: V7.0 output has exact same columns, dtypes, index format as V6.2B
 2. **Passthrough check**: f2/f3/q* partitions are bit-identical to V6.2B
 3. **ML sanity**: f0/f1 rank_ori values differ from V6.2B, but:
-   - rank values uniformly spaced at 1/n
+   - rank values in (0, 1], normalized by K (unique dense ranks), matching V6.2B convention
    - tier distribution is roughly equal quintiles (0-4)
    - tier 0 constraints have highest ML scores
+   - tier assignments match `floor(rank * 5)` clamped to [0, 4] (validate vs V6.2B sample)
 4. **Round-trip**: `ConstraintsSignal.load_data()` on V7.0 returns valid DataFrame
 5. **pmodel integration**: load V7.0 in ftr22 signal loading path, verify no errors
 6. **Backtest**: generate V7.0 for a historical month where we have GT, verify ML

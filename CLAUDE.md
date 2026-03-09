@@ -78,6 +78,20 @@ When runs are slow, always investigate and optimize:
 - **Report walltimes**: always print walltime for every experiment run and do full auditing of results
 - **LightGBM num_threads**: This container has 64 CPUs. LightGBM auto-detects all 64 and creates massive thread contention on small data (57s → 0.1s with `num_threads=4`). **Always set `"num_threads": 4`** in LightGBM params. This applies to ALL LightGBM usage in the repo.
 
+## Temporal Leakage: Auction Timing (CRITICAL)
+
+**For any feature or label derived from realized market data (DA shadow prices, binding outcomes, etc.), you MUST account for the submission timing of the signal.**
+
+- f0 (front-month) for auction month M is submitted **~mid of M-1**
+- At submission time, only realized data through month **M-2** is complete
+- Month M-1 is only partially observed (~12 days) and MUST NOT be used
+
+This means: if your training or features use realized DA data, shift everything back by 1 month. Using `months < M` when you should use `months < M-1` is temporal leakage. This was discovered in stage5-tier where it inflated binding_freq results by 6-20%.
+
+**Rule**: when building any realized-data-derived feature, always ask: "at the moment we submit this signal, is this data actually available?" If unsure, check the auction calendar.
+
+See `research-stage5-tier/CLAUDE.md` and `research-stage5-tier/registry/v10e-lag1/NOTES.md` for the full analysis.
+
 ## Versioned Experiments (MANDATORY)
 
 When implementing a new version (e.g., bands v2, baseline v4):

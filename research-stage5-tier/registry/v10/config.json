@@ -1,0 +1,21 @@
+{
+  "method": "lightgbm_regression",
+  "features": [
+    "binding_freq_3",
+    "binding_freq_6",
+    "binding_freq_12",
+    "v7_formula_score",
+    "prob_exceed_110",
+    "constraint_limit"
+  ],
+  "monotone": [
+    1,
+    1,
+    1,
+    -1,
+    1,
+    0
+  ],
+  "label_mode": "tiered",
+  "rationale": "Pruned to top features: 3 binding_freq windows + formula + best 2 spice6"
+}

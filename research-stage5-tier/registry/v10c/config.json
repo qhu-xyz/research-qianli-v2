@@ -1,0 +1,23 @@
+{
+  "features": [
+    "binding_freq_1",
+    "binding_freq_3",
+    "binding_freq_6",
+    "binding_freq_12",
+    "binding_freq_15",
+    "v7_formula_score",
+    "prob_exceed_110",
+    "constraint_limit"
+  ],
+  "monotone": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    -1,
+    1,
+    0
+  ],
+  "method": "lightgbm_regression"
+}

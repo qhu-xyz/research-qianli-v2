@@ -1,0 +1,12 @@
+{
+  "method": "lightgbm_regression",
+  "features": "FEATURES_V1B + v7_formula_score + binding_freq_6 (14f)",
+  "binding_freq": {
+    "lookback": 6,
+    "source": "realized_da_cache",
+    "definition": "count(binding months in prior 6) / 6 per constraint"
+  },
+  "label_mode": "tiered",
+  "train_months": 8,
+  "val_months": 0
+}

@@ -1,0 +1,25 @@
+{
+  "method": "lightgbm_regression",
+  "features": [
+    "binding_freq_3",
+    "binding_freq_6",
+    "binding_freq_12",
+    "v7_formula_score",
+    "da_rank_value",
+    "prob_exceed_110",
+    "prob_exceed_100",
+    "constraint_limit"
+  ],
+  "monotone": [
+    1,
+    1,
+    1,
+    -1,
+    -1,
+    1,
+    1,
+    0
+  ],
+  "label_mode": "tiered",
+  "rationale": "v10 + da_rank_value + prob_exceed_100 to check if pruning hurt"
+}

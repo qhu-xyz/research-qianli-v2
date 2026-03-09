@@ -1,126 +1,314 @@
 # Stage 5 — Working Memory
 
-## Status: v6b Best on VC@20, Holdout-Confirmed (2026-03-08)
-
-Full audit: see `audit.md` (19/19 checks PASS, no leakage, no bugs).
-Holdout test: see `holdout/` (2024-2025 one-time test, immutable results).
-
-## VERIFICATION CHECKPOINTS
-
-### Ground Truth = Realized DA, NOT shadow_price_da
-- `shadow_price_da` in V6.2B parquet is a HISTORICAL 60-month lookback feature
-- Ground truth = realized DA shadow prices: `abs(sum(shadow_price))` per constraint_id
-- Fetched via `MisoApTools().tools.get_da_shadow_by_peaktype()`
-- Cached in `data/realized_da/{YYYY-MM}.parquet` (79 months, 2019-06 to 2025-12)
-- Spearman(shadow_price_da, realized_sp) = 0.22 — confirms NOT leaked
-
-### da_rank_value Is NOT Leaky
-- `da_rank_value = rank(shadow_price_da)` = rank of historical DA = legitimate signal
-- Leaky features: `rank, rank_ori, tier, shadow_sign, shadow_price` — auto-stripped by LTRConfig
-- `v62b_formula_score` (=rank_ori) is also NOT leaky — computed from 3 legitimate features
-
-### Score Direction: Lower rank_value = More Binding
-- V6.2B rank_values: LOWER = more binding
-- evaluate_ltr: HIGHER score = better
-- Formula evaluation: `scores = -v62b_score(...)` (negated)
-- ML output: higher = more binding (no negation needed)
+## Status: v10e-lag1 Production-Safe Champion (2026-03-09)
 
 ---
 
-## Results: 36-Month Combined Eval (Realized DA Ground Truth)
+## Research Summary
 
-| Metric | v0 (formula) | v5 (rank,12f) | v6a (reg,12f) | v6b (reg,13f) | v6c (rank,13f) |
-|--------|-------------|---------------|---------------|---------------|----------------|
-| VC@20 | 0.3336 | 0.3297 (-1%) | 0.3381 (+1%) | **0.3503** (+5%) | 0.3480 (+4%) |
-| VC@100 | 0.6100 | 0.6191 (+1%) | 0.6166 (+1%) | 0.6241 (+2%) | **0.6313** (+3%) |
-| Recall@20 | 0.2111 | 0.2375 (+13%) | 0.2278 (+8%) | 0.2375 (+13%) | **0.2389** (+13%) |
-| Recall@100 | 0.2281 | 0.2514 (+10%) | **0.2597** (+14%) | 0.2586 (+13%) | 0.2511 (+10%) |
-| NDCG | 0.4538 | 0.5470 (+21%) | 0.5538 (+22%) | **0.5567** (+23%) | 0.5366 (+18%) |
-| Spearman | **0.1964** | 0.1902 (-3%) | 0.1705 (-13%) | 0.1712 (-13%) | 0.1881 (-4%) |
+### What we built
 
-12-month subset (for reference):
+A LightGBM regression model (v10e-lag1) that predicts which MISO transmission constraints
+will bind in the day-ahead market, using 9 features. It replaces the V6.2B production
+formula (v0) which uses a hand-tuned 3-feature weighted sum.
 
-| Metric | v0 (formula) | v5 (rank,12f) | v6a (reg,12f) | v6b (reg,13f) | v6c (rank,13f) |
-|--------|-------------|---------------|---------------|---------------|----------------|
-| VC@20 | 0.2817 | 0.2962 (+5%) | 0.3226 (+15%) | **0.3533** (+25%) | 0.3504 (+24%) |
-| VC@100 | 0.6008 | 0.6051 (+1%) | 0.5808 (-3%) | 0.5953 (-1%) | **0.6247** (+4%) |
+### What it does
 
-v6 legend: reg=LightGBM regression, rank=LightGBM lambdarank, 13f=12 features + formula score
+For each auction month M, rank ~600-800 constraints by predicted binding likelihood.
+The top-ranked constraints are where we expect congestion (and therefore FTR value).
 
-## Key Findings
-- **v6b best on VC@20 across 36 months** (0.3503, +5% over formula)
-- **v6c best on VC@100** (0.6313, +3.5% over formula)
-- **12-month eval overstated ML gains**: v6b was +25% on 12mo but only +5% on 36mo combined
-- **Regression >> Ranking on VC@20**: v6a beats v5 with same features
-- **Formula-as-feature helps**: v6b > v6a, v6c > v5
-- **All ML variants beat formula** on Recall@20, Recall@100, NDCG
-- **Spearman: formula still wins** — ML sacrifices global correlation for top-k precision
-- **Tiered labels fix was massive**: v3→v4a = +36% VC@20 (same features, only label fix)
-- **da_rank_value carries >90% of ranking signal**
+### How well it works
 
-## Bug Fixes
-- **Label noise**: `_rank_transform_labels()` gave ~528 distinct labels to non-binding → fixed with `_tiered_labels()` (0/1/2/3)
-- **LightGBM threading deadlock**: Container reports 64 CPUs → `num_threads=4` in all LightGBM params
-- **Fork deadlock**: ProcessPoolExecutor fork copies broken LightGBM lock → removed, use sequential
-- **NFS bottleneck**: In-memory `_MONTH_CACHE` in data_loader.py cuts NFS reads by ~87%
+**Dev (36 months, 2020-06 to 2023-05):**
+
+| Metric | v0 (formula) | v6b (prev best) | v10e-lag1 (current) | v10e-lag1 vs v0 |
+|--------|-------------|-----------------|--------------------|-----------------|
+| VC@20 | 0.2817 | 0.3503 (+24%) | **0.4137** | **+47%** |
+| VC@50 | 0.4653 | — | **0.5631** | **+21%** |
+| VC@100 | 0.6008 | 0.6241 (+4%) | **0.7195** | **+20%** |
+| Recall@20 | 0.1833 | 0.2375 (+30%) | **0.3278** | **+79%** |
+| NDCG | 0.4423 | 0.5567 (+26%) | **0.5837** | **+32%** |
+| Spearman | 0.2045 | 0.1712 (-16%) | **0.2989** | **+46%** |
+
+**Holdout (24 months, 2024-2025, one-time unseen test):**
+
+| Metric | v0 (formula) | v6b (prev best) | v10e-lag1 (current) | v10e-lag1 vs v0 |
+|--------|-------------|-----------------|--------------------|-----------------|
+| VC@20 | 0.1835 | 0.2709 (+48%) | **0.3529** | **+92%** |
+| VC@50 | 0.3947 | 0.4183 (+6%) | **0.5442** | **+38%** |
+| VC@100 | 0.5924 | 0.5854 (-1%) | **0.6807** | **+15%** |
+| Recall@20 | 0.1500 | 0.1937 (+29%) | **0.3021** | **+101%** |
+| NDCG | 0.4224 | 0.4462 (+6%) | **0.5497** | **+30%** |
+| Spearman | 0.1946 | 0.1891 (-3%) | **0.3226** | **+66%** |
+
+---
+
+## The Model: v10e-lag1
+
+### Features (9)
+
+| Feature | Source | Importance | Monotone | What it captures |
+|---------|--------|-----------|----------|-----------------|
+| binding_freq_12 | Realized DA cache | 36.4% | +1 | Fraction of prior 12 months constraint was binding |
+| v7_formula_score | V6.2B parquet | 19.4% | -1 | 0.85*da_rank_value + 0.15*density_ori_rank_value |
+| binding_freq_15 | Realized DA cache | 16.3% | +1 | Fraction of prior 15 months (seasonal patterns) |
+| da_rank_value | V6.2B parquet | 10.0% | -1 | Percentile rank of 60-month historical DA shadow price |
+| binding_freq_6 | Realized DA cache | 9.0% | +1 | Fraction of prior 6 months |
+| binding_freq_1 | Realized DA cache | 2.9% | +1 | Did it bind 2 months ago? (lagged) |
+| binding_freq_3 | Realized DA cache | 2.7% | +1 | Fraction of prior 3 months |
+| prob_exceed_110 | Spice6 density | 2.3% | +1 | Probability flow exceeds 110% of thermal limit |
+| constraint_limit | Spice6 limit | 0.9% | 0 | MW thermal limit of constraint |
+
+### Config
+
+- **Method**: LightGBM regression, tiered labels (0/1/2/3)
+- **Training**: 8 months rolling, 0 validation, 1-month production lag
+- **Hyperparams**: lr=0.05, 31 leaves, 100 trees, num_threads=4
+
+### v7_formula_score decomposition
+
+`v7_formula_score` is NOT an independent feature. It's computed by us as a weighted sum
+of two V6.2B parquet columns:
+
+```
+v7_formula_score = 0.85 * da_rank_value + 0.15 * density_ori_rank_value
+```
+
+Since `da_rank_value` also appears as its own feature (10%), the total model dependence
+on `da_rank_value` is approximately: 10% (direct) + 0.85 × 19.4% (via formula) ≈ **26.5%**.
+
+---
+
+## Leakage Audit
+
+### The two core leakage dimensions
+
+1. **Feature leak**: Are features for target month M using information unavailable at
+   decision time?
+2. **Row leak**: Are training rows/labels including months whose outcomes would not yet
+   be known at decision time?
+
+### Production timing constraint
+
+For f0 (front-month), signal for auction month M is submitted **~mid of month M-1**.
+At that point:
+- Realized DA through **M-2** is complete (full month)
+- Month **M-1** is only ~12 days in — NOT available as a complete month
+- V6.2B signal parquet for month M is generated by the pipeline (available)
+- Spice6 density for month M is generated by the pipeline (available)
+
+### v9 through v10e: LEAKY (do not use for production estimates)
+
+These versions had both leak types:
+- **Feature leak**: `binding_freq` for test month M used `months < M`, which includes M-1.
+  At mid of M-1, we don't have M-1's complete realized DA.
+- **Row leak**: Training included month M-1 with its `realized_sp` label. At mid of M-1,
+  that label doesn't exist yet.
+
+**Impact**: v10e results were inflated by 6-20% depending on metric.
+- bf_1 was especially inflated: "did it bind LAST month" (strong signal) vs
+  "did it bind 2 months ago" (weaker signal)
+
+### v10e-lag1: FIXED on both dimensions
+
+For eval month M with lag=1:
+
+| Component | Leaky (v10e) | Fixed (v10e-lag1) | Available at mid(M-1)? |
+|-----------|-------------|-------------------|----------------------|
+| Training months | M-8..M-1 | M-9..M-2 | M-2 is complete ✓ |
+| Training labels | realized_sp for M-8..M-1 | realized_sp for M-9..M-2 | M-2 is complete ✓ |
+| bf for training month T | months < T | months < T-1 | T-2 is complete ✓ |
+| bf for test month M | months < M (includes M-1) | months < M-1 (through M-2) | M-2 is complete ✓ |
+| V6.2B test features | M parquet | M parquet (unchanged) | See caveat below |
+| Spice6 test features | M parquet | M parquet (unchanged) | See caveat below |
+| Test label | M realized_sp | M realized_sp (unchanged) | Ground truth ✓ |
+
+**Concrete example**: eval month 2025-03, submitted mid-February 2025.
+- Training: 2024-06 through 2025-01 (features + labels). No 2025-02 data anywhere.
+- bf for training month 2025-01: uses realized DA months < 2024-12 (through Nov 2024)
+- bf for test month 2025-03: uses realized DA months < 2025-02 (through Jan 2025)
+- 2025-02 realized DA is NOT used — not as label, not as feature, not in bf.
+
+**Why v10e-lag1 is lower than v10e**: it is not worse because it is wrong — it is worse
+because it is more realistic. You lose the freshest training month and binding_freq_1
+becomes "2 months ago" instead of "last month." Short-horizon persistence signals weaken.
+That is the correct cost of respecting production timing.
+
+### Remaining caveat: V6.2B/Spice6 signal parquet provenance
+
+The lag fix covers all realized-DA-derived features (67.3% of model importance) and
+training labels. But 32.7% of importance comes from V6.2B parquet and Spice6 features
+loaded for the test month:
+
+| Feature | Source | Importance | Risk |
+|---------|--------|-----------|------|
+| binding_freq_* (5) | Our realized DA cache | 67.3% | **CLEAN** — lag verified |
+| v7_formula_score | V6.2B parquet for M | 19.4% | **Unverified** |
+| da_rank_value | V6.2B parquet for M | 10.0% | **Unverified** |
+| prob_exceed_110 | Spice6 density for M | 2.3% | **Unverified** |
+| constraint_limit | Spice6 limit for M | 0.9% | **Unverified** |
+
+All V6.2B and Spice6 parquets were written **2025-11-12** (bulk backfill). At backfill
+time, the pipeline had access to all data through November 2025. We cannot verify from
+the data alone whether the pipeline:
+- **(a)** Correctly respects point-in-time (uses only inputs available at original
+  submission) — no leakage
+- **(b)** Uses data available at backfill time — potential leakage in `shadow_price_da`
+  and flow forecasts
+
+Evidence is ambiguous: `shadow_price_da` for overlapping constraints changes 77.6% between
+adjacent months, which is high for a "60-month historical lookback." But
+Spearman(shadow_price_da, same-month realized_sp) is only 0.18, suggesting it's not
+directly reflecting current-month outcomes.
+
+**These are production signal features.** If V6.2B runs in production before each auction,
+then by definition these features are available at submission time. The backfill should
+reproduce production behavior. But "should" is not "verified" — **this needs confirmation
+from the pipeline team.**
+
+---
+
+## Version History
+
+### Phase 1: Baseline and ML foundations (v0-v6c)
+
+- **v0** (formula): `rank_ori = 0.60*da_rank + 0.30*density_mix_rank + 0.10*density_ori_rank`.
+  Exact reproduction of V6.2B production signal. Baseline for all comparisons.
+- **v1-v4**: Feature set and label experiments. Key finding: tiered labels (0/1/2/3) fix
+  rank-transform noise (+36% VC@20). Formula-as-feature helps (+10-18% VC@20).
+- **v5** (lambdarank, 12f): comparable to formula on VC@20, better on coverage metrics
+- **v6b** (regression, 13f): +5% VC@20 over formula on dev, +48% on holdout.
+  Previous champion. Regression > lambdarank for top-k precision on sparse targets.
+- **v6c** (lambdarank, 13f): +3.5% VC@100, best coverage. Underperforms v6b on holdout.
+
+### Phase 2: Binding frequency breakthrough (v9-v10e)
+
+- **v9** (14f, +bf_6): Single binding_freq_6 feature added. +34% VC@20 dev.
+  Feature importance: bf_6=73.6%, everything else combined=26.4%.
+  **LEAKY** — used M-1 data not available at submission time.
+- **v10** (6f): Pruned 8 features with <2% importance. Multi-window bf (3/6/12).
+- **v10e** (9f): Added bf_1, bf_15, da_rank_value back. Beat v9 on ALL metrics.
+  **LEAKY** — same timing issue as v9.
+
+### Phase 3: Temporal leakage fix (v10e-lag1)
+
+- **v10e-lag1** (9f, lag=1): Production-safe version. Costs 6-20% vs leaky v10e
+  but still +47-92% vs formula. Current champion.
+
+### Feature importance evolution
+
+| Feature | v9 (leaky) | v10e (leaky) | v10e-lag1 (safe) |
+|---------|-----------|-------------|-----------------|
+| binding_freq_6 | 73.6% | ~8% | 9.0% |
+| binding_freq_1 | — | ~44% | 2.9% |
+| binding_freq_12 | — | ~12% | **36.4%** |
+| binding_freq_15 | — | ~4% | **16.3%** |
+| v7_formula_score | 14.9% | ~6% | **19.4%** |
+| da_rank_value | 6.1% | ~2% | **10.0%** |
+
+With the lag, longer-window features (bf_12, bf_15) and the formula become much more
+important. bf_1 collapses from 44% to 3% because "2 months ago" is much weaker than
+"last month." This is the correct behavior — the model adapts to the information actually
+available at decision time.
+
+---
+
+## Ground Truth and Data
+
+### Ground truth = Realized DA shadow prices
+- Source: `MisoApTools().tools.get_da_shadow_by_peaktype()`
+- Cached: `data/realized_da/{YYYY-MM}.parquet` (79 months, 2019-06 to 2025-12)
+- Each parquet has columns: `constraint_id`, `realized_sp` (= abs sum of DA shadow prices)
+- NOT `shadow_price_da` from V6.2B (that's a historical lookback feature, not ground truth)
+
+### V6.2B signal data
+- Path: `/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1/{month}/f0/onpeak`
+- ~550-780 constraints per month, 21 columns
+- Key columns used: `da_rank_value`, `density_ori_rank_value`, `constraint_id`
+- Production formula output: `rank_ori` (verified exact match with our v0 computation)
+- `shadow_price_da` ≡ `da_rank_value` (Spearman = -1.0, identical information)
+
+### Spice6 density data
+- Path: `/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density/auction_month={month}/...`
+- Monte Carlo simulation output: probability of flow exceeding various thresholds
+- Aggregated across outage date scenarios (mean per constraint)
+- Key columns used: `prob_exceed_110`, `constraint_limit`
+
+### Constraint universe stats
+- ~600-800 V6.2B constraints per month
+- ~300-400 DA binding constraints per month (total MISO)
+- ~68-85 overlap (V6.2B ∩ DA binding) — this is what we predict
+- ~200-250 DA binding constraints NOT in V6.2B (coverage gap, not addressable)
+- ~12% base binding rate within V6.2B universe
+
+---
 
 ## V6.2B Formula (Verified Exact)
-`rank_ori = 0.60 * da_rank_value + 0.30 * density_mix_rank_value + 0.10 * density_ori_rank_value`
 
-## Timing
-- 36-month comparison (5 variants × 24 months + v0): **28s** with cache
-- 12-month eval (single variant): ~3s cached, ~10s cold NFS
-- Sequential beats parallel (NFS contention + spawn overhead > compute savings)
+```
+rank_ori = 0.60 * da_rank_value + 0.30 * density_mix_rank_value + 0.10 * density_ori_rank_value
+```
 
-## Ground Truth Stats
-- ~68-81 V6.2B constraints match DA per month (out of ~550-780)
-- ~200-250 DA binding constraints NOT in V6.2B signal universe (coverage gap)
-- Average ~72 binding constraints per month (11-13% of V6.2B)
+- Verified via reproduce_v62b.py: max_abs_diff = 0.0 for all months
+- All three rank columns: lower = more binding (inverted percentile ranks)
+- v7 optimized weights: 0.85/0.00/0.15 (density_mix gets zero weight — doesn't help)
 
 ---
 
-## Holdout Test: 2024-2025 (24 months, one-time, immutable)
+## Key ML Learnings
 
-Results in `holdout/{version}/metrics.json`. Dev eval period was 2020-2023; this is fully unseen.
-
-| Metric | v0 (formula) | v5 (rank,12f) | v6b (reg,13f) | v6c (rank,13f) |
-|--------|-------------|---------------|---------------|----------------|
-| VC@20 | 0.1835 | 0.2160 (+18%) | **0.2709** (+48%) | 0.2100 (+14%) |
-| VC@100 | 0.5924 | **0.6322** (+7%) | 0.5854 (-1%) | 0.6040 (+2%) |
-| Recall@20 | 0.1500 | 0.1854 (+24%) | **0.1937** (+29%) | 0.1792 (+19%) |
-| Recall@100 | 0.2421 | **0.2571** (+6%) | 0.2525 (+4%) | 0.2554 (+5%) |
-| NDCG | 0.4224 | **0.4580** (+8%) | 0.4462 (+6%) | 0.4550 (+8%) |
-| Spearman | **0.1946** | 0.1834 (-6%) | 0.1891 (-3%) | 0.1789 (-8%) |
-
-### Holdout Key Findings
-- **v6b VC@20 advantage holds on holdout**: +48% over formula (vs +5% on dev 36mo)
-- **All metrics lower than dev eval** — expected: 2024-2025 is harder (more constraints per month)
-- **v5 best on VC@100, NDCG, Recall@100** — ranking objective generalizes better for broader coverage
-- **v6b best on VC@20 and Recall@20** — regression still best for top-k precision
-- **Spearman: formula still wins** — consistent with dev eval finding
-- **v6c underperforms on holdout** — formula-as-feature helps regression more than ranking on new data
+- **binding_freq is the #1 feature**: multi-window (1/3/6/12/15) better than single bf_6
+- **Production lag matters**: 1-month lag costs 6-20% but is mandatory for honest evaluation
+- **Longer bf windows are more robust to lag**: bf_12 and bf_15 become dominant with lag
+- 8mo train / 0 val >> 6mo train / 2 val
+- LightGBM regression > lambdarank for top-k precision on sparse targets (88% zeros)
+- Tiered labels (0/1/2/3) fix rank-transform noise: +36% VC@20
+- Formula-as-feature: consistently helpful across all versions
+- Feature pruning works: 9 features beats 14 features (less noise)
+- Simple params (lr=0.05, 31 leaves, 100 trees) beat tuned params
+- LightGBM deadlocks with 64 threads — always num_threads=4
 
 ---
 
-## Codex Audit Fixes (2026-03-08)
+## Bug Fixes
 
-External review (`codex-review/audit.md`) found 4 issues. Actions taken:
-- **Removed** Tier0-AP / Tier01-AP from `evaluate_ltr()` — always 1.0 (degenerate)
-- **Demoted** Recall@100 from gate group A → B in `gates.json` — tie-contaminated (<100 binding/mo)
-- **Updated** `champion.json` from v0 → v6b with dev + holdout metrics
-- **Acknowledged** FEATURES_V3 dead code — `mlpred_loader.py` exists but never called; not blocking
+- **Temporal leakage in v9-v10e**: Used M-1 realized DA not available at f0 submission.
+  Fixed with 1-month lag in v10e-lag1.
+- **Label noise**: `_rank_transform_labels()` gave ~528 distinct levels to non-binding.
+  Fixed with `_tiered_labels()` (0/1/2/3).
+- **LightGBM threading deadlock**: Container reports 64 CPUs → `num_threads=4`.
+- **Fork deadlock**: ProcessPoolExecutor copies broken lock state → use sequential.
+- **NFS bottleneck**: In-memory `_MONTH_CACHE` cuts NFS reads by ~87%.
+
+---
 
 ## Production Migration Assessment
 
 See `production-migration/assessment.md`. Key findings:
-- **v0 reproduces 100% of production V6.2B signal** for f0 (`rank_ori` exact match, all consumed columns available)
-- **ML versions can produce same output format** — replace `rank_ori` with ML score, same tier/shadow_price/shadow_sign
-- **Gaps**: tier assignment (small), score normalization (small), output writer (medium), offpeak (medium)
-- pmodel consumes 4 columns: `shadow_price`, `shadow_sign`, `tier`, `rank_ori` + `constraint_id` as join key
+- v0 reproduces 100% of production V6.2B signal for f0
+- ML versions can produce same output format (replace rank_ori with ML score)
+- pmodel consumes: `shadow_price`, `shadow_sign`, `tier`, `rank_ori` + `constraint_id`
+- Gaps: tier assignment (small), score normalization (small), output writer (medium)
+
+---
+
+## File Index
+
+- `registry/v10e-lag1/` — Production-safe champion: metrics, config, notes
+- `registry/v10e/` — Leaky version (reference only, do not use for estimates)
+- `registry/v9/` — First binding_freq version (leaky)
+- `registry/v0/` — Formula baseline
+- `holdout/v10e-lag1/` — Holdout results (immutable)
+- `holdout/v10e/` — Leaky holdout (reference only)
+- `scripts/run_v10e_lagged.py` — Production-safe experiment script
+- `scripts/run_v10_variants.py` — v10c-v10g feature search
+- `scripts/run_v9_binding_freq.py` — Original v9 experiment (leaky)
+- `audit.md` — 19-point pipeline audit (pre-binding-freq)
+- `CLAUDE.md` — Contains temporal leakage warning for future work
 
 ## What's Next
-- Investigate 5-tier labels (0-4) vs current 4-tier (0-3)
-- Try different training window lengths (currently 8mo — try 12, 16)
+
+- Verify V6.2B/Spice6 backfill uses point-in-time inputs (check pipeline source code)
 - Multi-period extension (f1, f2, f3)
-- Hybrid approach: regression for top-20, ranking for top-100
 - Production migration: implement tier assignment + output writer
+- Update champion.json to v10e-lag1

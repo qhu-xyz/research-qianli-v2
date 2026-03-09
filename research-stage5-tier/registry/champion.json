@@ -1,25 +1,29 @@
 {
-  "champion": "v6b",
-  "description": "LightGBM regression, 13 features (12 + formula score), tiered labels",
+  "champion": "v10e-lag1",
+  "description": "LightGBM regression, 9 features (binding_freq + formula + da_rank), tiered labels, 1-month production lag",
   "dev_eval": {
     "period": "2020-06 to 2023-05 (36 months)",
-    "VC@20": 0.3503,
-    "VC@100": 0.6241,
-    "Recall@20": 0.2375,
-    "NDCG": 0.5567,
-    "Spearman": 0.1712
+    "VC@20": 0.4137,
+    "VC@50": 0.5631,
+    "VC@100": 0.7195,
+    "Recall@20": 0.3278,
+    "NDCG": 0.5837,
+    "Spearman": 0.2989
   },
   "holdout": {
     "period": "2024-01 to 2025-12 (24 months)",
-    "VC@20": 0.2709,
-    "VC@100": 0.5854,
-    "Recall@20": 0.1937,
-    "NDCG": 0.4462,
-    "Spearman": 0.1891
+    "VC@20": 0.3529,
+    "VC@50": 0.5442,
+    "VC@100": 0.6807,
+    "Recall@20": 0.3021,
+    "NDCG": 0.5497,
+    "Spearman": 0.3226
   },
-  "runner_up": "v6c",
-  "runner_up_note": "Best VC@100 on dev (0.6313), v5 best VC@100 on holdout (0.6322)",
+  "production_lag": 1,
+  "note": "Production-safe: 1-month lag on training window and binding_freq computation. For eval month M, trains on M-9..M-2, bf uses months < T-1 (train) / < M-1 (test). Fixes temporal leakage in v9-v10e.",
+  "runner_up": "v6b",
+  "runner_up_note": "Previous champion. No binding_freq features, no leakage concern. VC@20=0.3503 dev, 0.2709 holdout.",
   "baseline": "v0 (V6.2B formula)",
-  "updated_at": "2026-03-08",
-  "previous_champion": "v0 (initial baseline)"
+  "updated_at": "2026-03-09",
+  "previous_champion": "v6b"
 }

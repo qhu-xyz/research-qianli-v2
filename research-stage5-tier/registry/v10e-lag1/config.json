@@ -1,0 +1,16 @@
+{
+  "method": "lightgbm_regression",
+  "features": [
+    "binding_freq_1", "binding_freq_3", "binding_freq_6", "binding_freq_12",
+    "binding_freq_15", "v7_formula_score", "prob_exceed_110", "constraint_limit",
+    "da_rank_value"
+  ],
+  "monotone": [1, 1, 1, 1, 1, -1, 1, 0, -1],
+  "label_mode": "tiered",
+  "n_estimators": 100,
+  "learning_rate": 0.05,
+  "num_leaves": 31,
+  "train_months": 8,
+  "production_lag": 1,
+  "note": "1-month production lag: for eval month M, train on M-9..M-2, bf uses months < T-1 for training month T, months < M-1 for test month M. Simulates mid-month submission timing where only prior complete months are available."
+}

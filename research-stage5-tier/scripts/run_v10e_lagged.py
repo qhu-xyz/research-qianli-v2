@@ -53,12 +53,22 @@ def mem_mb() -> float:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 
-def load_all_binding_sets(cache_dir: str = REALIZED_DA_CACHE) -> dict[str, set[str]]:
+def load_all_binding_sets(
+    peak_type: str = "onpeak",
+    cache_dir: str = REALIZED_DA_CACHE,
+) -> dict[str, set[str]]:
     binding_sets: dict[str, set[str]] = {}
-    for f in sorted(Path(cache_dir).glob("*.parquet")):
+    if peak_type == "onpeak":
+        # Legacy: onpeak files are {month}.parquet (no suffix)
+        pattern = "[0-9][0-9][0-9][0-9]-[0-9][0-9].parquet"
+    else:
+        pattern = f"*_{peak_type}.parquet"
+    for f in sorted(Path(cache_dir).glob(pattern)):
         df = pl.read_parquet(str(f))
-        binding_sets[f.stem] = set(df.filter(pl.col("realized_sp") > 0)["constraint_id"].to_list())
-    print(f"[bf] Loaded {len(binding_sets)} months of binding sets")
+        # Extract month from filename
+        month = f.stem.replace(f"_{peak_type}", "")
+        binding_sets[month] = set(df.filter(pl.col("realized_sp") > 0)["constraint_id"].to_list())
+    print(f"[bf] Loaded {len(binding_sets)} months of {peak_type} binding sets")
     return binding_sets
 
 
@@ -110,8 +120,9 @@ def run_variant(
     eval_months: list[str],
     bs: dict[str, set[str]],
     lag: int,
+    class_type: str = "onpeak",
 ) -> dict[str, dict]:
-    print(f"\n[{label}] 9f, {len(eval_months)} months, lag={lag}")
+    print(f"\n[{label}] 9f, {len(eval_months)} months, lag={lag}, class_type={class_type}")
 
     cfg = PipelineConfig(
         ltr=LTRConfig(
@@ -137,7 +148,7 @@ def run_variant(
 
         # Shifted training: load as if eval is M-lag, giving us M-(8+lag)..M-(1+lag)
         shifted_eval = (eval_ts - pd.DateOffset(months=lag)).strftime("%Y-%m")
-        train_df, _, _ = load_train_val_test(shifted_eval, cfg.train_months, cfg.val_months, "f0", "onpeak")
+        train_df, _, _ = load_train_val_test(shifted_eval, cfg.train_months, cfg.val_months, "f0", class_type)
 
         # Training month strings for enrichment
         train_month_strs = [
@@ -146,7 +157,7 @@ def run_variant(
         ]
 
         # Load test month directly
-        test_df = load_v62b_month(m, "f0", "onpeak")
+        test_df = load_v62b_month(m, "f0", class_type)
         test_df = test_df.with_columns(pl.lit(m).alias("query_month"))
 
         # Enrich training months — each gets bf with lag
@@ -212,15 +223,18 @@ def run_variant(
     return per_month
 
 
-def save_results(label: str, per_month: dict, eval_months: list[str], dest_dir: Path) -> None:
+def save_results(
+    label: str, per_month: dict, eval_months: list[str], dest_dir: Path,
+    class_type: str = "onpeak", lag: int = 1,
+) -> None:
     clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in per_month.items()}
     agg = aggregate_months(clean)
     d = dest_dir / label
     d.mkdir(parents=True, exist_ok=True)
     result = {
-        "eval_config": {"eval_months": eval_months, "class_type": "onpeak",
-                        "period_type": "f0", "lag": 1,
-                        "note": "1-month production lag applied"},
+        "eval_config": {"eval_months": eval_months, "class_type": class_type,
+                        "period_type": "f0", "lag": lag,
+                        "note": f"{lag}-month production lag applied"},
         "per_month": clean, "aggregate": agg, "n_months": len(clean),
     }
     with open(d / "metrics.json", "w") as f:
@@ -253,46 +267,68 @@ def print_comparison(labels: dict[str, dict], title: str) -> None:
 
 
 def main() -> None:
-    t_start = time.time()
-    print(f"[main] V10e with 1-month production lag, mem={mem_mb():.0f} MB")
+    import argparse
+    parser = argparse.ArgumentParser(description="V10e with production lag")
+    parser.add_argument("--class-type", default="onpeak", choices=["onpeak", "offpeak"])
+    parser.add_argument("--lag", type=int, default=1)
+    parser.add_argument("--dev-only", action="store_true", help="Skip holdout")
+    args = parser.parse_args()
 
-    bs = load_all_binding_sets()
+    class_type = args.class_type
+    lag = args.lag
+    t_start = time.time()
+    print(f"[main] V10e lag={lag}, class_type={class_type}, mem={mem_mb():.0f} MB")
+
+    bs = load_all_binding_sets(peak_type=class_type)
+
+    # Version label includes class_type suffix for offpeak
+    suffix = "" if class_type == "onpeak" else f"-{class_type}"
+    version_id = f"v10e-lag{lag}{suffix}"
 
     # ── Dev (36 months) ──
-    dev_pm = run_variant("v10e-lag1", _FULL_EVAL_MONTHS, bs, lag=1)
-    save_results("v10e-lag1", dev_pm, _FULL_EVAL_MONTHS, REGISTRY)
+    dev_pm = run_variant(version_id, _FULL_EVAL_MONTHS, bs, lag=lag, class_type=class_type)
+    save_results(version_id, dev_pm, _FULL_EVAL_MONTHS, REGISTRY, class_type=class_type, lag=lag)
 
     # ── Holdout (24 months) ──
-    holdout_pm = run_variant("v10e-lag1-holdout", HOLDOUT_MONTHS, bs, lag=1)
-    save_results("v10e-lag1", holdout_pm, HOLDOUT_MONTHS, HOLDOUT)
+    if not args.dev_only:
+        holdout_pm = run_variant(f"{version_id}-holdout", HOLDOUT_MONTHS, bs, lag=lag, class_type=class_type)
+        save_results(version_id, holdout_pm, HOLDOUT_MONTHS, HOLDOUT, class_type=class_type, lag=lag)
 
-    # ── Comparison: load v0 and v10e (no lag) for reference ──
-    v0_dev = json.load(open(REGISTRY / "v0" / "metrics.json"))["aggregate"]["mean"]
-    v10e_dev = json.load(open(REGISTRY / "v10e" / "metrics.json"))["aggregate"]["mean"]
-    lag1_dev_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in dev_pm.items()}
-    lag1_dev = aggregate_months(lag1_dev_clean)["mean"]
+    # ── Comparison (only for onpeak where we have baselines) ──
+    if class_type == "onpeak":
+        v0_dev = json.load(open(REGISTRY / "v0" / "metrics.json"))["aggregate"]["mean"]
+        v10e_dev = json.load(open(REGISTRY / "v10e" / "metrics.json"))["aggregate"]["mean"]
+        lag1_dev_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in dev_pm.items()}
+        lag1_dev = aggregate_months(lag1_dev_clean)["mean"]
 
-    print_comparison(
-        {"v0 (formula)": v0_dev, "v10e (no lag)": v10e_dev, "v10e-lag1": lag1_dev},
-        "DEV COMPARISON (36 months)"
-    )
+        print_comparison(
+            {"v0 (formula)": v0_dev, "v10e (no lag)": v10e_dev, version_id: lag1_dev},
+            "DEV COMPARISON (36 months)"
+        )
 
-    v0_ho = json.load(open(HOLDOUT / "v0" / "metrics.json"))["aggregate"]["mean"]
-    v10e_ho = json.load(open(HOLDOUT / "v10e" / "metrics.json"))["aggregate"]["mean"]
-    lag1_ho_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in holdout_pm.items()}
-    lag1_ho = aggregate_months(lag1_ho_clean)["mean"]
+        if not args.dev_only:
+            v0_ho = json.load(open(HOLDOUT / "v0" / "metrics.json"))["aggregate"]["mean"]
+            v10e_ho = json.load(open(HOLDOUT / "v10e" / "metrics.json"))["aggregate"]["mean"]
+            lag1_ho_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in holdout_pm.items()}
+            lag1_ho = aggregate_months(lag1_ho_clean)["mean"]
 
-    print_comparison(
-        {"v0 (formula)": v0_ho, "v10e (no lag)": v10e_ho, "v10e-lag1": lag1_ho},
-        "HOLDOUT COMPARISON (24 months)"
-    )
-
-    # Delta summary
-    print(f"\nDelta: v10e-lag1 vs v10e (no lag):")
-    for met in ["VC@20", "VC@50", "VC@100", "Recall@20", "NDCG", "Spearman"]:
-        dev_d = (lag1_dev.get(met, 0) - v10e_dev.get(met, 0)) / v10e_dev.get(met, 1) * 100
-        ho_d = (lag1_ho.get(met, 0) - v10e_ho.get(met, 0)) / v10e_ho.get(met, 1) * 100
-        print(f"  {met:<12} dev: {dev_d:>+6.1f}%  holdout: {ho_d:>+6.1f}%")
+            print_comparison(
+                {"v0 (formula)": v0_ho, "v10e (no lag)": v10e_ho, version_id: lag1_ho},
+                "HOLDOUT COMPARISON (24 months)"
+            )
+    else:
+        # For offpeak, we need v0-offpeak baseline first
+        v0_offpeak_path = REGISTRY / f"v0{suffix}" / "metrics.json"
+        if v0_offpeak_path.exists():
+            v0_dev = json.load(open(v0_offpeak_path))["aggregate"]["mean"]
+            lag1_dev_clean = {m: {k: v for k, v in met.items() if not k.startswith("_")} for m, met in dev_pm.items()}
+            lag1_dev = aggregate_months(lag1_dev_clean)["mean"]
+            print_comparison(
+                {f"v0{suffix}": v0_dev, version_id: lag1_dev},
+                f"DEV COMPARISON ({class_type}, 36 months)"
+            )
+        else:
+            print(f"\n[main] No v0{suffix} baseline found — run v0 for {class_type} first to compare")
 
     print(f"\n[main] Done in {time.time() - t_start:.1f}s, mem={mem_mb():.0f} MB")
 

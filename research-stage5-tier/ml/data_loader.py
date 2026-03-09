@@ -83,8 +83,8 @@ def load_v62b_month(
                      "prob_exceed_85", "prob_exceed_80", "constraint_limit"]:
             df = df.with_columns(pl.lit(0.0).alias(col))
 
-    # Join realized DA ground truth
-    realized = load_realized_da(auction_month)
+    # Join realized DA ground truth (peak_type matches class_type)
+    realized = load_realized_da(auction_month, peak_type=class_type)
     df = df.join(realized, on="constraint_id", how="left")
     df = df.with_columns(pl.col("realized_sp").fill_null(0.0))
 

@@ -23,6 +23,20 @@ def test_load_realized_da_from_cache(tmp_path: Path):
     assert len(result) == 3
 
 
+def test_load_realized_da_offpeak(tmp_path: Path):
+    """load_realized_da reads offpeak cache with suffixed filename."""
+    df = pl.DataFrame({
+        "constraint_id": ["72691", "1026FG"],
+        "realized_sp": [80.0, 25.0],
+    })
+    month = "2022-06"
+    df.write_parquet(str(tmp_path / f"{month}_offpeak.parquet"))
+
+    result = load_realized_da(month, peak_type="offpeak", cache_dir=str(tmp_path))
+    assert len(result) == 2
+    assert result.schema["constraint_id"] == pl.String
+
+
 def test_load_realized_da_missing_month(tmp_path: Path):
     """load_realized_da raises FileNotFoundError for uncached month."""
     with pytest.raises(FileNotFoundError):

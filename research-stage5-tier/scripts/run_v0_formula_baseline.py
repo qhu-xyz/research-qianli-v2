@@ -32,12 +32,12 @@ def mem_mb() -> float:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 
-def evaluate_month(month: str) -> dict:
+def evaluate_month(month: str, class_type: str = "onpeak") -> dict:
     """Evaluate V6.2B formula on one month against realized DA."""
-    path = Path(V62B_SIGNAL_BASE) / month / "f0" / "onpeak"
+    path = Path(V62B_SIGNAL_BASE) / month / "f0" / class_type
     df = pl.read_parquet(str(path))
 
-    realized = load_realized_da(month)
+    realized = load_realized_da(month, peak_type=class_type)
     df = df.join(realized, on="constraint_id", how="left")
     df = df.with_columns(pl.col("realized_sp").fill_null(0.0))
 
@@ -106,13 +106,19 @@ def build_gates(agg: dict) -> dict:
 
 
 def main() -> None:
-    print(f"[v0] Starting V6.2B formula baseline, mem: {mem_mb():.0f} MB")
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--class-type", default="onpeak", choices=["onpeak", "offpeak"])
+    args = parser.parse_args()
+    class_type = args.class_type
+
+    print(f"[v0] Starting V6.2B formula baseline ({class_type}), mem: {mem_mb():.0f} MB")
     eval_months = _DEFAULT_EVAL_MONTHS
     print(f"[v0] Eval months ({len(eval_months)}): {eval_months}")
 
     per_month: dict[str, dict] = {}
     for month in eval_months:
-        per_month[month] = evaluate_month(month)
+        per_month[month] = evaluate_month(month, class_type=class_type)
 
     agg = aggregate_months(per_month)
 
@@ -126,32 +132,35 @@ def main() -> None:
         mx = agg["max"].get(metric, float("nan"))
         print(f"  {metric:<15} {m:>8.4f} {mn:>8.4f} {mx:>8.4f}")
 
-    # ── Check against expected numbers ──
-    expected = {"VC@20": 0.2817, "VC@100": 0.6008, "Spearman": 0.2045}
-    print("\n[v0] Validation against expected (tolerance=0.01):")
-    all_ok = True
-    for metric, exp_val in expected.items():
-        got = agg["mean"].get(metric, float("nan"))
-        diff = abs(got - exp_val)
-        status = "OK" if diff <= 0.01 else "MISMATCH"
-        if status == "MISMATCH":
-            all_ok = False
-        print(f"  {metric}: expected={exp_val:.4f}, got={got:.4f}, diff={diff:.4f} [{status}]")
+    # ── Check against expected numbers (onpeak only) ──
+    if class_type == "onpeak":
+        expected = {"VC@20": 0.2817, "VC@100": 0.6008, "Spearman": 0.2045}
+        print("\n[v0] Validation against expected (tolerance=0.01):")
+        all_ok = True
+        for metric, exp_val in expected.items():
+            got = agg["mean"].get(metric, float("nan"))
+            diff = abs(got - exp_val)
+            status = "OK" if diff <= 0.01 else "MISMATCH"
+            if status == "MISMATCH":
+                all_ok = False
+            print(f"  {metric}: expected={exp_val:.4f}, got={got:.4f}, diff={diff:.4f} [{status}]")
 
-    if not all_ok:
-        print("\n[v0] ERROR: Numbers differ by more than 0.01. Investigate before proceeding.")
-        sys.exit(1)
+        if not all_ok:
+            print("\n[v0] ERROR: Numbers differ by more than 0.01. Investigate before proceeding.")
+            sys.exit(1)
 
-    # ── Save to registry/v0/ ──
+    # ── Save to registry/v0/ or registry/v0-offpeak/ ──
     registry_dir = Path(__file__).resolve().parent.parent / "registry"
-    v0_dir = registry_dir / "v0"
+    suffix = "" if class_type == "onpeak" else f"-{class_type}"
+    version_id = f"v0{suffix}"
+    v0_dir = registry_dir / version_id
     v0_dir.mkdir(parents=True, exist_ok=True)
 
     # metrics.json (v2 format: per_month + aggregate)
     metrics_out = {
         "eval_config": {
             "eval_months": eval_months,
-            "class_type": "onpeak",
+            "class_type": class_type,
             "period_type": "f0",
             "mode": "eval",
         },
@@ -169,7 +178,7 @@ def main() -> None:
     config_out = {
         "method": "v62b_formula",
         "formula": "-(0.60*da_rank_value + 0.30*density_mix_rank_value + 0.10*density_ori_rank_value)",
-        "ground_truth": "realized_da (abs sum of DA shadow prices, onpeak)",
+        "ground_truth": f"realized_da (abs sum of DA shadow prices, {class_type})",
         "features_used": ["da_rank_value", "density_mix_rank_value", "density_ori_rank_value"],
     }
     with open(v0_dir / "config.json", "w") as f:
@@ -177,29 +186,29 @@ def main() -> None:
 
     # meta.json
     meta_out = {
-        "version_id": "v0",
-        "description": "V6.2B formula baseline evaluated against realized DA",
+        "version_id": version_id,
+        "description": f"V6.2B formula baseline evaluated against realized DA ({class_type})",
         "n_months": len(per_month),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     with open(v0_dir / "meta.json", "w") as f:
         json.dump(meta_out, f, indent=2)
 
-    # ── Gates ──
-    gates_data = build_gates(agg)
-    with open(registry_dir / "gates.json", "w") as f:
-        json.dump(gates_data, f, indent=2)
-    print(f"[v0] Wrote {registry_dir / 'gates.json'}")
+    # ── Gates (only recalibrate for onpeak) ──
+    if class_type == "onpeak":
+        gates_data = build_gates(agg)
+        with open(registry_dir / "gates.json", "w") as f:
+            json.dump(gates_data, f, indent=2)
+        print(f"[v0] Wrote {registry_dir / 'gates.json'}")
 
-    # ── Champion ──
-    champion_data = {
-        "version": "v0",
-        "promoted_at": datetime.now(timezone.utc).isoformat(),
-        "reason": "initial baseline (V6.2B formula vs realized DA)",
-    }
-    with open(registry_dir / "champion.json", "w") as f:
-        json.dump(champion_data, f, indent=2)
-    print(f"[v0] Wrote {registry_dir / 'champion.json'}")
+        champion_data = {
+            "version": "v0",
+            "promoted_at": datetime.now(timezone.utc).isoformat(),
+            "reason": "initial baseline (V6.2B formula vs realized DA)",
+        }
+        with open(registry_dir / "champion.json", "w") as f:
+            json.dump(champion_data, f, indent=2)
+        print(f"[v0] Wrote {registry_dir / 'champion.json'}")
 
     print(f"\n[v0] Done, mem: {mem_mb():.0f} MB")
 

@@ -15,8 +15,16 @@ import polars as pl
 from ml.config import REALIZED_DA_CACHE
 
 
+def _cache_path(month: str, peak_type: str, cache_dir: str) -> Path:
+    """Return cache file path. Onpeak uses legacy name for backward compat."""
+    if peak_type == "onpeak":
+        return Path(cache_dir) / f"{month}.parquet"
+    return Path(cache_dir) / f"{month}_{peak_type}.parquet"
+
+
 def load_realized_da(
     month: str,
+    peak_type: str = "onpeak",
     cache_dir: str = REALIZED_DA_CACHE,
 ) -> pl.DataFrame:
     """Read cached realized DA shadow prices for a month.
@@ -25,6 +33,8 @@ def load_realized_da(
     ----------
     month : str
         Month string like "2022-06".
+    peak_type : str
+        "onpeak" or "offpeak".
     cache_dir : str
         Directory containing cached parquet files.
 
@@ -38,9 +48,9 @@ def load_realized_da(
     FileNotFoundError
         If the cached parquet does not exist.
     """
-    p = Path(cache_dir) / f"{month}.parquet"
+    p = _cache_path(month, peak_type, cache_dir)
     if not p.exists():
-        raise FileNotFoundError(f"No cached realized DA for {month}: {p}")
+        raise FileNotFoundError(f"No cached realized DA for {month}/{peak_type}: {p}")
     df = pl.read_parquet(str(p))
     return df.select(
         pl.col("constraint_id").cast(pl.String),
@@ -50,6 +60,7 @@ def load_realized_da(
 
 def fetch_and_cache_month(
     month: str,
+    peak_type: str = "onpeak",
     cache_dir: str = REALIZED_DA_CACHE,
 ) -> Path:
     """Fetch realized DA shadow prices for one month and cache to parquet.
@@ -63,6 +74,8 @@ def fetch_and_cache_month(
     ----------
     month : str
         Month string like "2022-06".
+    peak_type : str
+        "onpeak" or "offpeak".
     cache_dir : str
         Directory to write cached parquet.
 
@@ -79,7 +92,7 @@ def fetch_and_cache_month(
 
     aptools = MisoApTools()
     da_shadow = aptools.tools.get_da_shadow_by_peaktype(
-        st=st, et_ex=et, peak_type="onpeak",
+        st=st, et_ex=et, peak_type=peak_type,
     )
 
     if da_shadow is None or len(da_shadow) == 0:
@@ -102,6 +115,6 @@ def fetch_and_cache_month(
 
     out_dir = Path(cache_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{month}.parquet"
+    out_path = _cache_path(month, peak_type, cache_dir)
     df.write_parquet(str(out_path))
     return out_path

@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import polars as pl
 
 from ml.config import REALIZED_DA_CACHE
-from ml.realized_da import fetch_and_cache_month
+from ml.realized_da import fetch_and_cache_month, _cache_path
 
 
 def mem_mb() -> float:
@@ -50,24 +50,30 @@ def main() -> None:
     import pmodel
     init_ray(extra_modules=[pmodel])
 
-    months = generate_months("2019-06", "2023-05")
-    cache_dir = str(
-        Path(__file__).resolve().parent.parent / REALIZED_DA_CACHE
-    )
-    print(f"[cache_realized_da] {len(months)} months, cache_dir={cache_dir}")
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--peak-type", default="onpeak", choices=["onpeak", "offpeak"])
+    parser.add_argument("--start", default="2019-06")
+    parser.add_argument("--end", default="2025-12")
+    args = parser.parse_args()
+
+    peak_type = args.peak_type
+    months = generate_months(args.start, args.end)
+    cache_dir = REALIZED_DA_CACHE
+    print(f"[cache_realized_da] {len(months)} months, peak_type={peak_type}, cache_dir={cache_dir}")
     print(f"[cache_realized_da] mem={mem_mb():.0f} MB")
 
     cached = 0
     fetched = 0
     for i, month in enumerate(months, 1):
-        parquet_path = Path(cache_dir) / f"{month}.parquet"
+        parquet_path = _cache_path(month, peak_type, cache_dir)
         if parquet_path.exists():
             cached += 1
             print(f"  [{i}/{len(months)}] {month} -- already cached, skipping")
             continue
 
         print(f"  [{i}/{len(months)}] {month} -- fetching ... ", end="", flush=True)
-        out = fetch_and_cache_month(month, cache_dir=cache_dir)
+        out = fetch_and_cache_month(month, peak_type=peak_type, cache_dir=cache_dir)
         df = pl.read_parquet(str(out))
         n_bind = len(df.filter(pl.col("realized_sp") > 0))
         fetched += 1

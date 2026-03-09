@@ -44,6 +44,13 @@ Recommended approach:
 4. Introduce daily/as-of realized DA caches
 5. Move feature engineering from “by month” to “by cutoff”
 
+Upstream evidence from `/research-spice-shadow-price-pred-qianli` supports this direction:
+
+- historical DA is built with an explicit auction cutoff and a `run_at_day`
+- the cutoff month is truncated to the available date, not dropped entirely
+- the cutoff month is **not** naively scaled to a full-month estimate
+- recency/seasonality weighting is applied after truncation
+
 ---
 
 ## What Changes and What Does Not
@@ -257,6 +264,12 @@ Example for `2025-03 / cutoff=2025-02-12`:
 - `binding_days_partial_m1` = number of observed February onpeak days with binding through Feb 12
 - `binding_rate_partial_m1` = `binding_days_partial_m1 / observed_days_partial_m1`
 
+Important rule for v1:
+
+- do **not** multiply these features by a completion factor like `month_days / observed_days`
+- keep the raw partial numerator and denominator
+- if scaling is explored later, add it as a separate experimental feature, not as the only representation
+
 ### C. Weighted as-of recency/frequency features
 
 Optional second-stage features:
@@ -436,6 +449,25 @@ Recommendation:
 
 - start with separate features for interpretability and auditability
 
+### Decision 1b: Should partial `M-1` be completion-scaled?
+
+Recommendation:
+
+- **No** for the first production-safe version
+
+Rationale:
+
+- naive scaling assumes the observed part of `M-1` is representative of the unobserved remainder
+- that assumption is fragile around outages, weather, and congestion bursts
+- the upstream `shadow_price_prediction` repo truncates the cutoff month to `run_at` and then applies designed historical weighting, rather than full-month completion scaling
+
+If needed later, test scaled variants explicitly:
+
+- `realized_sp_partial_m1_scaled`
+- `binding_days_partial_m1_scaled`
+
+but keep the unscaled forms in the feature set for auditability
+
 ### Decision 2: Daily vs hourly raw cache
 
 Options:
@@ -448,6 +480,12 @@ Recommendation:
 - start daily
 - only go finer if there is evidence that same-day timing matters materially
 
+Implementation note from upstream:
+
+- the upstream repo uses a month cutoff plus `run_at_day` and truncates raw DA rows within that month
+- that means our first version should support at least daily filtering up to `cutoff_ts`
+- if submission timing inside the day matters, hourly or publish-time snapshots can be a second-phase extension
+
 ### Decision 3: Whether to include partial `M-1` magnitude
 
 Binary-only partial features are safer initially:
@@ -457,6 +495,26 @@ Binary-only partial features are safer initially:
 - `binding_rate_partial_m1`
 
 Magnitude can be added in stage 2 if it improves signal without instability.
+
+### Decision 4: Whether to mirror upstream historical-DA weighting
+
+Recommendation:
+
+- yes, at least for the first historical DA as-of implementation, mirror the upstream structure before inventing new transforms
+
+What the upstream repo currently does:
+
+- defines `cutoff_month = auction_month - 1 month`
+- truncates DA rows in the cutoff month to `run_at_day`
+- computes `recent_hist_da` from recent months and divides by the number of months included
+- applies a fixed `recent_da_hist_discount = 1.3`
+- computes seasonal features with explicit per-year discounts and month-count normalization
+
+Implication for stage5:
+
+- our `binding_freq_*` family can remain separate and simpler
+- but any new `hist_da`/recent-history magnitude features should be compared directly against this upstream formulation
+- do not assume `generate_stat_fast`-style scaling is required unless we verify that exact path separately
 
 ---
 

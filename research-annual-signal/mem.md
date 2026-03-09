@@ -76,26 +76,25 @@ Denominator is V6.1 universe only — NOT all market DA shadow price.
 6. **No version passes all v0b gates**: Recall@100 L3 tail regression is the blocker.
 
 ### Recommendation
-Use v0b (pure da_rank_value) as primary signal. ML adds at most +3.9% via blending — marginal given complexity. Density components should be removed from annual formula.
+Use score_blend_v7d_a70 (70% ML + 30% v0b) as primary signal — +15.4% VC@20 over v0b on holdout, consistent across all quarters. Fallback to v0b if ML unavailable. Density components should be removed from annual formula.
 
 ---
 
 ## Holdout Results (2025, 4 quarters)
 
-| Metric | v0 (formula) | v1 (ML) | Delta |
-|--------|-------------|---------|-------|
-| VC@20 | 0.1559 | **0.2152** | +38.0% |
-| VC@100 | 0.5784 | 0.5812 | +0.5% |
-| Recall@20 | 0.2500 | **0.3125** | +25.0% |
-| Recall@100 | 0.4675 | 0.4875 | +4.3% |
-| NDCG | 0.5043 | **0.5218** | +3.5% |
-| Spearman | 0.3872 | 0.3906 | +0.9% |
-| Tier0-AP | — | 0.3914 | — |
-| Tier01-AP | — | 0.5443 | — |
+| Metric | v0 (formula) | v0b (pure DA) | v7d (ML) | blend_v7d_a70 |
+|--------|-------------|--------------|----------|---------------|
+| VC@20 | 0.1559 | 0.2177 | 0.2391 | **0.2513** |
+| VC@100 | 0.5784 | **0.6545** | 0.6154 | 0.6194 |
+| Recall@20 | 0.2500 | 0.3125 | 0.3250 | **0.3375** |
+| NDCG | 0.5043 | **0.5321** | 0.5151 | 0.5150 |
+| Spearman | 0.3872 | **0.4019** | 0.3977 | 0.3999 |
 
-- v1 beats v0 on VC@20 (+38%), Recall@20 (+25%), NDCG (+3.5%) on holdout
+- **blend_v7d_a70 beats v0b by +15.4% VC@20** on holdout (stronger than +3.9% on dev)
+- Blend wins all 4 quarters over v0b: aq1 +7.3%, aq2 +5.9%, aq3 +16.3%, aq4 +44.1%
+- v0b beats v0 by +39.6% — density components hurt on holdout too
 - Note: 2025/aq4 has only 76/418 (18.2%) binding — likely partial/incomplete data (Mar-May 2026)
-- Holdout VC@20 (0.215) is ~30% below dev eval (0.307) — expected degradation
+- VC@100 trades off: blend loses ~5% vs v0b (top-k sharpening sacrifices breadth)
 
 ---
 
@@ -128,9 +127,9 @@ Use v0b (pure da_rank_value) as primary signal. ML adds at most +3.9% via blendi
 - Gate recalibration from v0b: no version passes all gates due to Recall@100 tail tradeoff
 - ML rebase (v7a-v7d): tested lean/full features with tiered labels against v0b
 - Blending experiments: score blend, rank blend, RRF — best is score_blend_v7d_a70 (+3.9%)
+- Holdout validation (2025): blend_v7d_a70 = +15.4% VC@20 vs v0b (stronger than dev, wins all 4 quarters)
 
 ### Remaining
-- Test blend_v7d_a70 on holdout (2025) to confirm dev-eval gains hold
 - Consider relaxing Recall@100 tail gate (fundamental top-k vs breadth tradeoff)
 - Communicate finding: annual formula density components should be removed/downweighted
 
@@ -170,6 +169,9 @@ rank_ori = 0.60 * da_rank_value + 0.30 * density_mix_rank_value + 0.10 * density
 - `registry/v7a/`..`v7d/` — ML rebase experiments (lean/full features)
 - `registry/v7_blending/` — Blending experiment results (score/rank/RRF)
 - `registry/v1_holdout/` — v1 holdout (2025) results
+- `registry/v0b_holdout/` — v0b holdout (2025) results
+- `registry/v7d_holdout/` — v7d holdout (2025) results
+- `registry/blend_v7d_a70_holdout/` — blend holdout (2025) results
 - `registry/gates.json` — calibrated from v0
 - `registry/gates_v0b.json` — calibrated from v0b (stricter)
 - `registry/champion.json` — currently v0

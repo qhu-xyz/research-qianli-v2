@@ -311,4 +311,4 @@ See `production-migration/assessment.md`. Key findings:
 - Verify V6.2B/Spice6 backfill uses point-in-time inputs (check pipeline source code)
 - Multi-period extension (f1, f2, f3)
 - Production migration: implement tier assignment + output writer
-- Update champion.json to v10e-lag1
+- Peer audit: `docs/audit-report.md` — standalone report for teammates

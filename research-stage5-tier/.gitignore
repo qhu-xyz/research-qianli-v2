@@ -1,2 +1,6 @@
 # Cached data (large parquets, fetched via Ray)
 data/realized_da/*.parquet
+
+# Python bytecode
+__pycache__/
+*.pyc

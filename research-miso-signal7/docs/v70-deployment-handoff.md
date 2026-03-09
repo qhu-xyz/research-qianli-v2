@@ -92,6 +92,13 @@ Required columns (20):
 
 **Only 3 columns change** for ML slices: rank_ori, rank, tier. Everything else is V6.2B.
 
+**rank_ori semantics change**: In V6.2B, rank_ori is a weighted blend (range ~0-1,
+lower = more binding). In V7.0 ML slices, rank_ori will contain raw LightGBM prediction
+scores (arbitrary range, higher = more binding -- opposite polarity). Downstream code
+(`pmodel/base/ftr22/base.py`) uses `tier`, `rank`, `shadow_price`, and `equipment` but
+does NOT appear to use `rank_ori` directly. This must be confirmed before deployment --
+if any consumer reads rank_ori, the sign flip will silently produce wrong results.
+
 ### Shift factor parquet
 
 Path: `{data_root}/signal_data/miso/sf/{signal_name}/{auction_month}/{period_type}/{class_type}/`
@@ -245,7 +252,8 @@ recent 1-3 months. The preflight typically fetches 0-2 new months.
 ### Safety
 
 - **Locking**: write to temp file, rename atomically. Prevents partial writes if two jobs
-  run concurrently.
+  run concurrently. NOTE: current `fetch_and_cache_month()` in `realized_da.py:119` does a
+  direct `write_parquet()` with no temp+rename -- this must be implemented, not just documented.
 - **Peak type independence**: onpeak = `{month}.parquet`, offpeak = `{month}_offpeak.parquet`.
   Check and fetch each independently.
 - **Centralize logic**: one function `required_realized_da_months(auction_month, ptype, ctype)`
@@ -276,11 +284,21 @@ the month entirely. This is fine for research evaluation but blocks deployment.
 A scoring function that:
 1. Collects training months via `collect_usable_months()` (same as now)
 2. Loads and enriches training data with `load_v62b_month()` + `enrich_df()` (same as now)
-3. Trains LightGBM model (same as now)
-4. Loads target month V6.2B + spice6 **without** requiring realized DA
-5. Enriches target month with binding_freq + formula score (same `enrich_df`)
-6. Scores with trained model
-7. Returns (constraint_ids, raw_scores)
+3. Computes query groups via `compute_query_groups()` (required by `train_ltr_model`)
+4. Trains LightGBM model (same as now)
+5. Loads target month V6.2B + spice6 **without** requiring realized DA
+6. Enriches target month with binding_freq + formula score (same `enrich_df`)
+7. Scores with trained model
+8. Returns (constraint_ids, raw_scores) as aligned pairs -- NOT a bare scores array
+
+**Alignment hazard**: the scoring function loads V6.2B internally via `load_v62b_month`
+(polars DataFrame) while the assembly step (Gap 4) loads V6.2B separately via
+`ConstraintsSignal.load_data()` (pandas DataFrame with string index). Row ordering is
+not guaranteed to match between the two loads. To avoid this:
+- The inference function should return `(constraint_ids, scores)` pairs, and
+- The assembly step should join on constraint_id, not assign positionally.
+- Alternatively, the inference function can accept the already-loaded DataFrame and
+  return scores in the same row order, avoiding the double load entirely.
 
 The key change: `load_v62b_month()` currently always joins realized DA as ground truth
 for the target month. For inference, we need to skip that join. Options:
@@ -295,6 +313,11 @@ Key functions in `research-stage5-tier/scripts/run_v10e_lagged.py`:
 - `compute_bf(cids, month, bs, lookback)` -- binding frequency for one lookback window
 - `enrich_df(df, month, bs, lag, blend_weights)` -- adds bf_1/3/6/12/15 + v7_formula_score
 - `run_variant(label, eval_months, bs, lag, class_type, period_type)` -- full loop
+
+Key functions in `research-stage5-tier/ml/features.py`:
+- `prepare_features(df, cfg)` -- extract feature matrix from DataFrame
+- `compute_query_groups(df)` -- compute LTR query group sizes from query_month column
+  (REQUIRED by `train_ltr_model`, must not be omitted)
 
 ### Effort
 
@@ -453,16 +476,20 @@ The blend weights vary per slice:
 ### LightGBM config (all slices)
 
 ```
-objective:     lambdarank
-label_mode:    tiered (4 levels: 0=non-binding, 1/2/3=binding tiers)
-n_estimators:  100
-learning_rate: 0.05
-num_leaves:    31
-num_threads:   4   (CRITICAL: container has 64 CPUs, LightGBM deadlocks with auto-detect)
-subsample:     0.8
+objective:        lambdarank
+label_mode:       tiered (4 levels per train.py:37-65:
+                    0=non-binding (realized_sp==0, ~88% of rows),
+                    1=binding bottom 50%, 2=binding top 50%, 3=binding top 20%)
+n_estimators:     100
+learning_rate:    0.05
+num_leaves:       31
+num_threads:      4       (CRITICAL: container has 64 CPUs, LightGBM deadlocks with auto-detect)
+subsample:        0.8
 colsample_bytree: 0.8
-min_data_in_leaf:  25
-seed:          42
+min_data_in_leaf: 25      (config field: min_child_weight, mapped in train.py:102)
+reg_alpha:        1.0     (L1 regularization, LTRConfig default)
+reg_lambda:       1.0     (L2 regularization, LTRConfig default)
+seed:             42      (hardcoded in train.py:110, not in LTRConfig)
 ```
 
 ### Training config per slice
@@ -559,15 +586,24 @@ def generate_v70_signal(
             ).load_data(pd.Timestamp(auction_month))
 
             if ptype in ml_ptypes:
-                # ML scoring: train on history, score target
-                scores = score_ml_inference(
+                # ML scoring: train on history, score target.
+                # Returns (constraint_ids, scores) to avoid alignment hazard --
+                # load_v62b_month (polars) and ConstraintsSignal.load_data (pandas)
+                # may return rows in different order.
+                cids, scores = score_ml_inference(
                     auction_month, ptype, ctype, bs[ctype]
                 )
                 rank, tier = compute_rank_tier(scores)
 
-                v62b_df["rank_ori"] = scores
-                v62b_df["rank"] = rank
-                v62b_df["tier"] = tier
+                # Join on constraint_id, NOT positional assignment
+                score_df = pd.DataFrame({
+                    "constraint_id": cids, "_rank_ori": scores,
+                    "_rank": rank, "_tier": tier,
+                }).set_index("constraint_id")
+                v62b_cids = v62b_df.index.str.split("|").str[0]
+                v62b_df["rank_ori"] = score_df.loc[v62b_cids, "_rank_ori"].values
+                v62b_df["rank"] = score_df.loc[v62b_cids, "_rank"].values
+                v62b_df["tier"] = score_df.loc[v62b_cids, "_tier"].values
 
                 # SO_MW_Transfer exception
                 if "branch_name" in v62b_df.columns:

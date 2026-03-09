@@ -222,9 +222,13 @@ any ML work, and if it fails (e.g., API unreachable), the job stops cleanly.
 For auction month M, period type P:
 
 - **Training labels**: each training month T (from `collect_usable_months(M, P)`) needs
-  realized DA for `delivery_month(T, P)`.
-- **Binding frequency**: bf features use realized DA for all months in the lookback window.
-  The bf cutoff is `M - (period_offset(P) + 1)`. Lookback goes up to 15 months before cutoff.
+  realized DA for `delivery_month(T, P)`. This is usually the binding constraint on the
+  latest required month.
+- **Binding frequency**: bf features use realized DA for months in the lookback window.
+  The bf cutoff is `prev_month(auction_month_of_row)` -- i.e., `BF_LAG=1`, keyed on
+  auction month, same for both f0 and f1 (see Temporal Lag section). Lookback goes up to
+  15 months before cutoff. In practice, training label requirements already cover these
+  months, so bf does not independently extend the required set.
 
 In practice, the binding set cache covers 2019-06+, so the main gap is always the most
 recent 1-3 months. The preflight typically fetches 0-2 new months.
@@ -341,9 +345,17 @@ of actual V6.2B outputs during implementation -- if V6.2B uses a different bucke
 method (e.g., pandas `qcut` which handles edge cases differently), the tier formula
 must be adjusted to match.
 
+### Status
+
+**Open until validated.** The rank formula (`dense_rank / K`) is verified against V6.2B.
+The tier formula (`floor(rank * 5)`) is a reasonable default but has NOT been validated
+against actual V6.2B tier outputs yet. Before implementation ships, run a parity check:
+load a real V6.2B month, recompute tier from its `rank` column using this formula, and
+compare against V6.2B's `tier` column. If they differ, adjust the formula to match.
+
 ### Effort
 
-Small (~15 lines of code, but requires validation against V6.2B tier outputs).
+Small (~15 lines of code, plus one parity check against V6.2B).
 
 ---
 
@@ -396,9 +408,13 @@ functionally equivalent to old `prob_exceed_110` (Spearman = 0.9994).
 
 ## Not a Gap: Speed
 
-~2.5s for all 4 ML slices (f0/f1 x onpeak/offpeak) per auction month. This includes
-data loading, training, and scoring. After signal generation, consumers just read
-parquets -- zero ML at consumption time.
+In an observed benchmark run (2026-01, all 4 slices), total wall time was ~2.5s for
+train + score across f0/f1 x onpeak/offpeak. Individual slices ranged from ~0.4-0.8s.
+This is with the LightGBM backend (`num_threads=4`); earlier XGBoost runs were much
+slower (~30-70s per slice). Actual deployment times may vary with data size and I/O
+conditions -- treat 2.5s as an indicative estimate, not a guarantee.
+
+After signal generation, consumers just read parquets -- zero ML at consumption time.
 
 ---
 

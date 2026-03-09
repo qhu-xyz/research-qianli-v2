@@ -1,0 +1,12 @@
+{
+  "method": "optimized_blend",
+  "formula": "-(0.8*da_rank_value + 0.0*density_mix_rank_value + 0.2*density_ori_rank_value)",
+  "ground_truth": "realized_da (abs sum of DA shadow prices, offpeak)",
+  "features_used": [
+    "da_rank_value",
+    "density_mix_rank_value",
+    "density_ori_rank_value"
+  ],
+  "search": "grid_step_0.05",
+  "optimized_on": "mean VC@20 over dev months"
+}

@@ -94,7 +94,11 @@ def prev_month(m: str) -> str:
 
 
 def enrich_df(df: pl.DataFrame, month: str, bs: dict[str, set[str]], lag: int = 1) -> pl.DataFrame:
-    """Add features. lag=1 means bf uses months < prev_month(month), i.e., through M-2."""
+    """Add features. lag=1 means bf cutoff = prev_month(month), i.e., through M-2.
+
+    This lag should ALWAYS be 1 (decision-time cutoff). The training window shift
+    (which rows to include) is handled separately by the caller.
+    """
     # Compute the cutoff: for lag=1, bf sees months strictly before M-1
     cutoff = month
     for _ in range(lag):
@@ -161,18 +165,20 @@ def run_variant(
         test_df = load_v62b_month(m, "f0", class_type)
         test_df = test_df.with_columns(pl.lit(m).alias("query_month"))
 
-        # Enrich training months — each gets bf with lag
+        # Enrich training months — bf always uses lag=1 (decision-time cutoff)
+        # Row inclusion is controlled by the training window (shifted by `lag`)
+        BF_LAG = 1  # binding_freq cutoff = decision timing, always 1
         parts = []
         for tm in train_month_strs:
             part = train_df.filter(pl.col("query_month") == tm)
             if len(part) > 0:
-                part = enrich_df(part, tm, bs, lag=lag)
+                part = enrich_df(part, tm, bs, lag=BF_LAG)
                 parts.append(part)
         if not parts:
             print(f"  {m}: SKIP (no training data)")
             continue
         train_df = pl.concat(parts)
-        test_df = enrich_df(test_df, m, bs, lag=lag)
+        test_df = enrich_df(test_df, m, bs, lag=BF_LAG)
 
         train_df = train_df.sort("query_month")
         X_train, _ = prepare_features(train_df, cfg.ltr)

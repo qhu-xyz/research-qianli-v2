@@ -24,9 +24,18 @@ def value_capture_at_k(actual: np.ndarray, scores: np.ndarray, k: int) -> float:
 
 
 def recall_at_k(actual: np.ndarray, scores: np.ndarray, k: int) -> float:
-    """Of the true top-k by actual value, how many are in model's top-k."""
+    """Of the true top-k by actual value, how many are in model's top-k.
+
+    When fewer than k rows have positive actual value, the true set is
+    capped to only positive rows (avoids arbitrary tie-breaking among zeros).
+    """
     k = min(k, len(scores))
-    true_top_k = set(np.argsort(actual)[::-1][:k].tolist())
+    sorted_idx = np.argsort(actual)[::-1]
+    n_positive = int((actual > 0).sum())
+    effective_k = min(k, n_positive)
+    if effective_k == 0:
+        return 0.0
+    true_top_k = set(sorted_idx[:effective_k].tolist())
     pred_top_k = set(np.argsort(scores)[::-1][:k].tolist())
     return len(true_top_k & pred_top_k) / k if k > 0 else 0.0
 

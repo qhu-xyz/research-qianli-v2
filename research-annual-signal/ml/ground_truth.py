@@ -26,29 +26,45 @@ from ml.config import get_market_months, SPICE_DATA_BASE
 # Use absolute path to avoid cwd issues
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "ground_truth"
 
-# Lazy-loaded constraint_id -> branch_name mapping
-_CID_TO_BRANCH: pl.DataFrame | None = None
+# Cached partition-filtered bridge tables: (auction_month, period_type) -> DataFrame
+_CID_TO_BRANCH_CACHE: dict[tuple[str, str], pl.DataFrame] = {}
 
 
 def mem_mb() -> float:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 
-def _load_cid_to_branch() -> pl.DataFrame:
-    """Load constraint_id -> branch_name mapping from MISO_SPICE_CONSTRAINT_INFO.
+def _load_cid_to_branch(
+    auction_month: str,
+    period_type: str,
+) -> pl.DataFrame:
+    """Load constraint_id -> branch_name mapping filtered to target partition.
 
-    Uses ALL entries (not filtered by auction_month) to maximize coverage,
-    since DA shadow constraint_ids may exist in any partition.
-    Returns unique (constraint_id, branch_name) pairs.
+    Filters MISO_SPICE_CONSTRAINT_INFO to (auction_type='annual', auction_month,
+    period_type, class_type='onpeak') to avoid cross-partition fan-out where
+    a constraint_id maps to different branch_names in different partitions.
+
+    Returns unique (constraint_id, branch_name) pairs for the target partition.
     """
-    global _CID_TO_BRANCH
-    if _CID_TO_BRANCH is not None:
-        return _CID_TO_BRANCH
+    cache_key = (auction_month, period_type)
+    if cache_key in _CID_TO_BRANCH_CACHE:
+        return _CID_TO_BRANCH_CACHE[cache_key]
     info_path = Path(SPICE_DATA_BASE) / "MISO_SPICE_CONSTRAINT_INFO.parquet"
-    info = pl.read_parquet(str(info_path), columns=["constraint_id", "branch_name"])
-    _CID_TO_BRANCH = info.unique()
-    print(f"[ground_truth] loaded constraint_info mapping: {len(_CID_TO_BRANCH)} entries")
-    return _CID_TO_BRANCH
+    info = (
+        pl.scan_parquet(str(info_path))
+        .filter(
+            (pl.col("auction_type") == "annual")
+            & (pl.col("auction_month") == auction_month)
+            & (pl.col("period_type") == period_type)
+            & (pl.col("class_type") == "onpeak")
+        )
+        .select(["constraint_id", "branch_name"])
+        .collect()
+        .unique()
+    )
+    _CID_TO_BRANCH_CACHE[cache_key] = info
+    print(f"[ground_truth] loaded constraint_info mapping ({auction_month}/{period_type}): {len(info)} entries")
+    return info
 
 
 def fetch_realized_da_quarter(
@@ -90,8 +106,8 @@ def fetch_realized_da_quarter(
     ).filter(pl.col("realized_shadow_price") > 0)
     per_cid = per_cid.with_columns(pl.col("constraint_id").cast(pl.Utf8))
 
-    # Step 2: Map DA constraint_id -> branch_name via constraint_info
-    cid_to_branch = _load_cid_to_branch()
+    # Step 2: Map DA constraint_id -> branch_name via partition-filtered constraint_info
+    cid_to_branch = _load_cid_to_branch(planning_year, aq_round)
     mapped = per_cid.join(cid_to_branch, on="constraint_id", how="left")
     mapped = mapped.filter(pl.col("branch_name").is_not_null())
 

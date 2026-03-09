@@ -47,13 +47,25 @@ def load_spice6_density(
     if not base.exists():
         return pl.DataFrame()
 
-    # Load score_df from all outage dates
+    # Load score data from all outage dates.
+    # Two schemas exist:
+    #   - score_df.parquet (through 2025-12): columns 110, 105, 100, ..., 60
+    #   - score.parquet (from 2026-01+): single "score" column (≈ prob_exceed_110, Spearman=0.9994)
     score_dfs = []
     limit_dfs = []
+    use_legacy_schema = None  # will detect from first file found
+
     for od_dir in sorted(base.iterdir()):
         if not od_dir.name.startswith("outage_date="):
             continue
         score_path = od_dir / "score_df.parquet"
+        if score_path.exists():
+            if use_legacy_schema is None:
+                use_legacy_schema = True
+        else:
+            score_path = od_dir / "score.parquet"
+            if use_legacy_schema is None:
+                use_legacy_schema = False
         limit_path = od_dir / "limit.parquet"
         if score_path.exists():
             score_dfs.append(pl.read_parquet(score_path))
@@ -66,13 +78,23 @@ def load_spice6_density(
     all_scores = pl.concat(score_dfs)
 
     # Aggregate across outage dates: mean per (constraint_id, flow_direction)
-    density = all_scores.group_by(["constraint_id", "flow_direction"]).agg([
-        pl.col("110").mean().alias("prob_exceed_110"),
-        pl.col("100").mean().alias("prob_exceed_100"),
-        pl.col("90").mean().alias("prob_exceed_90"),
-        pl.col("85").mean().alias("prob_exceed_85"),
-        pl.col("80").mean().alias("prob_exceed_80"),
-    ])
+    if use_legacy_schema:
+        # Legacy: per-threshold exceedance columns
+        density = all_scores.group_by(["constraint_id", "flow_direction"]).agg([
+            pl.col("110").mean().alias("prob_exceed_110"),
+            pl.col("100").mean().alias("prob_exceed_100"),
+            pl.col("90").mean().alias("prob_exceed_90"),
+            pl.col("85").mean().alias("prob_exceed_85"),
+            pl.col("80").mean().alias("prob_exceed_80"),
+        ])
+    else:
+        # New schema: single score ≈ prob_exceed_110 (Spearman=0.9994)
+        density = all_scores.group_by(["constraint_id", "flow_direction"]).agg([
+            pl.col("score").mean().alias("prob_exceed_110"),
+        ])
+        # Fill missing threshold columns with 0 (not used by v10e-lag1 features)
+        for col in ["prob_exceed_100", "prob_exceed_90", "prob_exceed_85", "prob_exceed_80"]:
+            density = density.with_columns(pl.lit(0.0).alias(col))
 
     # Aggregate constraint_limit across outage dates
     if limit_dfs:

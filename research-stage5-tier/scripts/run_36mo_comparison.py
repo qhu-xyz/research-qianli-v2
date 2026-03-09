@@ -1,7 +1,11 @@
-"""Run v0 formula + v5/v6a/v6b/v6c on 24 extra months, then combine with existing 12.
+"""DEPRECATED: Results archived to archive/registry/. Superseded by v10e-lag1.
 
+This script used flat registry paths (registry/{version_id}/) which no longer exist.
+Use `python scripts/run_v10e_lagged.py --ptype f0 --class-type onpeak` instead.
+
+Original description:
+Run v0 formula + v5/v6a/v6b/v6c on 24 extra months, then combine with existing 12.
 Produces a 36-month comprehensive comparison table.
-Expected time: ~15 min (5 variants x 24 months x ~8s/month, parallel 4 workers).
 """
 import sys
 import gc

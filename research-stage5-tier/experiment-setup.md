@@ -67,17 +67,20 @@ Spearman(V6.2B_formula, realized_DA)      = +0.2045  # correct evaluation (12-mo
 - **Monotone constraints matter**: flow features +1, rank features -1, prob_exceed +1
 - **Reusable code**: see Section 12
 
-### WARNING: Registry State Is Corrupted
+### WARNING: Registry State Was Corrupted (Now Fixed)
 
-The entire `registry/` directory contains results from the circular evaluation:
-- `registry/v0/metrics.json` — circular v0 (VC@20~0.50, Spearman~0.91). WRONG.
-- `registry/gates.json` — gates calibrated from circular v0 (Spearman floor=0.82). UNUSABLE.
-- `registry/v5/` through `registry/v9_screen/` — all invalid (trained/evaluated against shadow_price_da).
-- `registry/champion.json` — points to circular v0.
+The old flat `registry/` directory contained results from the circular evaluation.
+These have been moved to `archive/registry/` and are no longer used.
 
-**Action:** Before running any `compare.py` gate checks, you MUST either:
-1. Delete the registry and rebuild from correct v0, or
-2. Rewrite `scripts/run_v0_formula_baseline.py` to use realized DA, re-run it, and let it overwrite gates.json.
+The registry is now hierarchical: `registry/{period_type}/{class_type}/{version_id}/`.
+Each (period_type, class_type) slice has its own `gates.json` and `champion.json`.
+Use `ml.registry_paths` helpers to construct paths — never hardcode.
+
+Current state:
+- `registry/f0/onpeak/v0/metrics.json` — correct v0 (realized DA ground truth)
+- `registry/f0/onpeak/gates.json` — gates calibrated from correct v0
+- `registry/f0/onpeak/champion.json` — points to v10e-lag1
+- `archive/registry/` — legacy experiments (v1-v10d, circular evaluation results)
 
 ---
 
@@ -489,9 +492,9 @@ Only after v1-v3 established. Ideas:
 | L2 Tail | `count(months < v0_min) <= 1` | No catastrophic months |
 | L3 Bot2 | `bot2_mean(new) >= bot2_mean(v0) - 0.02` | Worst months don't regress |
 
-**WARNING: `registry/gates.json` is from the CIRCULAR v0 and is UNUSABLE.** It has Spearman floor=0.82 but the correct v0 Spearman is 0.20. If you run `compare.py` against these gates, everything will fail. You MUST recalibrate gates from the correct v0 numbers (Section 8) before using the gate system.
-
-Similarly, `registry/v0/metrics.json` contains the circular v0 metrics (VC@20~0.50, Spearman~0.91). These are WRONG. The correct v0 metrics are in Section 8 of this document.
+**NOTE:** The registry has been reorganized into `registry/{period_type}/{class_type}/{version_id}/`.
+Gates and champion are now at `registry/f0/onpeak/gates.json` and `registry/f0/onpeak/champion.json`,
+calibrated from the correct v0 (realized DA ground truth). Legacy circular results are in `archive/registry/`.
 
 ### Eval Months
 

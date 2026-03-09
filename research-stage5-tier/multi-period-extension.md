@@ -213,7 +213,12 @@ Complete the f0 pipeline end-to-end. This is the baseline.
 
 ### Phase 2: Parameterize for Period Type
 
-Changes needed to generalize from f0 to fN:
+**Registry structure is already in place.** Results are stored at `registry/{period_type}/{class_type}/{version_id}/`,
+with per-slice `gates.json` and `champion.json`. Use `ml.registry_paths` helpers (e.g., `registry_root()`,
+`holdout_root()`) to construct paths — never hardcode. This means adding a new period type (e.g., f1)
+just requires running experiments that write to `registry/f1/onpeak/`.
+
+Remaining code changes needed to generalize from f0 to fN:
 
 | Module | Change |
 |---|---|

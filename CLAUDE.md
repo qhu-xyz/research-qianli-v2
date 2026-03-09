@@ -90,7 +90,7 @@ This means: if your training or features use realized DA data, shift everything 
 
 **Rule**: when building any realized-data-derived feature, always ask: "at the moment we submit this signal, is this data actually available?" If unsure, check the auction calendar.
 
-See `research-stage5-tier/CLAUDE.md` and `research-stage5-tier/registry/v10e-lag1/NOTES.md` for the full analysis.
+See `research-stage5-tier/CLAUDE.md` and `research-stage5-tier/registry/f0/onpeak/v10e-lag1/NOTES.md` for the full analysis.
 
 ## Versioned Experiments (MANDATORY)
 
@@ -101,6 +101,11 @@ When implementing a new version (e.g., bands v2, baseline v4):
 4. **Update NOTES.md** with actual results (not placeholders)
 5. **Update mem.md** with actual numbers
 6. Deliver a complete, tested version — not a stub.
+
+### Registry Layout
+Results: `registry/{period_type}/{class_type}/{version_id}/metrics.json`
+Each slice has its own `gates.json` and `champion.json`.
+Use `ml.registry_paths` — never hardcode paths.
 
 ## Virtual Environment
 

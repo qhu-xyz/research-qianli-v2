@@ -484,10 +484,10 @@ Runs the 19-point audit checking ground truth, joins, labels, and score directio
 
 | File | Purpose |
 |------|---------|
-| `registry/v10e-lag1/` | Champion: config, metrics, detailed notes |
-| `registry/v10e-lag1/NOTES.md` | Full leakage analysis with concrete examples |
-| `registry/v0/` | Formula baseline metrics |
-| `holdout/v10e-lag1/metrics.json` | Holdout results (immutable) |
+| `registry/f0/onpeak/v10e-lag1/` | Champion: config, metrics, detailed notes |
+| `registry/f0/onpeak/v10e-lag1/NOTES.md` | Full leakage analysis with concrete examples |
+| `registry/f0/onpeak/v0/` | Formula baseline metrics |
+| `holdout/f0/onpeak/v10e-lag1/metrics.json` | Holdout results (immutable) |
 | `audit.md` | 19-point pipeline audit (pre-binding-freq) |
 | `experiment-setup.md` | Glossary, problem statement, data paths |
 | `mem.md` | Working memory with version history and learnings |

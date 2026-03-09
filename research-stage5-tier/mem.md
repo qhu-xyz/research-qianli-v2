@@ -294,12 +294,15 @@ See `production-migration/assessment.md`. Key findings:
 
 ## File Index
 
-- `registry/v10e-lag1/` — Production-safe champion: metrics, config, notes
-- `registry/v10e/` — Leaky version (reference only, do not use for estimates)
-- `registry/v9/` — First binding_freq version (leaky)
-- `registry/v0/` — Formula baseline
-- `holdout/v10e-lag1/` — Holdout results (immutable)
-- `holdout/v10e/` — Leaky holdout (reference only)
+- `registry/f0/onpeak/v10e-lag1/` — Production-safe champion: metrics, config, notes
+- `registry/f0/onpeak/v10e/` — Leaky version (reference only, do not use for estimates)
+- `registry/f0/onpeak/v9/` — First binding_freq version (leaky)
+- `registry/f0/onpeak/v0/` — Formula baseline
+- `registry/f0/onpeak/gates.json` — Gate thresholds for f0/onpeak
+- `registry/f0/onpeak/champion.json` — Current champion pointer
+- `holdout/f0/onpeak/v10e-lag1/` — Holdout results (immutable)
+- `holdout/f0/onpeak/v10e/` — Leaky holdout (reference only)
+- `archive/registry/` — Legacy experiments (v1-v10d)
 - `scripts/run_v10e_lagged.py` — Production-safe experiment script
 - `scripts/run_v10_variants.py` — v10c-v10g feature search
 - `scripts/run_v9_binding_freq.py` — Original v9 experiment (leaky)

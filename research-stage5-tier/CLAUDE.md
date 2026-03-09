@@ -28,7 +28,20 @@ leakage and it inflated v9-v10e results by 6-20%. The correct version is v10e-la
 for production. You must shift: `load_train_val_test(prev_month(eval_month), 8, 0)` and
 discard the test split, then load test month separately.
 
-See `registry/v10e-lag1/NOTES.md` for the full audit with concrete examples.
+See `registry/f0/onpeak/v10e-lag1/NOTES.md` for the full audit with concrete examples.
+
+## Registry Structure (MANDATORY)
+
+Results are organized hierarchically by period_type and class_type:
+
+```
+registry/{period_type}/{class_type}/{version_id}/metrics.json
+holdout/{period_type}/{class_type}/{version_id}/metrics.json
+```
+
+Each (period_type, class_type) slice has its own `gates.json` and `champion.json`.
+Use `ml.registry_paths` helpers to construct paths — never hardcode.
+Legacy experiments (v1-v10d) are in `archive/registry/`.
 
 ## Experiment Runs (CRITICAL)
 

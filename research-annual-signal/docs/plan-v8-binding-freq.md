@@ -147,7 +147,7 @@ Where:
 | bf_12 | 12 months | Full year cycle — captures seasonality |
 | bf_24 | 24 months | Two-year trend — structural vs transient |
 
-### Coverage (from preliminary analysis)
+### Coverage (from preliminary analysis, single quarter 2024-06/aq1)
 
 | Window | V6.1 constraints with bf > 0 |
 |--------|------------------------------|
@@ -158,6 +158,81 @@ Where:
 | bf_24 | 80.4% |
 
 Constraints with bf=0 are informative: they haven't bound recently, so they're less likely to bind in the future.
+
+---
+
+## Preliminary Validation (Evidence)
+
+All statistics below were computed before writing this plan, to validate that the approach is worth implementing. The methodology:
+1. Load realized DA from stage5-tier cache (`data/realized_da/{month}.parquet`)
+2. Map DA `constraint_id` → V6.1 `branch_name` via partition-filtered MISO_SPICE_CONSTRAINT_INFO bridge
+3. Build monthly binding sets `{month: set(branch_name)}` using months `< YYYY-04` (April cutoff)
+4. Compute bf_12 per constraint and correlate with realized_shadow_price (ground truth)
+
+### Constraint Tracking Coverage (Q: Can We Find Annual Constraints in Monthly Data?)
+
+For each V6.1 annual constraint, we check whether its `branch_name` appears in the realized DA monthly data via the bridge table. "Tracked (ever)" means the branch appeared as binding in any month. "Tracked (12mo)" means it appeared in at least one of the 12 months before cutoff.
+
+| Group | V6.1 constraints | Tracked (ever) | % | Tracked (12mo) | % |
+|-------|:---:|:---:|:---:|:---:|:---:|
+| 2022-06/aq1 | 273 | 228 | 83.5% | 168 | 61.5% |
+| 2022-06/aq2 | 248 | 215 | 86.7% | 172 | 69.4% |
+| 2022-06/aq3 | 231 | 186 | 80.5% | 150 | 64.9% |
+| 2022-06/aq4 | 310 | 262 | 84.5% | 197 | 63.5% |
+| 2023-06/aq1 | 235 | 208 | 88.5% | 154 | 65.5% |
+| 2023-06/aq2 | 323 | 295 | 91.3% | 238 | 73.7% |
+| 2023-06/aq3 | 391 | 350 | 89.5% | 279 | 71.4% |
+| 2023-06/aq4 | 357 | 314 | 88.0% | 255 | 71.4% |
+| 2024-06/aq1 | 363 | 329 | 90.6% | 241 | 66.4% |
+| 2024-06/aq2 | 388 | 352 | 90.7% | 261 | 67.3% |
+| 2024-06/aq3 | 270 | 241 | 89.3% | 188 | 69.6% |
+| 2024-06/aq4 | 368 | 337 | 91.6% | 266 | 72.3% |
+| 2025-06/aq1 | 333 | 301 | 90.4% | 228 | 68.5% |
+| 2025-06/aq2 | 315 | 296 | 94.0% | 234 | 74.3% |
+| 2025-06/aq3 | 244 | 226 | 92.6% | 162 | 66.4% |
+| 2025-06/aq4 | 321 | 299 | 93.1% | 238 | 74.1% |
+
+**Summary:** ~89% of annual constraints are trackable via the bridge (ever bound in any month). ~68% have been binding in the last 12 months. The remaining ~11% unmapped constraints get bf=0, which is itself a valid signal (never bound in DA = unlikely to bind in future).
+
+### Predictive Power: bf_12 vs shadow_price_da (Q: Does It Actually Help?)
+
+Spearman correlation of each feature with realized_shadow_price (ground truth), per quarter:
+
+| Group | N | Delivery | Gap | corr(sp_da) | corr(bf_12) | bf wins? |
+|-------|:---:|:---:|:---:|:---:|:---:|:---:|
+| 2022-06/aq1 | 325 | Jun-Aug | 3mo | 0.3541 | 0.4483 | YES |
+| 2022-06/aq2 | 302 | Sep-Nov | 6mo | 0.4169 | 0.4963 | YES |
+| 2022-06/aq3 | 262 | Dec-Feb | 9mo | 0.2591 | 0.3677 | YES |
+| 2022-06/aq4 | 380 | Mar-May | 12mo | 0.3574 | 0.4640 | YES |
+| 2023-06/aq1 | 276 | Jun-Aug | 3mo | 0.3721 | 0.4693 | YES |
+| 2023-06/aq2 | 410 | Sep-Nov | 6mo | 0.3582 | 0.5161 | YES |
+| 2023-06/aq3 | 504 | Dec-Feb | 9mo | 0.4171 | 0.4356 | YES |
+| 2023-06/aq4 | 459 | Mar-May | 12mo | 0.3503 | 0.4573 | YES |
+| 2024-06/aq1 | 425 | Jun-Aug | 3mo | 0.4138 | 0.6011 | YES |
+| 2024-06/aq2 | 483 | Sep-Nov | 6mo | 0.4079 | 0.5442 | YES |
+| 2024-06/aq3 | 315 | Dec-Feb | 9mo | 0.3976 | 0.5230 | YES |
+| 2024-06/aq4 | 476 | Mar-May | 12mo | 0.3095 | 0.5711 | YES |
+
+**bf_12 wins 12/12 quarters.** Mean Spearman: sp_da = 0.3678, bf_12 = 0.4912 (+33.5%).
+
+### Per-Quarter Summary (Q: Does the Signal Decay for Later Quarters?)
+
+The annual auction is submitted once (~April) for all 4 quarters. The "gap" column shows how far the binding data (cutoff = March) is from the first delivery month.
+
+| Quarter | Delivery | Gap from cutoff | Mean corr(sp_da) | Mean corr(bf_12) | bf_12 lift |
+|---------|----------|:---:|:---:|:---:|:---:|
+| aq1 | Jun-Aug | 3 months | 0.3800 | 0.5062 | **+33.2%** |
+| aq2 | Sep-Nov | 6 months | 0.3943 | 0.5189 | **+31.6%** |
+| aq3 | Dec-Feb | 9 months | 0.3579 | 0.4421 | **+23.5%** |
+| aq4 | Mar-May | 12 months | 0.3391 | 0.4975 | **+46.7%** |
+
+**Key finding:** bf_12 helps for ALL quarters, not just aq1. The lift is actually **largest for aq4** (+46.7%). This makes sense: aq4 delivery is Mar-May (closest to the cutoff month of March), so the most recent binding data is directly relevant to aq4's delivery period. shadow_price_da (a 60-month historical average) doesn't capture recent structural changes, but bf_12 does.
+
+aq3 shows the smallest lift (+23.5%) because Dec-Feb delivery is 9 months out and driven by winter-specific congestion patterns that may not appear in the April-March lookback. But bf_12 still beats sp_da in all 3 years for aq3.
+
+### Complementary Signal (Q: Does bf Add Info Beyond shadow_price_da?)
+
+For 2024-06/aq1: 18 constraints had high bf_12 (>0.3) but near-zero shadow_price_da (<1.0). Of those, **88.9% actually bound** — vs 44.5% base rate. This confirms bf captures recent binding patterns that the 60-month historical average misses entirely.
 
 ---
 

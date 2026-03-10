@@ -75,11 +75,20 @@ def generate_v70_signal(
             ).load_data(ts)
 
             if ptype in ML_PTYPES:
+                # Extract V6.2B rank_ori per constraint_id (before overwrite)
+                v62b_cids = v62b_df.index.str.split("|").str[0]
+                v62b_rank_map = pd.Series(
+                    v62b_df["rank_ori"].values, index=v62b_cids
+                ).groupby(level=0).first()
+
                 # ML scoring
                 cids, scores = score_ml_inference(
                     auction_month, ptype, ctype, bs[ctype]
                 )
-                rank, tier = compute_rank_tier(scores)
+
+                # V6.2B rank_ori as tie-breaker (lower = more binding)
+                v62b_rank_for_cids = v62b_rank_map.reindex(cids).fillna(1.0).values
+                rank, tier = compute_rank_tier(scores, v62b_rank_for_cids)
 
                 # Join on constraint_id, NOT positional assignment
                 score_df = pd.DataFrame({
@@ -89,8 +98,6 @@ def generate_v70_signal(
                     "_tier": tier,
                 }).set_index("constraint_id")
 
-                # Extract constraint_id from composite index "{cid}|{fd}|spice"
-                v62b_cids = v62b_df.index.str.split("|").str[0]
                 v62b_df["rank_ori"] = score_df.loc[v62b_cids.values, "_rank_ori"].values
                 v62b_df["rank"] = score_df.loc[v62b_cids.values, "_rank"].values
                 v62b_df["tier"] = score_df.loc[v62b_cids.values, "_tier"].values

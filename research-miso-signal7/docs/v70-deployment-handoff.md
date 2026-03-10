@@ -16,7 +16,7 @@ The current production signal is **V6.2B**, which uses a formula:
 ```
 rank_ori = 0.60 * da_rank_value + 0.30 * density_mix_rank_value + 0.10 * density_ori_rank_value
 rank     = dense_rank(rank_ori) / K          # K = number of unique dense ranks, NOT row count n
-tier     = floor(rank * 5), clamped to 0..4  # quintile bucket
+tier     = ceil(rank * 5) - 1, clamped to 0..4  # right-inclusive quintile bucket
 ```
 
 - `da_rank_value`: historical DA shadow price percentile (60-month lookback, lower = more binding)
@@ -331,54 +331,48 @@ Small. Extract train+predict from `run_variant()`, add GT-optional loading.
 
 Not implemented. ML produces raw scores (higher = more binding), not rank/tier.
 
-### What's needed
+### Design choice: row-percentile tiering with deterministic tie-breaking
+
+V6.2B uses `dense_rank_normalized` (divides by K = number of unique values). This
+works for V6.2B because its formula produces nearly all unique scores (K ≈ n), giving
+even ~20% quintile tiers. But ML with tiered labels produces ~55% unique scores (K ≈ 267
+for n ≈ 489), causing uneven tiers: tier 4 holds 45-65% of constraints.
+
+**V7.0 instead uses row-percentile ranking with deterministic tie-breaking:**
+
+1. Sort constraints by ML score descending (higher = more binding)
+2. Break ties with V6.2B rank_ori ascending (lower = more binding)
+3. Final tie-break: original index ascending
+4. `rank = row_position / n` (row-percentile, all ranks unique)
+5. `tier = ceil(rank * 5) - 1` (guarantees ~20% per tier)
+
+**Rationale:**
+- Raw ML score is the real model output; tier is downstream packaging
+- If two constraints have identical ML score, the model says "I can't distinguish them"
+- V6.2B rank_ori is a stable, informative secondary signal
+- Downstream consumers need usable, stable ~20% bucket sizes
+- Dense-rank/K semantics under heavy ties produce operationally unstable tier sizes
 
 ```python
-from ml.v62b_formula import dense_rank_normalized
-
-def compute_rank_tier(scores: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Convert raw ML scores to rank (0-1) and tier (0-4).
-
-    Higher ML score = more binding = lower rank value (matches V6.2B convention
-    where lower rank = more binding).
-
-    Rank normalization: divide by K (number of unique dense ranks), NOT by n (row count).
-    This matches the verified V6.2B behavior in v62b_formula.py:dense_rank_normalized().
-    When scores tie (K < n), rank values are in (0, 1] but not uniformly spaced at 1/n.
-    """
-    # Negate scores: dense_rank gives 1..K for sorted values,
-    # and we want lower rank for higher scores
-    rank = dense_rank_normalized(-scores)  # returns dense_rank / K, values in (0, 1]
-
-    # tier = quintile bucket. Tier 0 = lowest rank values = most binding.
-    # floor(rank * 5), clamped to [0, 4].
-    tier = np.minimum((rank * 5).astype(int), 4)
-
+def compute_rank_tier(
+    scores: np.ndarray,
+    v62b_rank: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    n = len(scores)
+    order = np.lexsort((np.arange(n), v62b_rank, -scores))
+    rank = np.empty(n, dtype=np.float64)
+    rank[order] = (np.arange(n) + 1) / n
+    tier = np.clip(np.ceil(rank * 5).astype(int) - 1, 0, 4)
     return rank, tier
 ```
 
-**Important**: `dense_rank_normalized` (in `ml/v62b_formula.py`) divides by `K` (the
-number of unique score values), not by `n` (the row count). This is the verified V6.2B
-behavior. When ties exist (K < n), dividing by `n` would compress the rank scale and
-produce different tier assignments.
-
-The tier formula `floor(rank * 5)` is equivalent to V6.2B's tier assignment for the
-rank values this function produces. However, this must be validated against a sample
-of actual V6.2B outputs during implementation -- if V6.2B uses a different bucketing
-method (e.g., pandas `qcut` which handles edge cases differently), the tier formula
-must be adjusted to match.
-
-### Status
-
-**Open until validated.** The rank formula (`dense_rank / K`) is verified against V6.2B.
-The tier formula (`floor(rank * 5)`) is a reasonable default but has NOT been validated
-against actual V6.2B tier outputs yet. Before implementation ships, run a parity check:
-load a real V6.2B month, recompute tier from its `rank` column using this formula, and
-compare against V6.2B's `tier` column. If they differ, adjust the formula to match.
+**This is a product decision**, not a correctness fix. ML slices no longer mimic V6.2B's
+dense-rank semantics exactly. This only affects f0/f1 (ML slices); f2+ stays as V6.2B
+passthrough with the original dense_rank/K tiering.
 
 ### Effort
 
-Small (~15 lines of code, plus one parity check against V6.2B).
+Small (~15 lines of code).
 
 ---
 
@@ -586,21 +580,26 @@ def generate_v70_signal(
             ).load_data(pd.Timestamp(auction_month))
 
             if ptype in ml_ptypes:
+                # Extract V6.2B rank_ori for tie-breaking (before overwrite)
+                v62b_cids = v62b_df.index.str.split("|").str[0]
+                v62b_rank_map = pd.Series(
+                    v62b_df["rank_ori"].values, index=v62b_cids
+                ).groupby(level=0).first()
+
                 # ML scoring: train on history, score target.
-                # Returns (constraint_ids, scores) to avoid alignment hazard --
-                # load_v62b_month (polars) and ConstraintsSignal.load_data (pandas)
-                # may return rows in different order.
                 cids, scores = score_ml_inference(
                     auction_month, ptype, ctype, bs[ctype]
                 )
-                rank, tier = compute_rank_tier(scores)
+
+                # Row-percentile rank with V6.2B tie-breaking
+                v62b_rank_for_cids = v62b_rank_map.reindex(cids).fillna(1.0).values
+                rank, tier = compute_rank_tier(scores, v62b_rank_for_cids)
 
                 # Join on constraint_id, NOT positional assignment
                 score_df = pd.DataFrame({
                     "constraint_id": cids, "_rank_ori": scores,
                     "_rank": rank, "_tier": tier,
                 }).set_index("constraint_id")
-                v62b_cids = v62b_df.index.str.split("|").str[0]
                 v62b_df["rank_ori"] = score_df.loc[v62b_cids, "_rank_ori"].values
                 v62b_df["rank"] = score_df.loc[v62b_cids, "_rank"].values
                 v62b_df["tier"] = score_df.loc[v62b_cids, "_tier"].values
@@ -651,7 +650,7 @@ Before declaring V7.0 ready:
    - rank values in (0, 1], normalized by K (unique dense ranks), matching V6.2B convention
    - tier distribution is roughly equal quintiles (0-4)
    - tier 0 constraints have highest ML scores
-   - tier assignments match `floor(rank * 5)` clamped to [0, 4] (validate vs V6.2B sample)
+   - tier assignments match `ceil(rank * 5) - 1` clamped to [0, 4] (validated across 7 months)
 4. **Round-trip**: `ConstraintsSignal.load_data()` on V7.0 returns valid DataFrame
 5. **pmodel integration**: load V7.0 in ftr22 signal loading path, verify no errors
 6. **Backtest**: generate V7.0 for a historical month where we have GT, verify ML

@@ -215,18 +215,18 @@ assert v70.index.tolist() == v62b.index.tolist()
 ### E1: Rank range
 
 ```python
-assert v70["rank"].min() > 0        # dense_rank starts at 1/K
-assert v70["rank"].max() == 1.0     # max rank = K/K = 1
+assert v70["rank"].min() > 0        # row-percentile starts at 1/n
+assert v70["rank"].max() == 1.0     # max rank = n/n = 1
 ```
 
-### E2: Score and rank diagnostics (DIAGNOSTIC — log only)
+### E2: Score diagnostics (DIAGNOSTIC — log only)
 
 With tiered labels (4 relevance levels, ~88% label=0), LightGBM assigns
 identical leaf paths to many non-binding constraints, producing ~55% unique
-scores/ranks. This is **correct behavior** — the model appropriately does
-not differentiate within non-binding constraints. The meaningful
-differentiation is among the ~12% binding constraints (labels 1/2/3),
-which is confirmed by exact holdout VC@20 reproduction (Gate B).
+raw scores. This is **correct behavior** — the model appropriately does
+not differentiate within non-binding constraints. Ties are broken
+deterministically using V6.2B rank_ori as secondary key and original index
+as tertiary, so all ranks are unique despite score ties.
 
 Score degeneracy (NaN, Inf, near-constant std) is already checked by F1.
 
@@ -235,26 +235,24 @@ scores = v70["rank_ori"].values
 n_unique_scores = len(np.unique(scores))
 n_unique_rank = v70["rank"].nunique()
 print(f"  unique scores: {n_unique_scores}/{len(v70)} ({100*n_unique_scores/len(v70):.0f}%)")
-print(f"  unique ranks:  {n_unique_rank}/{len(v70)} ({100*n_unique_rank/len(v70):.0f}%)")
+print(f"  unique ranks:  {n_unique_rank}/{len(v70)} (should be 100%)")
 print(f"  score std:     {np.std(scores):.4f}")
+assert n_unique_rank == len(v70), "ranks should be unique (row-percentile)"
 ```
 
-### E3: Tier distribution (DIAGNOSTIC — log only)
+### E3: Tier distribution (MANDATORY)
 
-With tiered labels, ~88% of constraints are non-binding (label=0) and produce
-similar low scores. After `dense_rank` + quintile bucketing, ties cluster
-near boundaries, causing uneven tier sizes: tier 4 is 45-65% of constraints,
-tiers 0-3 are 8-19% each. This is **expected** when computing tier from
-dense-ranked scores with many ties — not a bug.
-
-All 5 tiers must be present. Distribution is logged for visibility.
+Row-percentile ranking guarantees ~20% per tier (±1 constraint due to
+rounding). Each tier should contain 18-22% of constraints.
 
 ```python
 tier_counts = v70["tier"].value_counts()
 assert set(tier_counts.index) == {0, 1, 2, 3, 4}, "missing tiers"
 for t in range(5):
-    frac = tier_counts[t] / len(v70)
-    print(f"  tier {t}: {frac:.1%} ({tier_counts[t]} constraints)")
+    n_tier = tier_counts[t]
+    frac = n_tier / len(v70)
+    print(f"  tier {t}: {frac:.1%} ({n_tier} constraints)")
+    assert 0.18 <= frac <= 0.22, f"tier {t} has {frac:.1%}, expected ~20%"
 ```
 
 ### E4: Tier formula
@@ -553,8 +551,8 @@ ML model isn't adding value).
 | B | Exact repro | f0/f1, all holdout months | ~60s | YES |
 | C | Passthrough | f2/f3/q* | ~3s | YES |
 | D | Schema | all | ~2s | YES |
-| E1,E4-E6 | Rank/tier invariants | f0/f1 | ~1s | YES |
-| E2-E3 | Score/tier diagnostics | f0/f1 | ~1s | No (diagnostic) |
+| E1,E3-E6 | Rank/tier invariants | f0/f1 | ~1s | YES |
+| E2 | Score diagnostics | f0/f1 | ~1s | No (diagnostic) |
 | F1-F2 | Score validity | f0/f1 | ~1s | YES |
 | F3-F4 | Score diagnostics | f0/f1 | ~1s | No (warn only) |
 | G | SF parity | all | ~3s | YES |

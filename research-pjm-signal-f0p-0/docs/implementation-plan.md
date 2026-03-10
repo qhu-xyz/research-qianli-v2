@@ -1323,19 +1323,13 @@ def load_spice6_density(
 
     score_dfs = []
     limit_dfs = []
-    use_legacy_schema = None
 
     for od_dir in sorted(base.iterdir()):
         if not od_dir.name.startswith("outage_date="):
             continue
-        score_path = od_dir / "score_df.parquet"
-        if score_path.exists():
-            if use_legacy_schema is None:
-                use_legacy_schema = True
-        else:
-            score_path = od_dir / "score.parquet"
-            if use_legacy_schema is None:
-                use_legacy_schema = False
+        # PJM always uses new schema: score.parquet with single 'score' column
+        # (no legacy score_df.parquet exists — verified in preflight)
+        score_path = od_dir / "score.parquet"
         limit_path = od_dir / "limit.parquet"
         if score_path.exists():
             score_dfs.append(pl.read_parquet(score_path))
@@ -1347,20 +1341,12 @@ def load_spice6_density(
 
     all_scores = pl.concat(score_dfs)
 
-    if use_legacy_schema:
-        density = all_scores.group_by(["constraint_id", "flow_direction"]).agg([
-            pl.col("110").mean().alias("prob_exceed_110"),
-            pl.col("100").mean().alias("prob_exceed_100"),
-            pl.col("90").mean().alias("prob_exceed_90"),
-            pl.col("85").mean().alias("prob_exceed_85"),
-            pl.col("80").mean().alias("prob_exceed_80"),
-        ])
-    else:
-        density = all_scores.group_by(["constraint_id", "flow_direction"]).agg([
-            pl.col("score").mean().alias("prob_exceed_110"),
-        ])
-        for col in ["prob_exceed_100", "prob_exceed_90", "prob_exceed_85", "prob_exceed_80"]:
-            density = density.with_columns(pl.lit(0.0).alias(col))
+    # New schema: 'score' column = prob(exceed 110%)
+    density = all_scores.group_by(["constraint_id", "flow_direction"]).agg([
+        pl.col("score").mean().alias("prob_exceed_110"),
+    ])
+    for col in ["prob_exceed_100", "prob_exceed_90", "prob_exceed_85", "prob_exceed_80"]:
+        density = density.with_columns(pl.lit(0.0).alias(col))
 
     if limit_dfs:
         all_limits = pl.concat(limit_dfs)
@@ -1421,7 +1407,7 @@ grep -n "delivery_month\|market_month" ml/spice6_loader.py
 - [ ] Returns DataFrame with `constraint_id`, `flow_direction`, `prob_exceed_110`, `constraint_limit`
 - [ ] Uses `SPICE6_DENSITY_BASE` from `ml.config` (PJM path, not MISO)
 - [ ] Uses `delivery_month()` to compute `market_month` from `auction_month + period_type`
-- [ ] Handles both legacy schema (`score_df.parquet`) and new schema (`score.parquet`)
+- [ ] Uses new schema only (`score.parquet` with `score` column) — PJM has no legacy `score_df.parquet` (verified in preflight). Remove the legacy branch or guard it behind a "never reached for PJM" assertion.
 - [ ] Returns empty DataFrame gracefully if path doesn't exist
 
 ---
@@ -2811,19 +2797,18 @@ grep -n "gc.collect\|del " scripts/run_v2_ml.py
 - [ ] **HIGH**: f1 snapshot provenance verified (see check below)
 
 **f1 snapshot provenance check** (Finding 7 from review):
-V6.2B and Spice6 snapshots for f1 must have been produced BEFORE the f1 auction date.
-If they were generated post-auction, f1 features contain forward-looking information = leakage.
+V6.2B and Spice6 snapshots for f1 must have been produced AT or shortly after
+the auction date — not bulk-regenerated later with data that wasn't available
+at auction time. If all files share a recent mtime (e.g., 2026), the snapshots
+were regenerated and may embed forward-looking information = leakage.
 
 ```bash
 python -c "
 from pathlib import Path
-import os
+import os, pandas as pd
 
-# Check V6.2B f1 file timestamps vs auction dates
 base = Path('/opt/data/xyz-dataset/signal_data/pjm/constraints/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1')
-import pandas as pd
 
-# Sample a few f1 months and check file modification times
 for month in ['2023-06', '2024-01', '2025-01']:
     f1_path = base / month / 'f1' / 'onpeak'
     if not f1_path.exists():
@@ -2833,16 +2818,26 @@ for month in ['2023-06', '2024-01', '2025-01']:
     if files:
         mtime = os.path.getmtime(str(files[0]))
         mtime_ts = pd.Timestamp(mtime, unit='s')
-        # Auction for month M happens ~mid(M-1)
+        # Auction for month M happens ~mid(M-1).
+        # File should have been written around auction time.
         auction_approx = pd.Timestamp(month) - pd.Timedelta(days=15)
-        status = 'OK' if mtime_ts > auction_approx else 'SUSPICIOUS'
-        print(f'{month}/f1: file_mtime={mtime_ts.date()}, auction~{auction_approx.date()} [{status}]')
-        # NOTE: mtime > auction is expected (file created at/after auction)
-        # mtime >> auction+30d is suspicious (regenerated with future data?)
+        lag_days = (mtime_ts - auction_approx).days
+        if lag_days > 90:
+            status = 'SUSPECT — written >90d after auction, likely regenerated'
+        elif lag_days < -30:
+            status = 'SUSPECT — written >30d BEFORE auction'
+        else:
+            status = 'OK — written near auction time'
+        print(f'{month}/f1: mtime={mtime_ts.date()}, auction~{auction_approx.date()}, lag={lag_days}d [{status}]')
 "
 ```
 
-If file timestamps are much later than auction dates (e.g., all files have 2026 timestamps), this means snapshots were regenerated and may contain forward-looking data. Escalate to the data owner for provenance confirmation.
+**How to interpret**:
+- `OK` (mtime within ~90 days of auction): snapshot was produced around auction time, features are point-in-time.
+- `SUSPECT — written >90d after auction`: all files may have been bulk-regenerated with future data.
+  If ALL sampled months show the same recent mtime (e.g., all 2026), escalate to data owner.
+  The features cannot be trusted as point-in-time without confirmation.
+- `SUSPECT — written >30d BEFORE auction`: file predates the auction — unusual, investigate.
 
 ---
 
@@ -3232,25 +3227,71 @@ grep -n "pjm\|PJM" scripts/generate_v70_signal.py
 - [ ] f2-f11 passthrough: no ML scoring, V6.2B rank preserved as-is
 
 **Output integrity checks** (Finding 8 from review):
+
+The implementer MUST add a `--verify` flag to `generate_v70_signal.py` that runs this
+comparison automatically after signal generation. The flag produces a PASS/FAIL report.
+
 ```bash
-# 7. CRITICAL: For ML slices, only rank/rank_ori/tier change; all other columns are bit-identical to V6.2B
-python -c "
-# After generating a test signal, compare against V6.2B input
-# This requires a test run of generate_v70_signal.py first
+# 7. Run signal generation with --verify for a test month
+python scripts/generate_v70_signal.py --auction-month 2025-01 --verify
+
+# The --verify flag must perform these checks internally:
+#   a. Row universe: v70 output has same constraint_ids and row count as V6.2B input per (ptype, ctype)
+#   b. Immutable columns: all columns EXCEPT rank, rank_ori, tier are bit-identical to V6.2B
+#   c. SF passthrough: shift factor output directory is byte-identical to V6.2B SF input
+#   d. ML-only changes: for f0/f1 slices, rank/rank_ori/tier differ; for f2+ passthrough, all columns identical
+#   e. Prints per-slice summary: "f0/onpeak: 1234 rows, 3 cols changed, 18 cols identical — PASS"
+
+# If --verify is not yet implemented, run this standalone check:
+python3 << 'PYEOF'
 import polars as pl
 from pathlib import Path
 
-v62b_base = Path('/opt/data/xyz-dataset/signal_data/pjm/constraints/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1')
-# TODO: replace with actual v70 output path after first test run
-# v70_out = Path('path/to/v70/output')
+v62b_base = Path("/opt/data/xyz-dataset/signal_data/pjm/constraints/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1")
+# V70 output path — set by generate_v70_signal.py's --output-dir flag
+v70_base = Path("output/v70")  # adjust to actual output location
 
-# Check that:
-# 1. Row universe is identical (same constraint_ids, same count)
-# 2. All columns except rank, rank_ori, tier are unchanged
-# 3. Shift factors are bit-identical
-print('OUTPUT INTEGRITY: manual verification required after first signal generation')
-print('Check: row universe identical, non-tier columns bit-identical, SF unchanged')
-"
+month = "2025-01"
+changed_cols = {"rank", "rank_ori", "tier"}
+
+for ptype in ["f0", "f1"]:
+    for ctype in ["onpeak", "dailyoffpeak", "wkndonpeak"]:
+        v62b_path = v62b_base / month / ptype / ctype
+        v70_path = v70_base / month / ptype / ctype
+        if not v70_path.exists():
+            print(f"{ptype}/{ctype}: v70 output NOT FOUND — SKIP")
+            continue
+
+        old = pl.read_parquet(str(v62b_path)).sort("constraint_id")
+        new = pl.read_parquet(str(v70_path)).sort("constraint_id")
+
+        # a. Row universe
+        assert len(old) == len(new), f"Row count mismatch: {len(old)} vs {len(new)}"
+        assert old["constraint_id"].to_list() == new["constraint_id"].to_list(), "constraint_id mismatch"
+
+        # b. Immutable columns
+        immutable = [c for c in old.columns if c not in changed_cols and c in new.columns]
+        for col in immutable:
+            if old[col].to_list() != new[col].to_list():
+                print(f"  FAIL: {ptype}/{ctype} column '{col}' changed but should be immutable")
+                break
+        else:
+            print(f"{ptype}/{ctype}: {len(new)} rows, {len(immutable)} immutable cols verified — PASS")
+
+# c. Check a passthrough period type
+for ptype in ["f2", "f3"]:
+    for ctype in ["onpeak"]:
+        v62b_path = v62b_base / month / ptype / ctype
+        v70_path = v70_base / month / ptype / ctype
+        if not v70_path.exists():
+            continue
+        old = pl.read_parquet(str(v62b_path))
+        new = pl.read_parquet(str(v70_path))
+        if old.frame_equal(new):
+            print(f"{ptype}/{ctype}: passthrough — bit-identical PASS")
+        else:
+            print(f"{ptype}/{ctype}: passthrough — FAIL (should be identical)")
+PYEOF
 
 # 8. Signal naming: must use concrete PJM signal names
 grep -n "signal_name\|Signal.*PJM\|SPICE_F0P" scripts/generate_v70_signal.py

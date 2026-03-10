@@ -23,7 +23,7 @@ from ml.config import SPICE_DATA_BASE
 REALIZED_DA_CACHE = Path("/home/xyz/workspace/research-qianli-v2/research-stage5-tier/data/realized_da")
 
 # Default binding frequency windows
-BF_WINDOWS = [1, 3, 6, 12, 24]
+BF_WINDOWS = [1, 3, 6, 12, 15, 24, 36, 48]
 
 # In-memory cache for bridge tables: (auction_month, period_type) -> DataFrame
 _BRIDGE_CACHE: dict[tuple[str, str], pl.DataFrame] = {}
@@ -131,6 +131,9 @@ def compute_binding_freq(
     Returns
     -------
     np.ndarray of shape (len(branch_names),) with values in [0, 1].
+    When fewer than `window` months are available, uses all available months
+    and divides by actual count. Returns 0 when no data exists (no history
+    = no binding = 0 is a valid signal, better than NaN for tree models).
     """
     available = sorted(m for m in binding_sets.keys() if m < cutoff_month)
     lookback = available[-window:] if len(available) >= window else available
@@ -186,6 +189,11 @@ def enrich_with_binding_freq(
 
     binding_sets = build_monthly_binding_sets(auction_month, period_type, cutoff)
     branch_names = df["branch_name"].to_list()
+
+    # How many months of realized DA are available (model can learn data quality)
+    available = sorted(m for m in binding_sets.keys() if m < cutoff)
+    n_avail = len(available)
+    df = df.with_columns(pl.lit(float(n_avail)).alias("bf_months_avail"))
 
     for w in windows:
         col_name = f"bf_{w}"

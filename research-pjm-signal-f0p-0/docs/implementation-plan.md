@@ -353,8 +353,8 @@ REALIZED_DA_CACHE = str(Path(__file__).resolve().parent.parent / "data" / "reali
 # June exposes all 12 monthly periods; schedule shrinks as planning year progresses.
 # Source: pbase/src/pbase/data/const/period/pjm.py + V6.2B directory enumeration.
 PJM_AUCTION_SCHEDULE: dict[int, list[str]] = {
-    1: ["f0", "f1", "f2"],
-    2: ["f0", "f1"],
+    1: ["f0", "f1", "f2", "f3", "f4"],
+    2: ["f0", "f1", "f2", "f3"],
     3: ["f0", "f1", "f2"],
     4: ["f0", "f1"],
     5: ["f0"],
@@ -1065,11 +1065,13 @@ def load_realized_da(
 def _fetch_raw_da(month: str, peak_type: str) -> pl.DataFrame:
     """Fetch raw PJM DA shadow prices for one month.
 
+    PJM uses US/Eastern timezone (unlike MISO which uses US/Central).
+
     Returns polars DataFrame with columns: monitored_facility, shadow_price.
     """
     from pbase.analysis.tools.all_positions import PjmApTools
 
-    st = pd.Timestamp(f"{month}-01")
+    st = pd.Timestamp(f"{month}-01", tz="US/Eastern")
     et = st + pd.offsets.MonthBegin(1)
 
     aptools = PjmApTools()
@@ -1275,7 +1277,11 @@ Copy from `research-stage5-tier/ml/spice6_loader.py` and change the import path:
 # ml/spice6_loader.py
 """Load spice6 density features for PJM.
 
-Identical logic to MISO spice6_loader.py, only the base path changes.
+Adapted from MISO spice6_loader.py. Key PJM differences:
+  - Base path points to PJM density directory
+  - PJM always uses new schema (score.parquet with single 'score' column)
+  - No legacy score_df.parquet files exist for PJM (legacy branch is dead code)
+  - PJM uses US/Eastern timezone (not US/Central)
 """
 from __future__ import annotations
 
@@ -3284,6 +3290,19 @@ Tasks 1-8 can be done without Ray. Task 9 requires Ray and must complete before 
 
 ---
 
+## Preflight Findings (Verified 2026-03-10)
+
+Facts confirmed by probing actual data on disk:
+
+1. **V6.2B has `branch_name` column** — confirmed in 2023-06/f0/onpeak. 21 columns total.
+2. **PJM_AUCTION_SCHEDULE corrected**: Jan has f0-f4 (not f0-f2), Feb has f0-f3 (not f0-f1). Fixed in plan.
+3. **constraint_info is period-type invariant**: f0 and f1 have identical rows (32297 each, 4835 branches) for every sampled month. Safe to use `period_type="f0"` default.
+4. **PJM density uses new schema only**: always `score.parquet` with single `score` column. No legacy `score_df.parquet` exists. Legacy branch in spice6_loader is dead code.
+5. **PjmApTools DA output**: index=`datetime_beginning_utc`, columns include `monitored_facility`, `shadow_price`, `day`, `contingency_facility`, `constraint_full`, `monitored_line`. Timezone is US/Eastern (not US/Central like MISO).
+6. **V6.2B spans 105 months**: 2017-06 to 2026-03.
+7. **Spice6 ml_pred starts 2018-06** (92 auction months). Pre-2018-06 features fill with 0.
+8. **MISO modules to copy**: `train.py` imports `ml.config`, `compare.py` imports `ml.registry_paths`. Others (`evaluate`, `v62b_formula`, `registry_paths`) have no ml-internal imports.
+
 ## Critical Invariants to Verify
 
 After each major phase, verify these:
@@ -3295,6 +3314,7 @@ After each major phase, verify these:
 5. **Registry schema**: every slice has `metrics.json`, `config.json`, `gates.json`, `champion.json`
 6. **Memory**: never exceed 40 GiB for research scripts (`mem_mb()` at each stage)
 7. **LightGBM threads**: always `num_threads=4` (already hardcoded in `train.py`)
+8. **PJM timezone**: all DA fetch timestamps must use `tz="US/Eastern"` (not `US/Central`)
 
 ---
 

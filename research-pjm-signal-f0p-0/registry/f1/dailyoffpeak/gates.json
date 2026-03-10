@@ -1,0 +1,44 @@
+{
+  "gates": {
+    "VC@20": {
+      "floor": 0.2979,
+      "tail_floor": 0.0714,
+      "direction": "higher",
+      "group": "A"
+    },
+    "VC@100": {
+      "floor": 0.5916,
+      "tail_floor": 0.2606,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@20": {
+      "floor": 0.2045,
+      "tail_floor": 0.1,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@50": {
+      "floor": 0.2635,
+      "tail_floor": 0.18,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@100": {
+      "floor": 0.2225,
+      "tail_floor": 0.14,
+      "direction": "higher",
+      "group": "A"
+    },
+    "NDCG": {
+      "floor": 0.3704,
+      "tail_floor": 0.2032,
+      "direction": "higher",
+      "group": "A"
+    }
+  },
+  "noise_tolerance": 0.02,
+  "tail_max_failures": 1,
+  "calibrated_from": "v0",
+  "calibrated_at": "2026-03-10T19:19:09.754492+00:00"
+}

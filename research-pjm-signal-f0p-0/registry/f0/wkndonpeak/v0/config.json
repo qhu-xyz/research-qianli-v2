@@ -1,0 +1,5 @@
+{
+  "method": "v62b_formula",
+  "formula": "-(0.60*da_rank_value + 0.30*density_mix_rank_value + 0.10*density_ori_rank_value)",
+  "ground_truth": "realized_da (branch-level sum, wkndonpeak)"
+}

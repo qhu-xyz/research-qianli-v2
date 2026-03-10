@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "azure-devops": {
+      "args": [
+        "-y",
+        "@azure-devops/mcp",
+        "amazand",
+        "-d",
+        "core",
+        "work-items"
+      ],
+      "command": "npx",
+      "type": "stdio"
+    },
+    "context7": {
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "command": "npx",
+      "env": {},
+      "type": "stdio"
+    },
+    "serena": {
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena-mcp-server",
+        "--enable-web-dashboard",
+        "false",
+        "--context",
+        "ide-assistant",
+        "--project",
+        "pbase"
+      ],
+      "command": "uvx",
+      "type": "stdio"
+    }
+  }
+}

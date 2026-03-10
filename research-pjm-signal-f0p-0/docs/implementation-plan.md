@@ -2100,7 +2100,7 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ml.config import (
-    V62B_SIGNAL_BASE, PJM_CLASS_TYPES, _FULL_EVAL_MONTHS,
+    V62B_SIGNAL_BASE, PJM_CLASS_TYPES, _FULL_EVAL_MONTHS, _DEFAULT_EVAL_MONTHS,
     HOLDOUT_MONTHS, has_period_type,
 )
 from ml.evaluate import aggregate_months, evaluate_ltr
@@ -2280,7 +2280,7 @@ def main():
     ctypes = [args.class_type] if args.class_type else PJM_CLASS_TYPES
 
     for ptype in ptypes:
-        eval_months = _FULL_EVAL_MONTHS if args.full else _FULL_EVAL_MONTHS
+        eval_months = _FULL_EVAL_MONTHS if args.full else _DEFAULT_EVAL_MONTHS
         eval_months = [m for m in eval_months if has_period_type(m, ptype)]
         for ctype in ctypes:
             run_slice(ptype, ctype, eval_months, holdout=args.holdout)
@@ -2938,6 +2938,26 @@ This is a thin wrapper that runs `run_variant()` from `run_v2_ml.py` on holdout 
 
 **Important**: In addition to saving metrics, the holdout script must save **per-month predictions** to `holdout/{ptype}/{ctype}/v2/predictions/{month}.parquet` with columns `[constraint_id, rank]`. These are consumed by Task 14 (new-binding analysis) to compare V7.0b ranks against V6.2B ranks.
 
+To save predictions, modify `run_variant()` (or wrap it) so that after scoring each eval month, it saves the ML-assigned rank (row-percentile of predicted score) alongside the constraint_id:
+
+```python
+# Inside the holdout script's per-month loop, after scoring:
+scores = predict_scores(model, X_test)
+# Compute row-percentile rank (lower = more binding)
+order = np.argsort(-scores)  # descending
+rank = np.empty(len(scores), dtype=np.float64)
+rank[order] = (np.arange(len(scores)) + 1) / len(scores)
+
+# Save predictions
+pred_dir = holdout_root(ptype, ctype, base_dir=HOLDOUT_DIR) / "v2" / "predictions"
+pred_dir.mkdir(parents=True, exist_ok=True)
+pred_df = pl.DataFrame({
+    "constraint_id": test_df["constraint_id"].cast(pl.String),
+    "rank": rank,
+})
+pred_df.write_parquet(str(pred_dir / f"{m}.parquet"))
+```
+
 - [ ] **Step 2: Run holdout and commit**
 
 ```bash
@@ -3000,6 +3020,7 @@ if p.exists():
 **Acceptance criteria:**
 - [ ] **BLOCK**: All 6 slices have holdout results in `holdout/{ptype}/{ctype}/v2/metrics.json`
 - [ ] **BLOCK**: v2 holdout VC@20 > v0 holdout VC@20 for at least 5 of 6 slices
+- [ ] **BLOCK**: Per-month prediction files exist at `holdout/{ptype}/{ctype}/v2/predictions/{month}.parquet` with columns `[constraint_id, rank]` (needed by Task 14)
 - [ ] Holdout months are from 2024-2025 (out-of-sample, not overlapping dev)
 - [ ] Holdout VC@20 is within 0.5-1.2× of dev VC@20 (large divergence = overfitting concern)
 - [ ] Summary table printed comparing all slices
@@ -3104,6 +3125,9 @@ def rank_to_tier(rank: float) -> int:
 # ── Main analysis ────────────────────────────────────────────────────────
 
 def main():
+    import datetime
+    from dateutil.relativedelta import relativedelta
+
     period_type = "f0"
     class_type = "onpeak"
     months = sorted(HOLDOUT_MONTHS)
@@ -3211,8 +3235,6 @@ def main():
         v62b_t0, v70b_t0, v62b_t01, v70b_t01, n_obs = 0, 0, 0, 0, 0
         for bn, first_month in new_binder_events:
             # Find the month that is `lead` months before first_month
-            from dateutil.relativedelta import relativedelta
-            import datetime
             dt = datetime.datetime.strptime(first_month, "%Y-%m")
             check_dt = dt - relativedelta(months=lead)
             check_month = check_dt.strftime("%Y-%m")

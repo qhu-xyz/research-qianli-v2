@@ -10,6 +10,37 @@
 
 ---
 
+## Independent Review Protocol
+
+Each task ends with a **Review** block. A reviewer with zero prior context should be able to:
+
+1. **Run the verification commands** listed in the review block
+2. **Check the acceptance criteria** — every item must pass
+3. **Flag any issues** before the implementer moves to the next task
+
+### Review severity levels
+- **BLOCK**: Must fix before proceeding. Data correctness, leakage, or schema violations.
+- **WARN**: Should fix but can proceed. Style, naming, minor inefficiency.
+- **INFO**: Optional improvement. Nice-to-have.
+
+### How to review
+```bash
+cd /home/xyz/workspace/pmodel && source .venv/bin/activate
+cd /home/xyz/workspace/research-qianli-v2/research-pjm-signal-f0p-0
+# Then run the verification commands from each review block
+```
+
+### Global invariants (check after EVERY task)
+- [ ] No file imports from `pbase.data.pjm.ap_tools` (does not exist — use `pbase.analysis.tools.all_positions.PjmApTools`)
+- [ ] No use of `constraint_id` as DA join key (must use `branch_name`)
+- [ ] No `multiprocessing`, `concurrent.futures`, `joblib`, `dask`, or `threading` imports
+- [ ] All LightGBM usage includes `num_threads=4`
+- [ ] No leaky columns used as features: `rank`, `rank_ori`, `tier`, `shadow_sign`, `shadow_price`, `actual_shadow_price`, `actual_binding`, `error`, `abs_error`
+- [ ] `mem_mb()` printed at key stages in any script that loads data
+- [ ] All parquet reads use `pl.read_parquet()` or `pl.scan_parquet()` (polars, not pandas)
+
+---
+
 ## File Structure
 
 ```
@@ -26,7 +57,6 @@ research-pjm-signal-f0p-0/
 │   ├── evaluate.py            # VC@20, Recall, NDCG metrics (copy from MISO)
 │   ├── v62b_formula.py        # V6.2B formula reproduction (copy from MISO)
 │   ├── pipeline.py            # load → train → predict → evaluate (adapted)
-│   ├── benchmark.py           # Walk-forward multi-month evaluation (adapted)
 │   ├── compare.py             # Gate comparison system (copy from MISO)
 │   ├── registry_paths.py      # Registry path helpers (copy from MISO)
 │   └── tests/
@@ -74,7 +104,6 @@ research-pjm-signal-f0p-0/
 | `evaluate.py` | — | Copy verbatim |
 | `v62b_formula.py` | — | Copy verbatim |
 | `features.py` | — | Copy verbatim (add `v7_formula_score` derived feature) |
-| `benchmark.py` | 2 class types | 3 class types |
 
 ---
 
@@ -108,18 +137,20 @@ cp ../research-stage5-tier/ml/registry_paths.py ml/registry_paths.py
 cp ../research-stage5-tier/ml/compare.py ml/compare.py
 ```
 
-- [ ] **Step 2: Verify imports work**
+- [ ] **Step 2: Verify files exist (imports deferred to after Task 2)**
+
+Note: `train.py` imports `LTRConfig` from `ml.config`, which doesn't exist yet (created in Task 2).
+Full import verification is deferred to Task 2's review. For now, just confirm files are present.
 
 ```bash
-cd /home/xyz/workspace/pmodel && source .venv/bin/activate
 cd /home/xyz/workspace/research-qianli-v2/research-pjm-signal-f0p-0
-python -c "from ml.train import train_ltr_model, predict_scores; print('train OK')"
-python -c "from ml.evaluate import evaluate_ltr, aggregate_months; print('evaluate OK')"
+ls -1 ml/train.py ml/evaluate.py ml/v62b_formula.py ml/registry_paths.py ml/compare.py
+# Verify modules that DON'T depend on ml.config:
 python -c "from ml.v62b_formula import v62b_score, dense_rank_normalized; print('v62b OK')"
-python -c "from ml.registry_paths import registry_root, holdout_root; print('registry OK')"
+python -c "from ml.evaluate import evaluate_ltr, aggregate_months; print('evaluate OK')"
 ```
 
-Expected: all print OK, no errors.
+Expected: files exist, v62b and evaluate import OK. train/registry_paths/compare will work after Task 2.
 
 - [ ] **Step 3: Commit**
 
@@ -127,6 +158,34 @@ Expected: all print OK, no errors.
 git add ml/
 git commit -m "copy unchanged MISO modules: train, evaluate, v62b_formula, registry_paths, compare"
 ```
+
+#### Review: Task 1
+
+**Verify commands:**
+```bash
+# 1. All 5 modules exist
+ls -1 ml/train.py ml/evaluate.py ml/v62b_formula.py ml/registry_paths.py ml/compare.py
+
+# 2. Imports that DON'T depend on ml.config work now
+python -c "from ml.evaluate import evaluate_ltr, aggregate_months, value_capture_at_k; print('evaluate OK')"
+python -c "from ml.v62b_formula import v62b_score, dense_rank_normalized; print('v62b OK')"
+# train.py, registry_paths.py, compare.py import ml.config — verified in Task 2 review
+
+# 3. No MISO-specific hardcoded paths leaked in
+grep -rn "MISO\|miso" ml/train.py ml/evaluate.py ml/v62b_formula.py ml/registry_paths.py ml/compare.py || echo "No MISO references (OK)"
+
+# 4. num_threads=4 present in train.py
+grep -n "num_threads" ml/train.py
+```
+
+**Acceptance criteria:**
+- [ ] All 5 files exist
+- [ ] `ml/__init__.py` and `ml/tests/__init__.py` exist
+- [ ] v62b_formula and evaluate import successfully
+- [ ] `train.py` contains `"num_threads": 4` (or equivalent)
+- [ ] No hardcoded MISO paths in any copied module (paths come from config, which is Task 2)
+- [ ] Commit exists with the 5 files + 2 `__init__.py`
+- [ ] train/registry_paths/compare imports deferred to Task 2 review (they depend on `ml.config`)
 
 ---
 
@@ -484,6 +543,87 @@ git add ml/config.py ml/tests/test_config.py
 git commit -m "feat: add PJM config with auction schedule, paths, and LTRConfig"
 ```
 
+#### Review: Task 2
+
+**Verify commands:**
+```bash
+# 0. Deferred from Task 1: verify config-dependent modules now import
+python -c "from ml.train import train_ltr_model, predict_scores; print('train OK')"
+python -c "from ml.registry_paths import registry_root, holdout_root; print('registry OK')"
+python -c "from ml.compare import compare_versions; print('compare OK')"
+
+# 1. Tests pass
+python -m pytest ml/tests/test_config.py -v
+
+# 2. Auction schedule was verified against real data (not just the handoff guess)
+python -c "
+from pathlib import Path
+base = Path('/opt/data/xyz-dataset/signal_data/pjm/constraints/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1')
+real = {}
+for month_dir in sorted(base.iterdir()):
+    if not month_dir.is_dir(): continue
+    ptypes = sorted([p.name for p in month_dir.iterdir() if p.is_dir()])
+    mn = int(month_dir.name.split('-')[1])
+    if mn not in real:
+        real[mn] = set(ptypes)
+    else:
+        real[mn] |= set(ptypes)
+
+from ml.config import PJM_AUCTION_SCHEDULE
+for mn in sorted(real):
+    code_set = set(PJM_AUCTION_SCHEDULE.get(mn, ['f0']))
+    disk_set = real[mn]
+    if code_set != disk_set:
+        print(f'MISMATCH month={mn}: code={sorted(code_set)} disk={sorted(disk_set)}')
+    else:
+        print(f'OK month={mn}: {sorted(code_set)}')
+"
+
+# 3. Data paths exist
+python -c "
+from pathlib import Path
+from ml.config import V62B_SIGNAL_BASE, SPICE6_DENSITY_BASE, SPICE6_MLPRED_BASE, SPICE6_CI_BASE
+for name, p in [('V62B', V62B_SIGNAL_BASE), ('density', SPICE6_DENSITY_BASE),
+                ('mlpred', SPICE6_MLPRED_BASE), ('ci', SPICE6_CI_BASE)]:
+    exists = Path(p).exists()
+    print(f'{name}: {\"OK\" if exists else \"MISSING\"} -> {p}')
+"
+
+# 4. Temporal leakage guard: collect_usable_months respects lag
+python -c "
+from ml.config import collect_usable_months, delivery_month
+months = collect_usable_months('2023-06', 'f0', n_months=8)
+print(f'Training months for eval 2023-06/f0: {months}')
+# The latest training month's delivery month must be < 2023-05 (M-1 for f0)
+latest = months[0]
+dm = delivery_month(latest, 'f0')
+print(f'Latest train month={latest}, delivery_month={dm}')
+assert dm < '2023-05', f'LEAKAGE: delivery_month {dm} >= 2023-05'
+print('Leakage check PASSED')
+"
+
+# 5. Leaky features blocked
+python -c "
+from ml.config import LTRConfig
+cfg = LTRConfig(features=['rank', 'da_rank_value', 'rank_ori'], monotone_constraints=[0, -1, 0])
+print(f'Features after filter: {cfg.features}')
+assert 'rank' not in cfg.features, 'rank not filtered'
+assert 'rank_ori' not in cfg.features, 'rank_ori not filtered'
+assert 'da_rank_value' in cfg.features, 'da_rank_value wrongly filtered'
+print('Leaky feature guard PASSED')
+"
+```
+
+**Acceptance criteria:**
+- [ ] All tests pass
+- [ ] **BLOCK**: `PJM_AUCTION_SCHEDULE` matches actual V6.2B directories on disk (no MISMATCH lines)
+- [ ] **BLOCK**: All 4 data paths exist on disk
+- [ ] **BLOCK**: Temporal leakage check passes — latest training delivery month < eval_month - 1
+- [ ] **BLOCK**: Leaky features (`rank`, `rank_ori`, `tier`, `shadow_sign`, `shadow_price`) are filtered out by `LTRConfig.__post_init__`
+- [ ] `PJM_CLASS_TYPES` is `["onpeak", "dailyoffpeak", "wkndonpeak"]` (3 types, not 2)
+- [ ] `V10E_FEATURES` has exactly 9 features matching MISO champion
+- [ ] `HOLDOUT_MONTHS` covers 2024-01 through 2025-12
+
 ---
 
 ### Task 3: Create `ml/branch_mapping.py` — constraint_id → branch_name mapping
@@ -500,7 +640,11 @@ Reference: `research-spice-shadow-price-pred/src/shadow_price_prediction/data_lo
 
 ```python
 # ml/tests/test_branch_mapping.py
-"""Tests for PJM branch mapping module."""
+"""Tests for PJM branch mapping module.
+
+NOTE: This test must NOT import from ml.realized_da (Task 4).
+Task 3 must be independently completable.
+"""
 import polars as pl
 import pytest
 from ml.branch_mapping import load_constraint_info, build_branch_map, map_da_to_branches
@@ -527,15 +671,32 @@ def test_build_branch_map_has_match_str():
 
 
 def test_map_da_to_branches_captures_most_value():
-    """Branch-level join should capture >90% of DA value."""
+    """Branch-level join should capture >90% of DA value.
+
+    NOTE: This test uses PjmApTools directly (not ml.realized_da which is Task 4).
+    This keeps Task 3 independently completable.
+    """
     ci = load_constraint_info("2025-01", period_type="f0")
     bmap = build_branch_map(ci)
 
-    # Load a month of DA data
-    from ml.realized_da import _fetch_raw_da
-    da_df = _fetch_raw_da("2025-01", "onpeak")
-    if len(da_df) == 0:
-        pytest.skip("No DA data available for 2025-01")
+    # Fetch DA directly (not via ml.realized_da — that module doesn't exist yet)
+    try:
+        import pandas as pd
+        from pbase.analysis.tools.all_positions import PjmApTools
+        # polars already imported at module level
+
+        st = pd.Timestamp("2025-01-01")
+        et = st + pd.offsets.MonthBegin(1)
+        aptools = PjmApTools()
+        da_shadow = aptools.tools.get_da_shadow_by_peaktype(st=st, et_ex=et, peak_type="onpeak")
+        if da_shadow is None or len(da_shadow) == 0:
+            pytest.skip("No DA data for 2025-01")
+        da_df = pl.from_pandas(da_shadow.reset_index()).select([
+            pl.col("monitored_facility").cast(pl.String),
+            pl.col("shadow_price").cast(pl.Float64),
+        ])
+    except Exception as e:
+        pytest.skip(f"Cannot fetch DA data: {e}")
 
     result = map_da_to_branches(da_df, bmap)
     assert "branch_name" in result.columns
@@ -747,6 +908,52 @@ git add ml/branch_mapping.py ml/tests/test_branch_mapping.py
 git commit -m "feat: add PJM branch mapping (constraint_id → branch_name via constraint_info)"
 ```
 
+#### Review: Task 3
+
+**Verify commands:**
+```bash
+# 1. Tests pass
+python -m pytest ml/tests/test_branch_mapping.py -v
+
+# 2. Coverage test: branch mapping captures >90% DA value
+# (test_map_da_to_branches_captures_most_value does this, but run explicitly)
+python -c "
+from ml.branch_mapping import load_constraint_info, build_branch_map
+ci = load_constraint_info('2025-01', period_type='f0')
+bmap = build_branch_map(ci)
+print(f'constraint_info rows: {len(ci)}')
+print(f'branch_map rows: {len(bmap)}')
+print(f'Unique branch_names: {bmap[\"branch_name\"].n_unique()}')
+print(f'Unique match_strs: {bmap[\"match_str\"].n_unique()}')
+print(f'Sample match_strs: {bmap[\"match_str\"].head(5).to_list()}')
+# Verify all match_str are uppercase
+import polars as pl
+non_upper = bmap.filter(pl.col('match_str') != pl.col('match_str').str.to_uppercase())
+print(f'Non-uppercase match_strs: {len(non_upper)} (should be 0)')
+"
+
+# 3. Verify branch mapping uses the reference approach (not the naive join)
+grep -n "monitored_facility" ml/branch_mapping.py
+grep -n "interface" ml/branch_mapping.py
+# Should see: interface prefix matching logic present
+```
+
+**Acceptance criteria:**
+- [ ] All tests pass
+- [ ] **BLOCK**: DA value coverage >90% (printed by `test_map_da_to_branches_captures_most_value`)
+- [ ] **BLOCK**: `match_str` values are ALL uppercase (case normalization working)
+- [ ] Interface prefix matching is implemented (not just direct matching)
+- [ ] `load_constraint_info` uses `class_type=onpeak` path (constraint_info is class-invariant)
+- [ ] `build_branch_map` extracts `constraint_id.split(":")[0]` for match_str
+- [ ] Empty DataFrames handled gracefully (no crashes on missing data)
+- [ ] **BLOCK**: Test file does NOT import from `ml.realized_da` (Task 4 doesn't exist yet — Task 3 must be independently completable)
+
+**Reference check**: Compare logic against `research-spice-shadow-price-pred/src/shadow_price_prediction/data_loader.py:805`. Key elements:
+1. `constraint_id.split(":")[0]` → uppercase → `match_str` ✓
+2. Direct match on `match_str` ✓
+3. Interface prefix fallback ✓
+4. Aggregate by `branch_name` ✓
+
 ---
 
 ### Task 4: Create `ml/realized_da.py` — Fetch and cache realized DA by branch_name
@@ -892,6 +1099,13 @@ def fetch_and_cache_month(
 
     The branch mapping uses constraint_info for the given month. If
     constraint_info is unavailable, falls back to a nearby month.
+    If no constraint_info found at all, raises ValueError (fail closed).
+
+    NOTE on period_type: constraint_info is stored under period_type={P}/class_type=onpeak.
+    Per CLAUDE.md, constraint_info is "physical topology, class-invariant" — stored only
+    under class_type=onpeak by design. The implementer MUST verify that the branch mapping
+    is also period-type-invariant by running the verification in Task 4 Step 3a (below).
+    If f0 and f1 branch mappings differ materially, the cache must be keyed by period_type.
 
     Returns path to cached parquet with columns: branch_name, realized_sp.
     """
@@ -923,13 +1137,11 @@ def fetch_and_cache_month(
                     break
 
         if len(ci) == 0:
-            print(f"[realized_da] WARNING: no constraint_info for {month}, using raw aggregation")
-            # Fallback: aggregate by monitored_facility directly
-            df = (
-                raw_da
-                .group_by("monitored_facility")
-                .agg(pl.col("shadow_price").abs().sum().alias("realized_sp"))
-                .rename({"monitored_facility": "branch_name"})
+            raise ValueError(
+                f"[realized_da] FATAL: no constraint_info for {month} or neighbors. "
+                f"Cannot build branch mapping — refusing to fall back to naive join "
+                f"(captures only ~46% of DA value). Fix constraint_info availability "
+                f"or manually populate the cache for this month."
             )
         else:
             bmap = build_branch_map(ci)
@@ -946,6 +1158,45 @@ def fetch_and_cache_month(
     return out_path
 ```
 
+- [ ] **Step 3a: Verify branch mapping is period-type-invariant**
+
+This is CRITICAL. The cache uses `period_type="f0"` by default for constraint_info lookup.
+If f1 has different branch mappings, f1 targets will be silently incomplete.
+
+```python
+# Run this to compare f0 vs f1 branch mappings for a month that has both
+python -c "
+from ml.branch_mapping import load_constraint_info, build_branch_map
+import polars as pl
+
+month = '2025-01'  # pick a month with both f0 and f1
+ci_f0 = load_constraint_info(month, period_type='f0')
+ci_f1 = load_constraint_info(month, period_type='f1')
+print(f'constraint_info rows: f0={len(ci_f0)}, f1={len(ci_f1)}')
+
+if len(ci_f1) == 0:
+    print('f1 has no constraint_info — likely uses same as f0 (class-invariant)')
+else:
+    bmap_f0 = build_branch_map(ci_f0)
+    bmap_f1 = build_branch_map(ci_f1)
+    f0_branches = set(bmap_f0['branch_name'].to_list())
+    f1_branches = set(bmap_f1['branch_name'].to_list())
+    overlap = f0_branches & f1_branches
+    f1_only = f1_branches - f0_branches
+    print(f'f0 branches: {len(f0_branches)}, f1 branches: {len(f1_branches)}')
+    print(f'Overlap: {len(overlap)}, f1-only: {len(f1_only)}')
+    if f1_only:
+        print(f'WARNING: {len(f1_only)} branches in f1 not in f0!')
+        print(f'ACTION NEEDED: cache must be keyed by period_type, not shared')
+    else:
+        print('SAFE: f0 branch map is a superset — period_type=f0 default is fine')
+"
+```
+
+If f1 has branches not in f0, the implementer must:
+1. Add `period_type` to the cache key (file name)
+2. Update `cache_realized_da.py` to pass explicit `period_type`
+
 - [ ] **Step 4: Run tests**
 
 ```bash
@@ -960,6 +1211,52 @@ Expected: PASS (may skip tests if Ray is not available or data not cached yet).
 git add ml/realized_da.py ml/tests/test_realized_da.py
 git commit -m "feat: add PJM realized DA with branch-level aggregation"
 ```
+
+#### Review: Task 4
+
+**Verify commands:**
+```bash
+# 1. Tests pass (some may skip if Ray unavailable or data not cached)
+python -m pytest ml/tests/test_realized_da.py -v
+
+# 2. Verify load_realized_da returns branch_name (NOT constraint_id)
+python -c "
+import polars as pl
+from ml.realized_da import load_realized_da
+# This only works if cache exists — skip if not
+try:
+    df = load_realized_da('2024-06', 'onpeak')
+    print(f'Columns: {df.columns}')
+    assert 'branch_name' in df.columns, 'MISSING branch_name column'
+    assert 'constraint_id' not in df.columns, 'UNEXPECTED constraint_id column'
+    assert df['realized_sp'].dtype == pl.Float64
+    print(f'Rows: {len(df)}, non-zero: {len(df.filter(pl.col(\"realized_sp\") > 0))}')
+    print('Schema check PASSED')
+except FileNotFoundError:
+    print('SKIP: no cached data yet (will work after Task 9)')
+"
+
+# 3. Verify PjmApTools import path (not pbase.data.pjm.ap_tools)
+grep -n "PjmApTools\|pjm.*tools\|ap_tools" ml/realized_da.py
+# Should see: from pbase.analysis.tools.all_positions import PjmApTools
+
+# 4. Verify atomic write pattern
+grep -n "tmp\|rename" ml/realized_da.py
+# Should see: write to .tmp then rename
+
+# 5. Verify branch_mapping is used (not direct constraint_id aggregation)
+grep -n "branch_mapping\|map_da_to_branches\|build_branch_map" ml/realized_da.py
+```
+
+**Acceptance criteria:**
+- [ ] **BLOCK**: `load_realized_da` returns columns `[branch_name, realized_sp]` — NOT `constraint_id`
+- [ ] **BLOCK**: `_fetch_raw_da` uses `PjmApTools` from `pbase.analysis.tools.all_positions`
+- [ ] **BLOCK**: `fetch_and_cache_month` uses `branch_mapping.map_da_to_branches()` for the join
+- [ ] **BLOCK**: No naive `monitored_facility` fallback — if constraint_info is missing, `fetch_and_cache_month` must raise `ValueError` (fail closed), NOT silently fall back to the 46%-coverage naive join
+- [ ] **BLOCK**: Period-type invariance verified (Step 3a) — if f1 has branches not in f0, cache must be keyed by period_type
+- [ ] Atomic write: writes to `.tmp` then renames (no partial files on crash)
+- [ ] Cache-hit short circuit: skips fetch if file already exists
+- [ ] Adjacent-month constraint_info fallback tries offsets [1, -1, 2, -2] before failing
 
 ---
 
@@ -1091,6 +1388,36 @@ git add ml/spice6_loader.py
 git commit -m "feat: add PJM spice6 density loader"
 ```
 
+#### Review: Task 5
+
+**Verify commands:**
+```bash
+# 1. Smoke test: load density for a known month
+python -c "
+from ml.spice6_loader import load_spice6_density
+df = load_spice6_density('2025-01', 'f0')
+print(f'Rows: {len(df)}, Columns: {df.columns}')
+required = ['constraint_id', 'flow_direction', 'prob_exceed_110', 'constraint_limit']
+for c in required:
+    assert c in df.columns, f'MISSING column: {c}'
+print('Schema check PASSED')
+"
+
+# 2. Verify PJM density path (not MISO)
+grep -n "SPICE6_DENSITY_BASE\|prod_f0p_model" ml/spice6_loader.py
+# Should reference ml.config.SPICE6_DENSITY_BASE (PJM path)
+
+# 3. Verify delivery_month is used for market_month
+grep -n "delivery_month\|market_month" ml/spice6_loader.py
+```
+
+**Acceptance criteria:**
+- [ ] Returns DataFrame with `constraint_id`, `flow_direction`, `prob_exceed_110`, `constraint_limit`
+- [ ] Uses `SPICE6_DENSITY_BASE` from `ml.config` (PJM path, not MISO)
+- [ ] Uses `delivery_month()` to compute `market_month` from `auction_month + period_type`
+- [ ] Handles both legacy schema (`score_df.parquet`) and new schema (`score.parquet`)
+- [ ] Returns empty DataFrame gracefully if path doesn't exist
+
 ---
 
 ### Task 6: Create `ml/features.py` — Feature preparation
@@ -1118,8 +1445,13 @@ from ml.config import LTRConfig
 
 
 def _add_derived_features(df: pl.DataFrame) -> pl.DataFrame:
-    """Add v62b_formula_score if not already present."""
-    if "v62b_formula_score" not in df.columns:
+    """Add v7_formula_score if not already present.
+
+    IMPORTANT: This column MUST be named 'v7_formula_score' to match
+    V10E_FEATURES in ml/config.py. The v2 script (run_v2_ml.py) computes
+    it with per-slice blend weights; this fallback uses the V6.2B formula.
+    """
+    if "v7_formula_score" not in df.columns:
         has_cols = all(c in df.columns for c in
                        ["da_rank_value", "density_mix_rank_value", "density_ori_rank_value"])
         if has_cols:
@@ -1127,7 +1459,7 @@ def _add_derived_features(df: pl.DataFrame) -> pl.DataFrame:
                 (0.60 * pl.col("da_rank_value")
                  + 0.30 * pl.col("density_mix_rank_value")
                  + 0.10 * pl.col("density_ori_rank_value")
-                ).alias("v62b_formula_score")
+                ).alias("v7_formula_score")
             )
     return df
 
@@ -1180,6 +1512,63 @@ def compute_query_groups(df: pl.DataFrame) -> np.ndarray:
 git add ml/features.py
 git commit -m "feat: add PJM feature preparation module"
 ```
+
+#### Review: Task 6
+
+**Verify commands:**
+```bash
+# 1. Import check
+python -c "
+from ml.features import prepare_features, compute_query_groups, _add_derived_features
+print('features import OK')
+"
+
+# 2. CRITICAL: Verify derived feature is named v7_formula_score (NOT v62b_formula_score)
+grep -n "v7_formula_score\|v62b_formula_score" ml/features.py
+# MUST see: v7_formula_score
+# MUST NOT see: v62b_formula_score (this was a name mismatch bug in the original plan)
+
+# 3. Verify name matches V10E_FEATURES in config
+python -c "
+from ml.config import V10E_FEATURES
+assert 'v7_formula_score' in V10E_FEATURES, f'v7_formula_score not in V10E_FEATURES: {V10E_FEATURES}'
+assert 'v62b_formula_score' not in V10E_FEATURES, 'Wrong name in V10E_FEATURES'
+print(f'V10E_FEATURES: {V10E_FEATURES}')
+print('Feature name consistency PASSED')
+"
+
+# 4. Verify the derived feature actually gets created
+python -c "
+import polars as pl
+from ml.features import _add_derived_features
+df = pl.DataFrame({
+    'da_rank_value': [0.1, 0.5],
+    'density_mix_rank_value': [0.2, 0.6],
+    'density_ori_rank_value': [0.3, 0.7],
+})
+df = _add_derived_features(df)
+assert 'v7_formula_score' in df.columns, 'v7_formula_score not created!'
+expected = 0.60 * 0.1 + 0.30 * 0.2 + 0.10 * 0.3  # = 0.15
+actual = df['v7_formula_score'][0]
+assert abs(actual - expected) < 1e-10, f'Wrong value: {actual} vs {expected}'
+print(f'v7_formula_score = {actual} (expected {expected}) — PASSED')
+"
+
+# 5. Verify no leaky features can sneak through
+python -c "
+from ml.config import LTRConfig
+cfg = LTRConfig(features=['da_rank_value', 'rank'], monotone_constraints=[-1, 0])
+assert 'rank' not in cfg.features
+print('Leakage guard OK')
+"
+```
+
+**Acceptance criteria:**
+- [ ] **BLOCK**: Derived feature is named `v7_formula_score`, NOT `v62b_formula_score` — must match `V10E_FEATURES` in config
+- [ ] `prepare_features` fills missing features with 0 (no crash on partial data)
+- [ ] `_add_derived_features` uses exact V6.2B formula: `0.60*da + 0.30*dmix + 0.10*dori`
+- [ ] `compute_query_groups` handles empty input and single-group input
+- [ ] Feature matrix dtype is `np.float64`
 
 ---
 
@@ -1312,13 +1701,64 @@ git add ml/data_loader.py
 git commit -m "feat: add PJM data loader with branch-level DA join"
 ```
 
+#### Review: Task 7
+
+**Verify commands:**
+```bash
+# 1. Verify branch_name join (THE critical PJM check)
+grep -n "branch_name\|constraint_id" ml/data_loader.py
+# MUST see: join on branch_name for realized DA
+# MUST NOT see: join realized DA on constraint_id
+
+# 2. Verify V6.2B path structure matches disk
+python -c "
+from pathlib import Path
+from ml.config import V62B_SIGNAL_BASE
+p = Path(V62B_SIGNAL_BASE) / '2023-06' / 'f0' / 'onpeak'
+print(f'Path exists: {p.exists()} -> {p}')
+files = list(p.glob('*.parquet'))
+print(f'Parquet files: {len(files)}')
+"
+
+# 3. Verify branch_name column exists in V6.2B data
+python -c "
+import polars as pl
+from pathlib import Path
+from ml.config import V62B_SIGNAL_BASE
+p = Path(V62B_SIGNAL_BASE) / '2023-06' / 'f0' / 'onpeak'
+df = pl.read_parquet(str(p))
+print(f'Columns: {df.columns}')
+assert 'branch_name' in df.columns, 'V6.2B MISSING branch_name — data_loader join will fail!'
+assert 'constraint_id' in df.columns
+assert 'da_rank_value' in df.columns
+print('V6.2B schema check PASSED')
+"
+
+# 4. Verify delivery_month is used for ground truth lookup (not auction_month)
+grep -n "delivery_month\|gt_month" ml/data_loader.py
+
+# 5. Verify class_type maps to peak_type for DA fetch
+grep -n "peak_type" ml/data_loader.py
+```
+
+**Acceptance criteria:**
+- [ ] **BLOCK**: Realized DA is joined on `branch_name`, NOT `constraint_id`
+- [ ] **BLOCK**: Ground truth month = `delivery_month(auction_month, period_type)`, not `auction_month`
+- [ ] **BLOCK**: V6.2B parquet on disk actually has a `branch_name` column (verify with command above)
+- [ ] Spice6 density joined on `[constraint_id, flow_direction]` (these are spice6 features, not DA)
+- [ ] Month cache (`_MONTH_CACHE`) prevents redundant reads
+- [ ] Missing realized DA gracefully falls back to `realized_sp=0` with WARNING
+- [ ] `mem_mb()` available for memory tracking
+
 ---
 
 ## Chunk 2: Scripts (Cache, V0 Baseline, V2 ML, Blend, Holdout)
 
 ### Task 8: Create `ml/pipeline.py` — single-month pipeline
 
-Adapted from MISO's pipeline.py. Used by the benchmark harness.
+Adapted from MISO's pipeline.py. Provides a simple pipeline for formula-based evaluation (v0) and basic single-month ML.
+
+**IMPORTANT**: This pipeline does NOT include binding-frequency enrichment or `collect_usable_months()` — those are in `run_v2_ml.py` (Task 11). This module is used for the v0 formula baseline and as a building block. The v2 ML script has its own enrichment logic that supersedes this pipeline.
 
 **Files:**
 - Create: `ml/pipeline.py`
@@ -1430,6 +1870,31 @@ def run_pipeline(
 git add ml/pipeline.py
 git commit -m "feat: add PJM pipeline module"
 ```
+
+#### Review: Task 8
+
+**Verify commands:**
+```bash
+# 1. Import check
+python -c "from ml.pipeline import run_pipeline; print('pipeline OK')"
+
+# 2. Verify train data ordering (must be sorted by query_month for LTR)
+grep -n "sort.*query_month" ml/pipeline.py
+
+# 3. Verify gc.collect() after each phase
+grep -cn "gc.collect" ml/pipeline.py
+# Should be >= 2 (after training, after evaluation)
+
+# 4. Verify feature importance extraction
+grep -n "feature_importance\|feature_importances" ml/pipeline.py
+```
+
+**Acceptance criteria:**
+- [ ] Training data sorted by `query_month` before `compute_query_groups`
+- [ ] `gc.collect()` called after training data freed and after evaluation
+- [ ] Feature importance extracted from model and included in metrics
+- [ ] Uses `load_v62b_month` (which handles branch-level join internally)
+- [ ] **NOTE**: This pipeline does NOT include BF enrichment or `collect_usable_months()` — those are in `run_v2_ml.py` (Task 11). This is intentional: pipeline.py is a building block, not the full v2 model.
 
 ---
 
@@ -1551,6 +2016,50 @@ Expected: prints count of existing vs missing files. Then run without `--dry-run
 git add scripts/cache_realized_da.py
 git commit -m "feat: add realized DA cache script for PJM (branch-level)"
 ```
+
+#### Review: Task 9
+
+**Verify commands:**
+```bash
+# 1. Dry run works
+python scripts/cache_realized_da.py --dry-run
+
+# 2. After full run: verify cache contents
+python -c "
+from pathlib import Path
+from ml.config import REALIZED_DA_CACHE
+import polars as pl
+
+cache = Path(REALIZED_DA_CACHE)
+files = sorted(cache.glob('*.parquet'))
+print(f'Cached files: {len(files)}')
+if files:
+    # Spot-check one file
+    df = pl.read_parquet(str(files[len(files)//2]))
+    print(f'Sample file: {files[len(files)//2].name}')
+    print(f'Columns: {df.columns}')
+    print(f'Rows: {len(df)}')
+    assert 'branch_name' in df.columns, 'MISSING branch_name in cache!'
+    assert 'realized_sp' in df.columns, 'MISSING realized_sp in cache!'
+    print('Cache schema PASSED')
+"
+
+# 3. Verify Ray init pattern
+grep -n "RAY_ADDRESS\|init_ray" scripts/cache_realized_da.py
+# Must see RAY_ADDRESS set BEFORE init_ray()
+
+# 4. Check for all 3 peak types
+grep -n "peak.type\|onpeak\|dailyoffpeak\|wkndonpeak" scripts/cache_realized_da.py
+```
+
+**Acceptance criteria:**
+- [ ] **BLOCK**: Cached parquet files have columns `[branch_name, realized_sp]` (NOT `constraint_id`)
+- [ ] **BLOCK**: Ray initialized with correct address before any data fetch
+- [ ] All 3 peak types cached: onpeak, dailyoffpeak, wkndonpeak
+- [ ] Month range covers at least 2019-01 to 2026-02 (training lookback + holdout)
+- [ ] Dry-run flag works (no actual fetching)
+- [ ] Already-cached files are skipped (idempotent)
+- [ ] Print total time, fetched count, skipped count
 
 ---
 
@@ -1813,6 +2322,68 @@ Expected: saves v0 results for all 6 slices to registry/ and holdout/.
 git add scripts/run_v0_formula_baseline.py registry/ holdout/
 git commit -m "feat: v0 formula baseline for all 6 PJM slices"
 ```
+
+#### Review: Task 10
+
+**Verify commands:**
+```bash
+# 1. Registry structure: all 6 slices have v0
+python -c "
+from pathlib import Path
+import json
+root = Path('registry')
+for ptype in ['f0', 'f1']:
+    for ctype in ['onpeak', 'dailyoffpeak', 'wkndonpeak']:
+        v0 = root / ptype / ctype / 'v0' / 'metrics.json'
+        gates = root / ptype / ctype / 'gates.json'
+        champ = root / ptype / ctype / 'champion.json'
+        m = json.load(open(v0)) if v0.exists() else None
+        print(f'{ptype}/{ctype}: metrics={v0.exists()} gates={gates.exists()} champion={champ.exists()}', end='')
+        if m:
+            agg = m['aggregate']['mean']
+            print(f'  VC@20={agg[\"VC@20\"]:.4f}  n_months={m[\"n_months\"]}')
+        else:
+            print('  MISSING')
+"
+
+# 2. Sanity check: VC@20 in reasonable range
+python -c "
+import json
+from pathlib import Path
+for ptype in ['f0', 'f1']:
+    for ctype in ['onpeak', 'dailyoffpeak', 'wkndonpeak']:
+        p = Path(f'registry/{ptype}/{ctype}/v0/metrics.json')
+        if not p.exists(): continue
+        vc20 = json.load(open(p))['aggregate']['mean']['VC@20']
+        status = 'OK' if 0.10 <= vc20 <= 0.45 else 'SUSPICIOUS'
+        print(f'{ptype}/{ctype} VC@20={vc20:.4f} [{status}]')
+"
+
+# 3. Verify branch_name join is used (not constraint_id)
+grep -n "branch_name\|constraint_id" scripts/run_v0_formula_baseline.py
+# Should see: join on branch_name
+
+# 4. Verify formula negation (lower rank_value = more binding, eval expects higher = better)
+grep -n "negate\|\-v62b" scripts/run_v0_formula_baseline.py
+
+# 5. Gates calibration sanity
+python -c "
+import json
+from pathlib import Path
+g = json.load(open('registry/f0/onpeak/gates.json'))
+print(json.dumps(g, indent=2))
+# floor should be ~0.9 * mean for each metric
+"
+```
+
+**Acceptance criteria:**
+- [ ] **BLOCK**: All 6 slices have `v0/metrics.json`, `gates.json`, `champion.json`
+- [ ] **BLOCK**: VC@20 in range 0.10-0.45 for all slices (if 0.0 or >0.5, target join is broken)
+- [ ] **BLOCK**: Realized DA joined on `branch_name` in evaluate_month()
+- [ ] Formula scores negated before evaluation (lower rank = better, but evaluate_ltr expects higher = better)
+- [ ] Gates floor = 0.9 × mean for each Group A metric
+- [ ] `champion.json` version is "v0" for all slices
+- [ ] Holdout results saved to `holdout/` if `--holdout` was run
 
 ---
 
@@ -2158,23 +2729,134 @@ git add scripts/run_v2_ml.py registry/ holdout/
 git commit -m "feat: v2 ML model for all 6 PJM slices"
 ```
 
+#### Review: Task 11
+
+**Verify commands:**
+```bash
+# 1. v2 results exist for all 6 slices
+python -c "
+import json
+from pathlib import Path
+for ptype in ['f0', 'f1']:
+    for ctype in ['onpeak', 'dailyoffpeak', 'wkndonpeak']:
+        v2 = Path(f'registry/{ptype}/{ctype}/v2/metrics.json')
+        v0 = Path(f'registry/{ptype}/{ctype}/v0/metrics.json')
+        if not v2.exists():
+            print(f'{ptype}/{ctype}: v2 MISSING')
+            continue
+        v2_vc = json.load(open(v2))['aggregate']['mean']['VC@20']
+        v0_vc = json.load(open(v0))['aggregate']['mean']['VC@20']
+        delta = (v2_vc / v0_vc - 1) * 100 if v0_vc > 0 else 0
+        status = 'OK' if delta > 0 else 'REGRESSION'
+        print(f'{ptype}/{ctype}: v0={v0_vc:.4f} v2={v2_vc:.4f} delta={delta:+.1f}% [{status}]')
+"
+
+# 2. LEAKAGE CHECK: binding freq uses correct lag
+grep -n "prev_month\|cutoff\|BF_LAG\|months.*before\|< M-1" scripts/run_v2_ml.py
+# cutoff should be prev_month(auction_month), i.e., BF sees months < M-1
+
+# 3. LEAKAGE CHECK: training window uses collect_usable_months
+grep -n "collect_usable_months" scripts/run_v2_ml.py
+# Must be present — this enforces the delivery month lag
+
+# 4. Binding freq uses branch_name (not constraint_id)
+grep -n "branch_name\|constraint_id" scripts/run_v2_ml.py
+# BF should use branch_name from cached DA (which has branch_name columns)
+
+# 5. Feature count = 9
+python -c "
+from ml.config import V10E_FEATURES
+print(f'Features ({len(V10E_FEATURES)}): {V10E_FEATURES}')
+assert len(V10E_FEATURES) == 9, f'Expected 9 features, got {len(V10E_FEATURES)}'
+"
+
+# 6. Feature importance check (top features should make sense)
+python -c "
+import json
+from pathlib import Path
+p = Path('registry/f0/onpeak/v2/metrics.json')
+if p.exists():
+    data = json.load(open(p))
+    # Check first month's feature importance
+    first_month = sorted(data['per_month'].keys())[0]
+    fi = data['per_month'][first_month].get('_fi', {})
+    if fi:
+        print('Feature importance (f0/onpeak, first month):')
+        for k, v in sorted(fi.items(), key=lambda x: -x[1]):
+            print(f'  {k}: {v:.1f}')
+    else:
+        print('No feature importance saved (check _fi key)')
+"
+
+# 7. Memory: check script doesn't leak memory
+grep -n "gc.collect\|del " scripts/run_v2_ml.py
+```
+
+**Acceptance criteria:**
+- [ ] **BLOCK**: v2 VC@20 > v0 VC@20 for at least 5 of 6 slices (ML must beat formula)
+- [ ] **BLOCK**: If v2 is NOT better than v0 for any slice, investigate target join — branch mapping may be wrong
+- [ ] **BLOCK**: BF cutoff = `prev_month(auction_month)` — months strictly < M-1 (temporal leakage guard)
+- [ ] **BLOCK**: Training uses `collect_usable_months()` which respects delivery month lag
+- [ ] **BLOCK**: BF keys are `branch_name` (from cached DA parquet), not `constraint_id`
+- [ ] Exactly 9 features used
+- [ ] Feature importance is saved in per-month metrics
+- [ ] `gc.collect()` called after each eval month
+- [ ] Walltime printed at end
+- [ ] **HIGH**: f1 snapshot provenance verified (see check below)
+
+**f1 snapshot provenance check** (Finding 7 from review):
+V6.2B and Spice6 snapshots for f1 must have been produced BEFORE the f1 auction date.
+If they were generated post-auction, f1 features contain forward-looking information = leakage.
+
+```bash
+python -c "
+from pathlib import Path
+import os
+
+# Check V6.2B f1 file timestamps vs auction dates
+base = Path('/opt/data/xyz-dataset/signal_data/pjm/constraints/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1')
+import pandas as pd
+
+# Sample a few f1 months and check file modification times
+for month in ['2023-06', '2024-01', '2025-01']:
+    f1_path = base / month / 'f1' / 'onpeak'
+    if not f1_path.exists():
+        print(f'{month}/f1: NOT FOUND')
+        continue
+    files = list(f1_path.glob('*.parquet'))
+    if files:
+        mtime = os.path.getmtime(str(files[0]))
+        mtime_ts = pd.Timestamp(mtime, unit='s')
+        # Auction for month M happens ~mid(M-1)
+        auction_approx = pd.Timestamp(month) - pd.Timedelta(days=15)
+        status = 'OK' if mtime_ts > auction_approx else 'SUSPICIOUS'
+        print(f'{month}/f1: file_mtime={mtime_ts.date()}, auction~{auction_approx.date()} [{status}]')
+        # NOTE: mtime > auction is expected (file created at/after auction)
+        # mtime >> auction+30d is suspicious (regenerated with future data?)
+"
+```
+
+If file timestamps are much later than auction dates (e.g., all files have 2026 timestamps), this means snapshots were regenerated and may contain forward-looking data. Escalate to the data owner for provenance confirmation.
+
 ---
 
 ### Task 12: Create `scripts/run_blend_search.py`
 
-Search for optimal `(w_ml, 0, w_formula)` blend per slice.
+Search for optimal `(w_da, w_dmix, w_dori)` blend per slice on the full simplex.
 
 **Files:**
 - Create: `scripts/run_blend_search.py`
 
 - [ ] **Step 1: Write blend search script**
 
-This runs the v2 ML model with different blend weights for `v7_formula_score` and evaluates which produces the best dev VC@20. Saves the best blend as v1 in the registry.
+This runs the v2 ML model with different blend weights for `v7_formula_score` and evaluates which produces the best dev VC@20.
+
+**Artifact contract**: The blend search updates `BLEND_WEIGHTS` in `run_v2_ml.py` and saves the winning blend to `registry/{ptype}/{ctype}/v2/config.json` under `"blend_weights"`. There is NO separate "v1" version — the blend search refines v2's formula-score feature. After blend search, re-run `run_v2_ml.py` with the optimized weights and commit updated v2 results.
 
 The blend weights control how `v7_formula_score` (a feature) is computed:
 `v7_formula_score = w_da * da_rank_value + w_dmix * density_mix_rank_value + w_dori * density_ori_rank_value`
 
-Search grid: `w_da` from 0.50 to 1.00 step 0.05, `w_dori = 1 - w_da`, `w_dmix = 0`.
+Search grid: Explore the full `(w_da, w_dmix, w_dori)` simplex (all three weights, summing to 1.0) in 0.05 increments. Do NOT hardcode `w_dmix = 0` without PJM-specific evidence that `density_mix_rank_value` adds no value.
 
 This script can be adapted from `research-stage5-tier/scripts/run_f1_blend_search.py`.
 
@@ -2192,18 +2874,66 @@ git add scripts/run_blend_search.py registry/
 git commit -m "feat: blend search for all 6 PJM slices"
 ```
 
+#### Review: Task 12
+
+**Verify commands:**
+```bash
+# 1. Optimized blend weights stored in v2/config.json for all slices
+python -c "
+import json
+from pathlib import Path
+for ptype in ['f0', 'f1']:
+    for ctype in ['onpeak', 'dailyoffpeak', 'wkndonpeak']:
+        cfg_path = Path(f'registry/{ptype}/{ctype}/v2/config.json')
+        if cfg_path.exists():
+            cfg = json.load(open(cfg_path))
+            bw = cfg.get('blend_weights', {})
+            print(f'{ptype}/{ctype}: blend_weights={bw}')
+        else:
+            print(f'{ptype}/{ctype}: v2/config.json MISSING')
+"
+
+# 2. BLEND_WEIGHTS in run_v2_ml.py match config.json
+grep -A 8 "BLEND_WEIGHTS" scripts/run_v2_ml.py
+
+# 3. Blend search explored full simplex (not just w_dmix=0 edge)
+grep -n "w_dmix\|density_mix\|simplex" scripts/run_blend_search.py
+# Should see: w_dmix explored (not hardcoded to 0)
+
+# 4. v2 results were re-run with optimized blend (check updated metrics)
+python -c "
+import json
+from pathlib import Path
+# v2 metrics should reflect optimized blend, not defaults
+p = Path('registry/f0/onpeak/v2/config.json')
+if p.exists():
+    cfg = json.load(open(p))
+    bw = cfg.get('blend_weights', {})
+    print(f'f0/onpeak blend: {bw}')
+    # If w_da=0.85, w_dmix=0.0, w_dori=0.15 — these are defaults; blend search may not have changed them
+    # But the search should have at least TRIED other values
+"
+```
+
+**Acceptance criteria:**
+- [ ] Blend search explored the full `(w_da, w_dmix, w_dori)` simplex (at least 20 combinations per slice)
+- [ ] Best blend stored in `registry/{ptype}/{ctype}/v2/config.json` under `"blend_weights"`
+- [ ] `BLEND_WEIGHTS` in `run_v2_ml.py` updated to match search results
+- [ ] v2 metrics re-generated with optimized blend (not stale from pre-search run)
+- [ ] Best blend VC@20 >= v2 with default blend (blend search should not regress)
+
 ---
 
 ### Task 13: Create `scripts/run_holdout.py` — Final holdout evaluation
 
-Re-run best version (v2 with optimized blend) on held-out months (2024-2025).
+Re-run v2 (with optimized blend from Task 12) on held-out months (2024-2025).
 
 **Files:**
 - Create: `scripts/run_holdout.py`
 
 - [ ] **Step 1: Write holdout script**
 
-This is a thin wrapper that runs `run_variant()` from `run_v2_ml.py` on holdout months with the best blend weights from the blend search.
+This is a thin wrapper that runs `run_variant()` from `run_v2_ml.py` on holdout months. It reads `BLEND_WEIGHTS` from `run_v2_ml.py` (already updated by blend search in Task 12), ensuring holdout uses the same blend as the dev evaluation.
 
 - [ ] **Step 2: Run holdout and commit**
 
@@ -2212,6 +2942,64 @@ python scripts/run_holdout.py
 git add scripts/run_holdout.py holdout/
 git commit -m "feat: holdout evaluation for all 6 PJM slices"
 ```
+
+#### Review: Task 13
+
+**Verify commands:**
+```bash
+# 1. Holdout results for all 6 slices
+python -c "
+import json
+from pathlib import Path
+print(f'{\"Slice\":<25} {\"Dev VC@20\":>10} {\"HO VC@20\":>10} {\"HO vs Dev\":>10}')
+print('-' * 60)
+for ptype in ['f0', 'f1']:
+    for ctype in ['onpeak', 'dailyoffpeak', 'wkndonpeak']:
+        dev = Path(f'registry/{ptype}/{ctype}/v2/metrics.json')
+        ho = Path(f'holdout/{ptype}/{ctype}/v2/metrics.json')
+        dev_vc = json.load(open(dev))['aggregate']['mean']['VC@20'] if dev.exists() else 0
+        ho_vc = json.load(open(ho))['aggregate']['mean']['VC@20'] if ho.exists() else 0
+        ratio = ho_vc / dev_vc if dev_vc > 0 else 0
+        print(f'{ptype}/{ctype:<20} {dev_vc:>10.4f} {ho_vc:>10.4f} {ratio:>9.1%}')
+"
+
+# 2. Holdout vs v0 holdout (ML should beat formula on holdout too)
+python -c "
+import json
+from pathlib import Path
+print(f'{\"Slice\":<25} {\"v0 HO\":>10} {\"v2 HO\":>10} {\"Delta\":>10}')
+print('-' * 60)
+for ptype in ['f0', 'f1']:
+    for ctype in ['onpeak', 'dailyoffpeak', 'wkndonpeak']:
+        v0_ho = Path(f'holdout/{ptype}/{ctype}/v0/metrics.json')
+        v2_ho = Path(f'holdout/{ptype}/{ctype}/v2/metrics.json')
+        v0_vc = json.load(open(v0_ho))['aggregate']['mean']['VC@20'] if v0_ho.exists() else 0
+        v2_vc = json.load(open(v2_ho))['aggregate']['mean']['VC@20'] if v2_ho.exists() else 0
+        delta = (v2_vc / v0_vc - 1) * 100 if v0_vc > 0 else 0
+        status = 'OK' if delta > 0 else 'FAIL'
+        print(f'{ptype}/{ctype:<20} {v0_vc:>10.4f} {v2_vc:>10.4f} {delta:>+9.1f}% [{status}]')
+"
+
+# 3. Holdout months cover 2024-2025
+python -c "
+import json
+from pathlib import Path
+p = Path('holdout/f0/onpeak/v2/metrics.json')
+if p.exists():
+    data = json.load(open(p))
+    months = sorted(data['per_month'].keys())
+    print(f'Holdout months ({len(months)}): {months[0]} .. {months[-1]}')
+    assert months[0] >= '2024-01', f'Holdout starts too early: {months[0]}'
+    print('Holdout range OK')
+"
+```
+
+**Acceptance criteria:**
+- [ ] **BLOCK**: All 6 slices have holdout results in `holdout/{ptype}/{ctype}/v2/metrics.json`
+- [ ] **BLOCK**: v2 holdout VC@20 > v0 holdout VC@20 for at least 5 of 6 slices
+- [ ] Holdout months are from 2024-2025 (out-of-sample, not overlapping dev)
+- [ ] Holdout VC@20 is within 0.5-1.2× of dev VC@20 (large divergence = overfitting concern)
+- [ ] Summary table printed comparing all slices
 
 ---
 
@@ -2371,9 +3159,10 @@ Adapt from MISO's `v70/inference.py`. Key PJM changes:
 
 Adapt from MISO's `scripts/generate_v70_signal.py`. Key changes:
 - `"pjm"` instead of `"miso"` in `ConstraintsSignal` calls
-- PJM signal names
-- 3 class types
-- No `SO_MW_Transfer` exception
+- Concrete PJM signal names: input=`TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1`, output=`TEST.TEST.Signal.PJM.SPICE_F0P_V7.0B.R1` (verify these with the downstream PJM consumer or `ConstraintsSignal` API before finalizing)
+- SF signal: input/output from `/opt/data/xyz-dataset/signal_data/pjm/sf/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1/` (passthrough, no modification)
+- 3 class types: onpeak, dailyoffpeak, wkndonpeak
+- No `SO_MW_Transfer` exception (MISO-specific)
 
 - [ ] **Step 5: Commit**
 
@@ -2381,6 +3170,94 @@ Adapt from MISO's `scripts/generate_v70_signal.py`. Key changes:
 git add v70/ scripts/generate_v70_signal.py
 git commit -m "feat: PJM V7.0 signal deployment pipeline"
 ```
+
+#### Review: Task 14
+
+**Verify commands:**
+```bash
+# 1. All deployment modules exist
+ls -1 v70/__init__.py v70/cache.py v70/inference.py v70/signal_writer.py scripts/generate_v70_signal.py
+
+# 2. Import check
+python -c "
+from v70.cache import ensure_realized_da_cache, required_realized_da_months
+from v70.signal_writer import compute_rank_tier, available_ptypes
+print('v70 imports OK')
+"
+
+# 3. Verify compute_rank_tier produces valid tiers (0-4)
+python -c "
+import numpy as np
+from v70.signal_writer import compute_rank_tier
+scores = np.array([10.0, 5.0, 1.0, 8.0, 3.0, 7.0, 2.0, 6.0, 4.0, 9.0])
+v62b = np.array([0.1, 0.5, 0.9, 0.2, 0.7, 0.3, 0.8, 0.4, 0.6, 0.15])
+rank, tier = compute_rank_tier(scores, v62b)
+print(f'Ranks: {rank}')
+print(f'Tiers: {tier}')
+assert tier.min() >= 0 and tier.max() <= 4, f'Tier out of range: {tier.min()}-{tier.max()}'
+assert len(set(tier)) > 1, 'All same tier — ranking broken'
+# Highest score should get lowest rank (tier 0)
+best_idx = np.argmax(scores)
+print(f'Best score idx={best_idx}, tier={tier[best_idx]}')
+assert tier[best_idx] == 0, f'Best score should be tier 0, got {tier[best_idx]}'
+print('Rank/tier check PASSED')
+"
+
+# 4. PJM-specific: no SO_MW_Transfer exception
+grep -rn "SO_MW\|so_mw" v70/ scripts/generate_v70_signal.py || echo "No SO_MW_Transfer (correct for PJM)"
+
+# 5. Verify 3 class types in signal writer
+grep -n "onpeak\|dailyoffpeak\|wkndonpeak\|class_type\|PJM_CLASS_TYPES" v70/ scripts/generate_v70_signal.py
+
+# 6. Verify signal uses PJM naming (not MISO)
+grep -rn "miso\|MISO" v70/ scripts/generate_v70_signal.py || echo "No MISO references (correct)"
+grep -n "pjm\|PJM" scripts/generate_v70_signal.py
+```
+
+**Acceptance criteria:**
+- [ ] All 4 v70 modules + generation script exist and import cleanly
+- [ ] **BLOCK**: `compute_rank_tier` produces tiers 0-4 with highest ML score → tier 0
+- [ ] **BLOCK**: Lexsort order: ML score descending, V6.2B rank ascending, index ascending
+- [ ] **BLOCK**: No `SO_MW_Transfer` exception (MISO-specific, not applicable to PJM)
+- [ ] Signal uses PJM naming, not MISO
+- [ ] 3 class types handled (onpeak, dailyoffpeak, wkndonpeak)
+- [ ] `available_ptypes()` uses `PJM_AUCTION_SCHEDULE`
+- [ ] `ensure_realized_da_cache` covers BF lookback months (15 months before cutoff)
+- [ ] f2-f11 passthrough: no ML scoring, V6.2B rank preserved as-is
+
+**Output integrity checks** (Finding 8 from review):
+```bash
+# 7. CRITICAL: For ML slices, only rank/rank_ori/tier change; all other columns are bit-identical to V6.2B
+python -c "
+# After generating a test signal, compare against V6.2B input
+# This requires a test run of generate_v70_signal.py first
+import polars as pl
+from pathlib import Path
+
+v62b_base = Path('/opt/data/xyz-dataset/signal_data/pjm/constraints/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1')
+# TODO: replace with actual v70 output path after first test run
+# v70_out = Path('path/to/v70/output')
+
+# Check that:
+# 1. Row universe is identical (same constraint_ids, same count)
+# 2. All columns except rank, rank_ori, tier are unchanged
+# 3. Shift factors are bit-identical
+print('OUTPUT INTEGRITY: manual verification required after first signal generation')
+print('Check: row universe identical, non-tier columns bit-identical, SF unchanged')
+"
+
+# 8. Signal naming: must use concrete PJM signal names
+grep -n "signal_name\|Signal.*PJM\|SPICE_F0P" scripts/generate_v70_signal.py
+# Must see concrete PJM signal names (e.g., TEST.TEST.Signal.PJM.SPICE_F0P_V7.0B.R1)
+# NOT generic "PJM signal names" placeholder
+```
+
+**Acceptance criteria (continued):**
+- [ ] **BLOCK**: For ML slices (f0, f1), only `rank`, `rank_ori`, and `tier` columns change vs V6.2B; all other constraint columns are bit-identical
+- [ ] **BLOCK**: Shift factors (SF) are completely unchanged (passthrough from V6.2B)
+- [ ] **BLOCK**: Row universe (set of constraint_ids per month/ptype/ctype) is identical to V6.2B
+- [ ] **HIGH**: Concrete PJM signal names specified in the generation script (not placeholder text)
+- [ ] **HIGH**: Signal naming verified against downstream PJM consumer expectations (check with `ConstraintsSignal` API)
 
 ---
 
@@ -2418,3 +3295,142 @@ After each major phase, verify these:
 5. **Registry schema**: every slice has `metrics.json`, `config.json`, `gates.json`, `champion.json`
 6. **Memory**: never exceed 40 GiB for research scripts (`mem_mb()` at each stage)
 7. **LightGBM threads**: always `num_threads=4` (already hardcoded in `train.py`)
+
+---
+
+## Final End-to-End Review
+
+Run this after ALL tasks are complete. This is the go/no-go gate for declaring the pipeline ready.
+
+```bash
+cd /home/xyz/workspace/pmodel && source .venv/bin/activate
+cd /home/xyz/workspace/research-qianli-v2/research-pjm-signal-f0p-0
+```
+
+### 1. Codebase health
+```bash
+# No MISO references in PJM code (except comments explaining the adaptation)
+grep -rn "from.*miso\|import.*miso" ml/ scripts/ v70/ --include="*.py" || echo "Clean (no MISO imports)"
+
+# No pandas used for data loading (should be polars)
+grep -rn "pd.read_parquet\|pd.read_csv" ml/ scripts/ --include="*.py" || echo "Clean (polars only)"
+
+# All scripts have sys.path setup
+for f in scripts/*.py; do grep -l "sys.path" "$f" > /dev/null || echo "MISSING sys.path: $f"; done
+
+# No dangling imports
+python -c "
+import ml.config, ml.branch_mapping, ml.realized_da, ml.spice6_loader
+import ml.features, ml.data_loader, ml.pipeline
+import ml.train, ml.evaluate, ml.v62b_formula, ml.registry_paths, ml.compare
+print('All ml modules import OK')
+"
+```
+
+### 2. Data correctness (THE most important check)
+```bash
+python -c "
+import json
+from pathlib import Path
+
+print('=== FULL RESULTS SUMMARY ===')
+print()
+print(f'{\"Slice\":<25} {\"v0 Dev\":>8} {\"v2 Dev\":>8} {\"v0 HO\":>8} {\"v2 HO\":>8} {\"Dev Δ\":>8} {\"HO Δ\":>8}')
+print('-' * 75)
+
+all_ok = True
+for ptype in ['f0', 'f1']:
+    for ctype in ['onpeak', 'dailyoffpeak', 'wkndonpeak']:
+        def get_vc20(path):
+            if not Path(path).exists(): return None
+            return json.load(open(path))['aggregate']['mean']['VC@20']
+
+        v0d = get_vc20(f'registry/{ptype}/{ctype}/v0/metrics.json')
+        v2d = get_vc20(f'registry/{ptype}/{ctype}/v2/metrics.json')
+        v0h = get_vc20(f'holdout/{ptype}/{ctype}/v0/metrics.json')
+        v2h = get_vc20(f'holdout/{ptype}/{ctype}/v2/metrics.json')
+
+        dev_delta = f'{(v2d/v0d-1)*100:+.0f}%' if v0d and v2d else 'N/A'
+        ho_delta = f'{(v2h/v0h-1)*100:+.0f}%' if v0h and v2h else 'N/A'
+
+        line = f'{ptype}/{ctype:<20} {v0d or 0:>8.4f} {v2d or 0:>8.4f} {v0h or 0:>8.4f} {v2h or 0:>8.4f} {dev_delta:>8} {ho_delta:>8}'
+        print(line)
+
+        # Checks
+        if v2d and v0d and v2d <= v0d:
+            print(f'  ⚠ WARN: v2 dev <= v0 dev for {ptype}/{ctype}')
+        if v2h and v0h and v2h <= v0h:
+            print(f'  ⚠ WARN: v2 holdout <= v0 holdout for {ptype}/{ctype}')
+            all_ok = False
+
+print()
+print('VERDICT:', 'PASS — ML beats formula on holdout' if all_ok else 'NEEDS INVESTIGATION')
+"
+```
+
+### 3. Leakage audit
+```bash
+python -c "
+# Check every module for potential temporal leakage patterns
+import ast, sys
+from pathlib import Path
+
+suspect_patterns = [
+    'actual_shadow_price', 'actual_binding', 'abs_error', 'error',
+    'shadow_sign', 'shadow_price',  # as feature (not in fetch context)
+]
+
+for py in sorted(Path('ml').glob('*.py')):
+    if py.name == '__init__.py': continue
+    code = py.read_text()
+    for pat in suspect_patterns:
+        # Skip if it's in a comment or in fetch/cache context
+        for i, line in enumerate(code.split('\n'), 1):
+            stripped = line.strip()
+            if stripped.startswith('#'): continue
+            if pat in stripped and 'feature' in stripped.lower():
+                print(f'SUSPECT {py}:{i}: {stripped}')
+
+print('Leakage audit complete')
+"
+```
+
+### 4. Registry completeness
+```bash
+python -c "
+from pathlib import Path
+import json
+
+required_files = ['metrics.json', 'config.json']
+slice_files = ['gates.json', 'champion.json']
+
+missing = []
+for ptype in ['f0', 'f1']:
+    for ctype in ['onpeak', 'dailyoffpeak', 'wkndonpeak']:
+        base = Path(f'registry/{ptype}/{ctype}')
+        for sf in slice_files:
+            if not (base / sf).exists():
+                missing.append(f'{base / sf}')
+        for v in ['v0', 'v2']:
+            for rf in required_files:
+                if not (base / v / rf).exists():
+                    missing.append(f'{base / v / rf}')
+
+if missing:
+    print(f'MISSING {len(missing)} files:')
+    for m in missing:
+        print(f'  {m}')
+else:
+    print('Registry complete: all 6 slices × 2 versions × required files')
+"
+```
+
+### Final acceptance criteria
+- [ ] **BLOCK**: ML (v2) beats formula (v0) on holdout VC@20 for at least 5/6 slices
+- [ ] **BLOCK**: No temporal leakage suspects found in audit
+- [ ] **BLOCK**: Registry complete — all files present for all 6 slices
+- [ ] **BLOCK**: All modules import cleanly
+- [ ] All holdout VC@20 values in range 0.10-0.50
+- [ ] Dev-to-holdout ratio between 0.5-1.2 (no severe overfitting)
+- [ ] No MISO imports in production code
+- [ ] Deployment modules (v70/) produce valid tiers 0-4

@@ -26,6 +26,7 @@ _STAGE5 = _PROJECT.parent / "research-stage5-tier"
 sys.path.insert(0, str(_STAGE5))
 
 from pbase.data.dataset.signal.general import ConstraintsSignal, ShiftFactorSignal
+from v70.cache import REALIZED_DA_CACHE
 from v70.signal_writer import available_ptypes
 
 V62B_SIGNAL = "TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1"
@@ -33,7 +34,7 @@ V70_SIGNAL = "TEST.TEST.Signal.MISO.SPICE_F0P_V7.0.R1"
 ML_PTYPES = ["f0", "f1"]
 
 HOLDOUT_DIR = _STAGE5 / "holdout"
-DA_PATH = Path("/opt/temp/qianli/spice_data/miso/realized_da")
+DA_PATH = Path(REALIZED_DA_CACHE)
 
 
 class ValidationResult:
@@ -160,6 +161,10 @@ def validate_rank_tier(month: str, ptype: str, ctype: str, vr: ValidationResult)
     except FileNotFoundError:
         return
 
+    if len(v70) == 0 or "rank" not in v70.columns:
+        vr.warn("E", f"{month} {key}: V7.0 signal empty or missing rank/tier columns")
+        return
+
     n = len(v70)
     rank = v70["rank"].values
     tier = v70["tier"].values
@@ -216,6 +221,10 @@ def validate_scores(month: str, ptype: str, ctype: str, vr: ValidationResult):
     try:
         v70 = ConstraintsSignal("miso", V70_SIGNAL, ptype, ctype).load_data(ts)
     except FileNotFoundError:
+        return
+
+    if len(v70) == 0 or "rank_ori" not in v70.columns:
+        vr.warn("F", f"{month} {key}: V7.0 signal empty or missing rank_ori")
         return
 
     scores = v70["rank_ori"].values

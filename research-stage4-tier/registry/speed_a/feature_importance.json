@@ -1,0 +1,101 @@
+{
+  "importance_type": "gain",
+  "model": "ltr_ranker",
+  "n_months": 1,
+  "per_month": {
+    "2021-09": {
+      "da_rank_value": 1265.427354556974,
+      "density_mix_rank_value": 47.304341869428754,
+      "mean_branch_max": 37.510447541077156,
+      "constraint_limit": 11.451342007378116,
+      "mix_mean": 9.454601266465033,
+      "prob_exceed_100": 2.712169885635376,
+      "density_ori_rank_value": 1.582965224981308,
+      "prob_exceed_110": 0.730459988117218,
+      "ori_mean": 0.6730056144297123,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0
+    }
+  },
+  "aggregate": {
+    "mean": {
+      "da_rank_value": 1265.427354556974,
+      "density_mix_rank_value": 47.304341869428754,
+      "mean_branch_max": 37.510447541077156,
+      "constraint_limit": 11.451342007378116,
+      "mix_mean": 9.454601266465033,
+      "prob_exceed_100": 2.712169885635376,
+      "density_ori_rank_value": 1.582965224981308,
+      "prob_exceed_110": 0.730459988117218,
+      "ori_mean": 0.6730056144297123,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0
+    },
+    "std": {
+      "da_rank_value": 0.0,
+      "density_mix_rank_value": 0.0,
+      "mean_branch_max": 0.0,
+      "constraint_limit": 0.0,
+      "mix_mean": 0.0,
+      "prob_exceed_100": 0.0,
+      "density_ori_rank_value": 0.0,
+      "prob_exceed_110": 0.0,
+      "ori_mean": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0
+    }
+  },
+  "ranked": [
+    [
+      "da_rank_value",
+      1265.427354556974
+    ],
+    [
+      "density_mix_rank_value",
+      47.304341869428754
+    ],
+    [
+      "mean_branch_max",
+      37.510447541077156
+    ],
+    [
+      "constraint_limit",
+      11.451342007378116
+    ],
+    [
+      "mix_mean",
+      9.454601266465033
+    ],
+    [
+      "prob_exceed_100",
+      2.712169885635376
+    ],
+    [
+      "density_ori_rank_value",
+      1.582965224981308
+    ],
+    [
+      "prob_exceed_110",
+      0.730459988117218
+    ],
+    [
+      "ori_mean",
+      0.6730056144297123
+    ],
+    [
+      "prob_exceed_90",
+      0.0
+    ],
+    [
+      "prob_exceed_85",
+      0.0
+    ],
+    [
+      "prob_exceed_80",
+      0.0
+    ]
+  ]
+}

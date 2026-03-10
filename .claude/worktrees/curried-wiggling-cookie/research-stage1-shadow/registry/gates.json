@@ -1,0 +1,136 @@
+{
+  "version": 2,
+  "effective_since": "2026-03-01",
+  "noise_tolerance": 0.02,
+  "tail_max_failures": 1,
+  "eval_months": {
+    "primary": [
+      "2020-09",
+      "2020-11",
+      "2021-01",
+      "2021-04",
+      "2021-06",
+      "2021-08",
+      "2021-10",
+      "2021-12",
+      "2022-03",
+      "2022-06",
+      "2022-09",
+      "2022-12"
+    ],
+    "stress": [
+      "2020-04",
+      "2020-07",
+      "2021-02",
+      "2021-07",
+      "2022-07",
+      "2022-01"
+    ]
+  },
+  "cascade_stages": [
+    {
+      "stage": 1,
+      "ptype": "f0",
+      "blocking": true
+    },
+    {
+      "stage": 2,
+      "ptype": "f1",
+      "blocking": true
+    },
+    {
+      "stage": 3,
+      "ptype": "f2p",
+      "blocking": false
+    }
+  ],
+  "gates": {
+    "S1-AUC": {
+      "floor": 0.7848,
+      "tail_floor": 0.7088,
+      "direction": "higher",
+      "group": "A",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.1
+    },
+    "S1-AP": {
+      "floor": 0.3436,
+      "tail_floor": 0.215,
+      "direction": "higher",
+      "group": "A",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.1
+    },
+    "S1-VCAP@100": {
+      "floor": -0.0351,
+      "tail_floor": -0.0995,
+      "direction": "higher",
+      "group": "A",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.1
+    },
+    "S1-NDCG": {
+      "floor": 0.6833,
+      "tail_floor": 0.5601,
+      "direction": "higher",
+      "group": "A",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.1
+    },
+    "S1-BRIER": {
+      "floor": 0.1703,
+      "tail_floor": 0.2086,
+      "direction": "lower",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 0.02,
+      "v0_tail_offset": 0.05
+    },
+    "S1-VCAP@500": {
+      "floor": 0.0408,
+      "tail_floor": -0.0567,
+      "direction": "higher",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.1
+    },
+    "S1-VCAP@1000": {
+      "floor": 0.1091,
+      "tail_floor": -0.0191,
+      "direction": "higher",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.1
+    },
+    "S1-REC": {
+      "floor": 0.1,
+      "tail_floor": 0.0,
+      "direction": "higher",
+      "group": "B"
+    },
+    "S1-CAP@100": {
+      "floor": 0.7325,
+      "tail_floor": 0.26,
+      "direction": "higher",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.1
+    },
+    "S1-CAP@500": {
+      "floor": 0.724,
+      "tail_floor": 0.318,
+      "direction": "higher",
+      "group": "B",
+      "pending_v0": false,
+      "v0_offset": 0.05,
+      "v0_tail_offset": 0.1
+    }
+  }
+}

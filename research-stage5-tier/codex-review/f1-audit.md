@@ -1,0 +1,37 @@
+# f1 Audit
+
+## Findings
+
+1. High: `f1/offpeak` governance is calibrated from the wrong baseline window. The current offpeak `v0` artifact was saved from only 9 dev months, while `f1/offpeak` `v1` and `v2` were evaluated on 30 dev months. That makes the active gates and champion for the offpeak slice non-comparable to the ML results they are supposed to govern. The script defaults to `_DEFAULT_EVAL_MONTHS` unless `--full` is passed in [run_v0_formula_baseline.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v0_formula_baseline.py#L115-L129), and the saved outputs confirm the mismatch: [registry/f1/offpeak/v0/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/registry/f1/offpeak/v0/metrics.json#L1) has `n_months = 9`, while [registry/f1/offpeak/v1/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/registry/f1/offpeak/v1/metrics.json#L1) and [registry/f1/offpeak/v2/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/registry/f1/offpeak/v2/metrics.json#L1) have `n_months = 30`. The live offpeak gates/champion are therefore anchored to the wrong baseline slice in [registry/f1/offpeak/gates.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/registry/f1/offpeak/gates.json#L1) and [registry/f1/offpeak/champion.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/registry/f1/offpeak/champion.json#L1).
+
+2. Medium: `run_f1_blend_search.py` checks ground-truth availability using the onpeak filename convention even when running `offpeak`. `_has_gt()` only tests for `{gt_month}.parquet` in [run_f1_blend_search.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_f1_blend_search.py#L30-L33), but offpeak realized files are stored as `{gt_month}_offpeak.parquet` by [realized_da.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/ml/realized_da.py#L14-L17). Today this happened not to corrupt the reported offpeak holdout because the offpeak cache exists through the same months, but the filtering logic is still wrong and can misclassify month availability or fail if onpeak/offpeak cache coverage diverges.
+
+3. Medium: the saved holdout artifacts overstate which `f1` months were actually evaluated. Both `v0` and `v2` write the requested holdout month list into `eval_config`, even when a month is skipped for missing delivery-month GT. `run_v0_formula_baseline.py` saves `HOLDOUT_MONTHS` directly in [run_v0_formula_baseline.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v0_formula_baseline.py#L243-L248), and `run_v10e_lagged.py` saves `holdout_eval` directly in [run_v10e_lagged.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v10e_lagged.py#L246-L259). The current `f1` holdout metrics therefore list `2025-12` in `eval_config` but only record 19 evaluated months because `2026-01` ground truth is missing: see [holdout/f1/onpeak/v0/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/holdout/f1/onpeak/v0/metrics.json#L1) and [holdout/f1/onpeak/v2/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/holdout/f1/onpeak/v2/metrics.json#L1). The headline VC@20 values are still based on the 19 actual months, but the metadata is misleading.
+
+4. Medium: `f1 v2` is not reproducible from its registry artifacts alone. The runner uses per-period blend weights from the code constant in [run_v10e_lagged.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v10e_lagged.py#L43-L47), and those weights materially affect `v7_formula_score` in [run_v10e_lagged.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v10e_lagged.py#L116-L123). But `save_results()` writes only `metrics.json` in [run_v10e_lagged.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v10e_lagged.py#L246-L262), and the current `v2` directories contain no `config.json` or `meta.json` at all: [registry/f1/onpeak/v2](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/registry/f1/onpeak/v2) and [registry/f1/offpeak/v2](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/registry/f1/offpeak/v2). If those code constants change later, the registry no longer tells you what `v2` actually was.
+
+5. Medium: the core `f1` row-leak and `binding_freq` leak look fixed, but the upstream snapshot leakage question remains unresolved. The code now joins GT on `delivery_month` in [ml/data_loader.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/ml/data_loader.py#L86-L96), uses `market_month = delivery_month` in [ml/spice6_loader.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/ml/spice6_loader.py#L37-L45), collects usable training rows via [ml/config.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/ml/config.py#L169-L211), and applies per-row `binding_freq` cutoffs in [run_v10e_lagged.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v10e_lagged.py#L102-L130) and [run_v10e_lagged.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v10e_lagged.py#L165-L194). I do not see a remaining local code bug that leaks `M-1` realized DA into `f1`. However, I still do not see any implemented proof that the upstream `V6.2B` and Spice6 monthly snapshots themselves are genuine pre-auction artifacts. That remains an upstream assumption, not a verified fact.
+
+## What Looks Correct
+
+- The key `f1` semantics are now wired correctly in code:
+  - `delivery_month(auction_month, period_type)` in [ml/config.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/ml/config.py#L146-L153)
+  - `collect_usable_months(...)` enforcing `delivery_month(row) <= last_full_known` in [ml/config.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/ml/config.py#L169-L211)
+  - GT join on delivery month in [ml/data_loader.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/ml/data_loader.py#L86-L96)
+  - Spice6 join on delivery month in [ml/spice6_loader.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/ml/spice6_loader.py#L37-L45)
+  - per-row `binding_freq` cutoff in [run_v10e_lagged.py](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/scripts/run_v10e_lagged.py#L102-L130)
+
+- The reported holdout improvements in the summary are numerically consistent with the saved artifacts:
+  - `f1/onpeak`: [holdout/f1/onpeak/v0/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/holdout/f1/onpeak/v0/metrics.json#L1) vs [holdout/f1/onpeak/v2/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/holdout/f1/onpeak/v2/metrics.json#L1)
+  - `f1/offpeak`: [holdout/f1/offpeak/v0/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/holdout/f1/offpeak/v0/metrics.json#L1) vs [holdout/f1/offpeak/v2/metrics.json](/home/xyz/workspace/research-qianli-v2/research-stage5-tier/holdout/f1/offpeak/v2/metrics.json#L1)
+
+## Bottom Line
+
+I would describe the current `f1` work as:
+
+- row timing and `binding_freq` leakage: mostly fixed
+- holdout gains: real in the saved artifacts
+- governance/artifact hygiene: still incomplete
+- upstream snapshot leakage question: still unresolved
+
+The one bug I would fix first is the offpeak baseline/governance mismatch, because it affects the current slice-level registry and makes `f1/offpeak` promotion logic hard to trust.

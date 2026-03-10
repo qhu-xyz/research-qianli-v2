@@ -1,38 +1,38 @@
 # Champion
 
-**Current champion: v0** (baseline, no iterations yet)
+**Current champion: v0** (baseline, no successful promotions yet)
+**Best candidate: v0005** (iter1) — NOT promoted, Tier-VC@100 fails L1 by 0.0004
 
 ## Key Metrics (12-month means)
 
 ### Group A — Blocking Gates (tier-count invariant)
 
-| Metric | Mean | Std | Min | Max | Bot2 | Floor |
-|--------|------|-----|-----|-----|------|-------|
-| Tier-VC@100 | 0.0708 | 0.0652 | 0.0029 | 0.2483 | 0.0103 | 0.075 |
-| Tier-VC@500 | 0.2296 | 0.1008 | 0.0450 | 0.3806 | 0.0564 | 0.217 |
-| Tier0-AP | 0.3062 | 0.1443 | 0.1144 | 0.5942 | 0.1146 | 0.306 |
-| Tier01-AP | 0.3110 | 0.0663 | 0.1935 | 0.4003 | 0.1941 | 0.311 |
+| Metric | v0 Mean | v0005 Mean | Delta | Floor | Status |
+|--------|---------|------------|-------|-------|--------|
+| Tier-VC@100 | 0.0708 | 0.0746 | +0.0038 | 0.075 | **FAIL L1** |
+| Tier-VC@500 | 0.2296 | 0.2329 | +0.0033 | 0.217 | PASS |
+| Tier0-AP | 0.3062 | 0.3126 | +0.0064 | 0.306 | PASS |
+| Tier01-AP | 0.3110 | 0.3132 | +0.0022 | 0.311 | PASS |
 
 ### Group B — Monitor (no hard gates)
 
-| Metric | Mean | Std | Min | Max | Bot2 |
-|--------|------|-----|-----|-----|------|
-| Tier-NDCG | 0.7711 | 0.0653 | 0.6430 | 0.8583 | 0.6585 |
-| QWK | 0.3698 | 0.0644 | 0.2439 | 0.4526 | 0.2584 |
-| Macro-F1 | 0.3560 | 0.0440 | 0.2897 | 0.4216 | 0.2975 |
-| Value-QWK | 0.3914 | 0.0971 | 0.1804 | 0.5103 | 0.1934 |
-| Tier-Recall@0 | 0.4389 | 0.1522 | 0.1874 | 0.6425 | 0.2041 |
-| Tier-Recall@1 | 0.0467 | 0.0501 | 0.0000 | 0.1825 | 0.0030 |
+| Metric | v0 Mean | v0005 Mean | Delta |
+|--------|---------|------------|-------|
+| Tier-NDCG | 0.7711 | 0.7751 | +0.0040 |
+| QWK | 0.3698 | 0.3706 | +0.0008 |
+| Macro-F1 | 0.3560 | 0.3560 | +0.0000 |
+| Value-QWK | 0.3914 | 0.3918 | +0.0004 |
+| Tier-Recall@0 | 0.4389 | 0.4403 | +0.0014 |
+| Tier-Recall@1 | 0.0467 | 0.0447 | -0.0020 |
 
 ## Critical Observations
 
 - **Tier 4 has 0 samples** in ALL months (no negative shadow prices in real data)
-- **Tier0-AP has high variance** (0.114 to 0.594) — worst months are 2022-06 and 2022-09
-- **Tier01-AP worst months** 2022-06 (0.195) and 2022-12 (0.194) — late 2022 is hard
-- **Tier-Recall@1 is catastrophically low** (mean 0.047) — missing most strongly binding constraints
-- **Worst months**: 2021-11 (QWK=0.244, VC@100=0.003), 2022-06 (NDCG=0.643, VC@500=0.045, Tier0-AP=0.114)
-- **Best month**: 2020-09 (Tier0-AP=0.594, Recall@0=0.633)
-- **Early stopping** effective: models use 87-285 trees out of 400
+- **Tier-VC@100 gap is tiny** (0.0004) — log transforms in iter2 should close it
+- **Tier-Recall@1 is catastrophically low** (0.045) — structural, FE cannot fix
+- **Value-QWK barely passing** (0.3918 vs 0.3914) — monitor closely
+- **Worst months**: 2021-11 (VC@100=0.008), 2022-06 (NDCG=0.636, VC@500=0.048, Tier0-AP=0.106)
+- **Best month**: 2020-09 (Tier0-AP=0.605, Recall@0=0.633)
 
 ## v0 Config
 
@@ -41,3 +41,9 @@
 - 34 features, monotone constraints active
 - reg_alpha=1.0, reg_lambda=1.0, min_child_weight=25
 - early_stopping_rounds=50 on val set
+
+## v0005 Config
+
+- Same hyperparams as v0
+- 37 features (+3 interaction: overload_x_hist, prob110_x_recent_hist, tail_x_hist)
+- Monotone constraints: all 3 new features = +1

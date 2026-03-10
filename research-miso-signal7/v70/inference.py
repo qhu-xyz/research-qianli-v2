@@ -74,12 +74,12 @@ def _compute_bf(
     n = len(prior)
     if n == 0:
         return np.zeros(len(cids), dtype=np.float64)
-    cid_set = set(cids)
     freq = np.zeros(len(cids), dtype=np.float64)
-    cid_to_idx = {cid: i for i, cid in enumerate(cids)}
     for m in prior:
-        for cid in bs[m] & cid_set:
-            freq[cid_to_idx[cid]] += 1
+        s = bs[m]
+        for i, cid in enumerate(cids):
+            if cid in s:
+                freq[i] += 1
     return freq / n
 
 

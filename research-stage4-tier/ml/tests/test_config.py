@@ -6,10 +6,10 @@ from ml.config import LTRConfig, PipelineConfig, GateConfig
 def test_ltr_config_defaults():
     cfg = LTRConfig()
     assert cfg.backend == "lightgbm"
-    assert cfg.n_estimators == 400
+    assert cfg.n_estimators == 100
     assert cfg.num_leaves == 31
-    assert cfg.early_stopping_rounds == 50
-    assert len(cfg.features) == 40
+    assert cfg.early_stopping_rounds == 20
+    assert len(cfg.features) == 11
     assert len(cfg.monotone_constraints) == len(cfg.features)
 
 def test_ltr_config_roundtrip():
@@ -27,6 +27,16 @@ def test_pipeline_config_roundtrip():
     assert cfg2.train_months == 6
     assert cfg2.val_months == 2
     assert cfg2.ltr.backend == "lightgbm"
+
+def test_ltr_config_drops_leaky_features():
+    cfg = LTRConfig(
+        features=["mean_branch_max", "da_rank_value", "shadow_price_da", "prob_exceed_110"],
+        monotone_constraints=[0, 0, 0, 1],
+    )
+    assert "da_rank_value" not in cfg.features
+    assert "shadow_price_da" not in cfg.features
+    assert cfg.features == ["mean_branch_max", "prob_exceed_110"]
+    assert cfg.monotone_constraints == [0, 1]
 
 def test_gate_config_missing_file(tmp_path):
     cfg = GateConfig.from_json(tmp_path / "nonexistent.json")

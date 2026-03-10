@@ -1,0 +1,513 @@
+{
+  "importance_type": "gain",
+  "model": "ltr_ranker",
+  "n_months": 4,
+  "per_month": {
+    "2020-12": {
+      "da_rank_value": 963.5954493542376,
+      "da_x_dori": 181.91085538449988,
+      "da_rank_sq": 125.02571857513249,
+      "da_x_dmix": 112.11773448507302,
+      "flow_utilization": 0.7482048524543643,
+      "constraint_limit": 0.40644229762256145,
+      "rank_gap_da_mix": 0.4052410125732422,
+      "prob_spread_100_90": 0.3244602093473077,
+      "da_x_branch_util": 0.26929969069897197,
+      "da_x_util": 0.1921893060207367,
+      "flow_util_sq": 0.13393710181117058,
+      "density_ori_rank_value": 0.06525480002164841,
+      "prob_spread_110_100": 0.046930499374866486,
+      "da_x_prob110": 0.012256000190973282,
+      "mean_branch_max": 0.0,
+      "ori_mean": 0.0,
+      "mix_mean": 0.0,
+      "density_mix_rank_value": 0.0,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_100": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "mix_utilization": 0.0,
+      "branch_utilization": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "rank_gap_da_ori": 0.0,
+      "prob_spread_90_80": 0.0,
+      "prob_exceed_mean": 0.0,
+      "prob110_x_flow": 0.0,
+      "prob110_x_branch": 0.0,
+      "probmax_x_util": 0.0,
+      "probmean_x_util": 0.0,
+      "dmix_rank_sq": 0.0,
+      "prob110_sq": 0.0,
+      "ori_mean_sq": 0.0,
+      "log_constraint_limit": 0.0,
+      "log_ori_mean": 0.0,
+      "log_branch_max": 0.0,
+      "da_prob110_util": 0.0,
+      "dmix_prob110_branch": 0.0,
+      "prob110_x_ori_mix_ratio": 0.0
+    },
+    "2021-09": {
+      "da_rank_value": 1099.0942499316297,
+      "da_rank_sq": 130.34032247948926,
+      "da_x_dmix": 108.20626459852792,
+      "da_x_dori": 23.334042391645198,
+      "da_x_util": 0.2579219937324524,
+      "rank_gap_da_mix": 0.25360000133514404,
+      "da_x_branch_util": 0.18012260273098946,
+      "da_x_prob110": 0.16388870030641556,
+      "constraint_limit": 0.028521399945020676,
+      "rank_gap_da_ori": 0.010689876253309194,
+      "flow_utilization": 0.0060841599479317665,
+      "mean_branch_max": 0.0,
+      "ori_mean": 0.0,
+      "mix_mean": 0.0,
+      "density_mix_rank_value": 0.0,
+      "density_ori_rank_value": 0.0,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_100": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "mix_utilization": 0.0,
+      "branch_utilization": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "prob_spread_110_100": 0.0,
+      "prob_spread_100_90": 0.0,
+      "prob_spread_90_80": 0.0,
+      "prob_exceed_mean": 0.0,
+      "prob110_x_flow": 0.0,
+      "prob110_x_branch": 0.0,
+      "probmax_x_util": 0.0,
+      "probmean_x_util": 0.0,
+      "dmix_rank_sq": 0.0,
+      "flow_util_sq": 0.0,
+      "prob110_sq": 0.0,
+      "ori_mean_sq": 0.0,
+      "log_constraint_limit": 0.0,
+      "log_ori_mean": 0.0,
+      "log_branch_max": 0.0,
+      "da_prob110_util": 0.0,
+      "dmix_prob110_branch": 0.0,
+      "prob110_x_ori_mix_ratio": 0.0
+    },
+    "2022-06": {
+      "da_rank_value": 1063.0139669787604,
+      "da_rank_sq": 133.77821839530952,
+      "da_x_dmix": 107.88433779781917,
+      "da_x_dori": 23.250786434626207,
+      "da_x_util": 0.8919541938230395,
+      "da_x_branch_util": 0.40140500664711,
+      "da_x_prob110": 0.23238339740782976,
+      "constraint_limit": 0.22348660603165627,
+      "branch_utilization": 0.026686200872063637,
+      "mean_branch_max": 0.023081690073013306,
+      "mix_utilization": 0.020404070150107145,
+      "rank_gap_da_mix": 0.0170655008405447,
+      "dmix_rank_sq": 0.011001099832355976,
+      "flow_utilization": 0.002289949916303158,
+      "ori_mean": 0.0,
+      "mix_mean": 0.0,
+      "density_mix_rank_value": 0.0,
+      "density_ori_rank_value": 0.0,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_100": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "rank_gap_da_ori": 0.0,
+      "prob_spread_110_100": 0.0,
+      "prob_spread_100_90": 0.0,
+      "prob_spread_90_80": 0.0,
+      "prob_exceed_mean": 0.0,
+      "prob110_x_flow": 0.0,
+      "prob110_x_branch": 0.0,
+      "probmax_x_util": 0.0,
+      "probmean_x_util": 0.0,
+      "flow_util_sq": 0.0,
+      "prob110_sq": 0.0,
+      "ori_mean_sq": 0.0,
+      "log_constraint_limit": 0.0,
+      "log_ori_mean": 0.0,
+      "log_branch_max": 0.0,
+      "da_prob110_util": 0.0,
+      "dmix_prob110_branch": 0.0,
+      "prob110_x_ori_mix_ratio": 0.0
+    },
+    "2023-03": {
+      "da_rank_value": 1083.3342023131117,
+      "da_rank_sq": 132.41366019821726,
+      "da_x_dmix": 117.45536793617066,
+      "da_x_dori": 13.907116917631356,
+      "da_x_util": 0.6312444172799587,
+      "da_x_branch_util": 0.3047228939831257,
+      "da_x_prob110": 0.18797101930249482,
+      "constraint_limit": 0.09353739954531193,
+      "density_mix_rank_value": 0.08023999631404877,
+      "prob_spread_90_80": 0.03623880073428154,
+      "mix_mean": 0.0018132199766114354,
+      "mean_branch_max": 0.0,
+      "ori_mean": 0.0,
+      "density_ori_rank_value": 0.0,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_100": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "flow_utilization": 0.0,
+      "mix_utilization": 0.0,
+      "branch_utilization": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "rank_gap_da_mix": 0.0,
+      "rank_gap_da_ori": 0.0,
+      "prob_spread_110_100": 0.0,
+      "prob_spread_100_90": 0.0,
+      "prob_exceed_mean": 0.0,
+      "prob110_x_flow": 0.0,
+      "prob110_x_branch": 0.0,
+      "probmax_x_util": 0.0,
+      "probmean_x_util": 0.0,
+      "dmix_rank_sq": 0.0,
+      "flow_util_sq": 0.0,
+      "prob110_sq": 0.0,
+      "ori_mean_sq": 0.0,
+      "log_constraint_limit": 0.0,
+      "log_ori_mean": 0.0,
+      "log_branch_max": 0.0,
+      "da_prob110_util": 0.0,
+      "dmix_prob110_branch": 0.0,
+      "prob110_x_ori_mix_ratio": 0.0
+    }
+  },
+  "aggregate": {
+    "mean": {
+      "da_rank_value": 1052.259467144435,
+      "da_x_dori": 60.60070028210066,
+      "da_rank_sq": 130.38947991203713,
+      "da_x_dmix": 111.41592620439769,
+      "flow_utilization": 0.1891447405796498,
+      "constraint_limit": 0.18799692578613758,
+      "rank_gap_da_mix": 0.16897662868723273,
+      "prob_spread_100_90": 0.08111505233682692,
+      "da_x_branch_util": 0.2888875485150493,
+      "da_x_util": 0.49332747771404684,
+      "flow_util_sq": 0.033484275452792645,
+      "density_ori_rank_value": 0.016313700005412102,
+      "prob_spread_110_100": 0.011732624843716621,
+      "da_x_prob110": 0.14912477930192836,
+      "mean_branch_max": 0.005770422518253326,
+      "ori_mean": 0.0,
+      "mix_mean": 0.00045330499415285885,
+      "density_mix_rank_value": 0.020059999078512192,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_100": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "mix_utilization": 0.005101017537526786,
+      "branch_utilization": 0.006671550218015909,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "rank_gap_da_ori": 0.0026724690633272985,
+      "prob_spread_90_80": 0.009059700183570385,
+      "prob_exceed_mean": 0.0,
+      "prob110_x_flow": 0.0,
+      "prob110_x_branch": 0.0,
+      "probmax_x_util": 0.0,
+      "probmean_x_util": 0.0,
+      "dmix_rank_sq": 0.002750274958088994,
+      "prob110_sq": 0.0,
+      "ori_mean_sq": 0.0,
+      "log_constraint_limit": 0.0,
+      "log_ori_mean": 0.0,
+      "log_branch_max": 0.0,
+      "da_prob110_util": 0.0,
+      "dmix_prob110_branch": 0.0,
+      "prob110_x_ori_mix_ratio": 0.0
+    },
+    "std": {
+      "da_rank_value": 60.92646759800989,
+      "da_x_dori": 80.99437081904892,
+      "da_rank_sq": 3.845049044828918,
+      "da_x_dmix": 4.462489424524524,
+      "flow_utilization": 0.3727151864151214,
+      "constraint_limit": 0.16666627665350162,
+      "rank_gap_da_mix": 0.19545849184033817,
+      "prob_spread_100_90": 0.16223010467365384,
+      "da_x_branch_util": 0.09151399557048764,
+      "da_x_util": 0.32864584857384355,
+      "flow_util_sq": 0.06696855090558529,
+      "density_ori_rank_value": 0.032627400010824203,
+      "prob_spread_110_100": 0.023465249687433243,
+      "da_x_prob110": 0.09555463343001931,
+      "mean_branch_max": 0.011540845036506653,
+      "ori_mean": 0.0,
+      "mix_mean": 0.0009066099883057177,
+      "density_mix_rank_value": 0.040119998157024384,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_100": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "mix_utilization": 0.010202035075053573,
+      "branch_utilization": 0.013343100436031818,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "rank_gap_da_ori": 0.005344938126654597,
+      "prob_spread_90_80": 0.01811940036714077,
+      "prob_exceed_mean": 0.0,
+      "prob110_x_flow": 0.0,
+      "prob110_x_branch": 0.0,
+      "probmax_x_util": 0.0,
+      "probmean_x_util": 0.0,
+      "dmix_rank_sq": 0.005500549916177988,
+      "prob110_sq": 0.0,
+      "ori_mean_sq": 0.0,
+      "log_constraint_limit": 0.0,
+      "log_ori_mean": 0.0,
+      "log_branch_max": 0.0,
+      "da_prob110_util": 0.0,
+      "dmix_prob110_branch": 0.0,
+      "prob110_x_ori_mix_ratio": 0.0
+    }
+  },
+  "ranked": [
+    [
+      "da_rank_value",
+      1052.259467144435
+    ],
+    [
+      "da_rank_sq",
+      130.38947991203713
+    ],
+    [
+      "da_x_dmix",
+      111.41592620439769
+    ],
+    [
+      "da_x_dori",
+      60.60070028210066
+    ],
+    [
+      "da_x_util",
+      0.49332747771404684
+    ],
+    [
+      "da_x_branch_util",
+      0.2888875485150493
+    ],
+    [
+      "flow_utilization",
+      0.1891447405796498
+    ],
+    [
+      "constraint_limit",
+      0.18799692578613758
+    ],
+    [
+      "rank_gap_da_mix",
+      0.16897662868723273
+    ],
+    [
+      "da_x_prob110",
+      0.14912477930192836
+    ],
+    [
+      "prob_spread_100_90",
+      0.08111505233682692
+    ],
+    [
+      "flow_util_sq",
+      0.033484275452792645
+    ],
+    [
+      "density_mix_rank_value",
+      0.020059999078512192
+    ],
+    [
+      "density_ori_rank_value",
+      0.016313700005412102
+    ],
+    [
+      "prob_spread_110_100",
+      0.011732624843716621
+    ],
+    [
+      "prob_spread_90_80",
+      0.009059700183570385
+    ],
+    [
+      "branch_utilization",
+      0.006671550218015909
+    ],
+    [
+      "mean_branch_max",
+      0.005770422518253326
+    ],
+    [
+      "mix_utilization",
+      0.005101017537526786
+    ],
+    [
+      "dmix_rank_sq",
+      0.002750274958088994
+    ],
+    [
+      "rank_gap_da_ori",
+      0.0026724690633272985
+    ],
+    [
+      "mix_mean",
+      0.00045330499415285885
+    ],
+    [
+      "ori_mean",
+      0.0
+    ],
+    [
+      "prob_exceed_110",
+      0.0
+    ],
+    [
+      "prob_exceed_100",
+      0.0
+    ],
+    [
+      "prob_exceed_90",
+      0.0
+    ],
+    [
+      "prob_exceed_85",
+      0.0
+    ],
+    [
+      "prob_exceed_80",
+      0.0
+    ],
+    [
+      "prob_exceed_max",
+      0.0
+    ],
+    [
+      "ori_mix_ratio",
+      0.0
+    ],
+    [
+      "branch_ori_ratio",
+      0.0
+    ],
+    [
+      "branch_mix_ratio",
+      0.0
+    ],
+    [
+      "ori_mix_diff",
+      0.0
+    ],
+    [
+      "branch_ori_diff",
+      0.0
+    ],
+    [
+      "branch_mix_diff",
+      0.0
+    ],
+    [
+      "rank_gap_mix_ori",
+      0.0
+    ],
+    [
+      "prob_exceed_mean",
+      0.0
+    ],
+    [
+      "prob110_x_flow",
+      0.0
+    ],
+    [
+      "prob110_x_branch",
+      0.0
+    ],
+    [
+      "probmax_x_util",
+      0.0
+    ],
+    [
+      "probmean_x_util",
+      0.0
+    ],
+    [
+      "prob110_sq",
+      0.0
+    ],
+    [
+      "ori_mean_sq",
+      0.0
+    ],
+    [
+      "log_constraint_limit",
+      0.0
+    ],
+    [
+      "log_ori_mean",
+      0.0
+    ],
+    [
+      "log_branch_max",
+      0.0
+    ],
+    [
+      "da_prob110_util",
+      0.0
+    ],
+    [
+      "dmix_prob110_branch",
+      0.0
+    ],
+    [
+      "prob110_x_ori_mix_ratio",
+      0.0
+    ]
+  ]
+}

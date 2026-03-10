@@ -1,9 +1,0 @@
-{
-  "model_id": "v012-unified-regressor",
-  "created": "2026-02-25T20:22:49",
-  "description": "Unified regressor: train on ALL samples (binding+non-binding) with target=log1p(shadow_price). Eliminates binary gate between classifier and regressor.",
-  "source_commit": "4b3ca42",
-  "algo": "xgb",
-  "status": "candidate",
-  "config_checksum": "sha256:7ae0322c068d400e"
-}

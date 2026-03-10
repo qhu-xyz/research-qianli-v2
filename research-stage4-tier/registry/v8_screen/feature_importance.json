@@ -1,0 +1,313 @@
+{
+  "importance_type": "gain",
+  "model": "ltr_ranker",
+  "n_months": 4,
+  "per_month": {
+    "2020-12": {
+      "da_rank_value": 1259.6370748880145,
+      "rank_gap_da_ori": 60.835943523125025,
+      "rank_gap_da_mix": 18.148577017476782,
+      "mix_mean": 12.25521215092158,
+      "mean_branch_max": 10.761138268746436,
+      "density_mix_rank_value": 7.256469877145719,
+      "ori_mean": 4.717342003248632,
+      "mix_utilization": 3.364754263777286,
+      "branch_utilization": 2.652310605160892,
+      "flow_utilization": 1.6007297373585914,
+      "prob_exceed_85": 0.9837419986724854,
+      "constraint_limit": 0.3103011045604944,
+      "density_ori_rank_value": 0.23265124042518437,
+      "prob_spread_110_100": 0.0927777816541493,
+      "prob_spread_90_80": 0.07238390296697617,
+      "prob_spread_100_90": 0.003289799904450774,
+      "prob_exceed_100": 0.0024583600461483,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_80": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "prob_exceed_mean": 0.0
+    },
+    "2021-09": {
+      "da_rank_value": 1253.2926079141907,
+      "rank_gap_da_mix": 73.1285769958049,
+      "mix_mean": 12.985099296551198,
+      "density_mix_rank_value": 11.949246951495297,
+      "rank_gap_da_ori": 8.189269967377186,
+      "prob_exceed_100": 2.712169885635376,
+      "mean_branch_max": 1.5050992693941225,
+      "density_ori_rank_value": 1.3718319679537672,
+      "flow_utilization": 0.4343071086332202,
+      "mix_utilization": 0.40225940477102995,
+      "constraint_limit": 0.26071998244151473,
+      "ori_mean": 0.24949927150737494,
+      "branch_utilization": 0.24011540692299604,
+      "prob_exceed_mean": 0.09038729965686798,
+      "prob_exceed_110": 0.052579499781131744,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "prob_spread_110_100": 0.0,
+      "prob_spread_100_90": 0.0,
+      "prob_spread_90_80": 0.0
+    },
+    "2022-06": {
+      "da_rank_value": 1215.2643000465068,
+      "rank_gap_da_mix": 62.93158775108168,
+      "branch_utilization": 14.522347867488861,
+      "flow_utilization": 14.015298585407436,
+      "rank_gap_da_ori": 7.174791932848166,
+      "mix_mean": 5.8725619243923575,
+      "mean_branch_max": 4.428831399185583,
+      "prob_exceed_mean": 2.544405937194824,
+      "density_mix_rank_value": 1.0086030070087872,
+      "ori_mean": 0.949118043994531,
+      "density_ori_rank_value": 0.7177927941083908,
+      "prob_spread_90_80": 0.4566299768630415,
+      "constraint_limit": 0.25552360247820616,
+      "mix_utilization": 0.09253755782265216,
+      "prob_spread_100_90": 0.032975099980831146,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_100": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "prob_spread_110_100": 0.0
+    },
+    "2023-03": {
+      "da_rank_value": 1237.2944703760877,
+      "rank_gap_da_mix": 72.34782581683248,
+      "mix_utilization": 16.82363646477461,
+      "mix_mean": 9.940395249053836,
+      "branch_utilization": 8.299265739507973,
+      "prob_exceed_100": 6.674586687237024,
+      "mean_branch_max": 2.984805727377534,
+      "rank_gap_da_ori": 2.9540659822523594,
+      "density_mix_rank_value": 1.827429011464119,
+      "ori_mean": 0.35786600410938263,
+      "prob_spread_110_100": 0.18037939816713333,
+      "prob_exceed_mean": 0.13413499295711517,
+      "constraint_limit": 0.121824000030756,
+      "flow_utilization": 0.05387920141220093,
+      "density_ori_rank_value": 4.3072999687865376e-05,
+      "prob_exceed_110": 0.0,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_85": 0.0,
+      "prob_exceed_80": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "prob_spread_100_90": 0.0,
+      "prob_spread_90_80": 0.0
+    }
+  },
+  "aggregate": {
+    "mean": {
+      "da_rank_value": 1241.3721133062,
+      "rank_gap_da_ori": 19.788517851400684,
+      "rank_gap_da_mix": 56.63914189529896,
+      "mix_mean": 10.263317155229743,
+      "mean_branch_max": 4.919968666175919,
+      "density_mix_rank_value": 5.510437211778481,
+      "ori_mean": 1.5684563307149801,
+      "mix_utilization": 5.170796922786394,
+      "branch_utilization": 6.428509904770181,
+      "flow_utilization": 4.026053658202862,
+      "prob_exceed_85": 0.24593549966812134,
+      "constraint_limit": 0.23709217237774283,
+      "density_ori_rank_value": 0.5805797688717576,
+      "prob_spread_110_100": 0.06828929495532066,
+      "prob_spread_90_80": 0.13225346995750442,
+      "prob_spread_100_90": 0.00906622497132048,
+      "prob_exceed_100": 2.347303733229637,
+      "prob_exceed_110": 0.013144874945282936,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_80": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "prob_exceed_mean": 0.6922320574522018
+    },
+    "std": {
+      "da_rank_value": 19.781743252746963,
+      "rank_gap_da_ori": 27.458687496150727,
+      "rank_gap_da_mix": 26.075420609852994,
+      "mix_mean": 3.2020177884834187,
+      "mean_branch_max": 4.0729459746722325,
+      "density_mix_rank_value": 5.110054192263808,
+      "ori_mean": 2.121653251200594,
+      "mix_utilization": 7.90734105575418,
+      "branch_utilization": 6.365685298832236,
+      "flow_utilization": 6.691936030981053,
+      "prob_exceed_85": 0.4918709993362427,
+      "constraint_limit": 0.08071408454437869,
+      "density_ori_rank_value": 0.6063509910406026,
+      "prob_spread_110_100": 0.0865847038643337,
+      "prob_spread_90_80": 0.2189265051072866,
+      "prob_spread_100_90": 0.016014516968829193,
+      "prob_exceed_100": 3.1552411272562604,
+      "prob_exceed_110": 0.026289749890565872,
+      "prob_exceed_90": 0.0,
+      "prob_exceed_80": 0.0,
+      "prob_exceed_max": 0.0,
+      "ori_mix_ratio": 0.0,
+      "branch_ori_ratio": 0.0,
+      "branch_mix_ratio": 0.0,
+      "ori_mix_diff": 0.0,
+      "branch_ori_diff": 0.0,
+      "branch_mix_diff": 0.0,
+      "rank_gap_mix_ori": 0.0,
+      "prob_exceed_mean": 1.2360451378016235
+    }
+  },
+  "ranked": [
+    [
+      "da_rank_value",
+      1241.3721133062
+    ],
+    [
+      "rank_gap_da_mix",
+      56.63914189529896
+    ],
+    [
+      "rank_gap_da_ori",
+      19.788517851400684
+    ],
+    [
+      "mix_mean",
+      10.263317155229743
+    ],
+    [
+      "branch_utilization",
+      6.428509904770181
+    ],
+    [
+      "density_mix_rank_value",
+      5.510437211778481
+    ],
+    [
+      "mix_utilization",
+      5.170796922786394
+    ],
+    [
+      "mean_branch_max",
+      4.919968666175919
+    ],
+    [
+      "flow_utilization",
+      4.026053658202862
+    ],
+    [
+      "prob_exceed_100",
+      2.347303733229637
+    ],
+    [
+      "ori_mean",
+      1.5684563307149801
+    ],
+    [
+      "prob_exceed_mean",
+      0.6922320574522018
+    ],
+    [
+      "density_ori_rank_value",
+      0.5805797688717576
+    ],
+    [
+      "prob_exceed_85",
+      0.24593549966812134
+    ],
+    [
+      "constraint_limit",
+      0.23709217237774283
+    ],
+    [
+      "prob_spread_90_80",
+      0.13225346995750442
+    ],
+    [
+      "prob_spread_110_100",
+      0.06828929495532066
+    ],
+    [
+      "prob_exceed_110",
+      0.013144874945282936
+    ],
+    [
+      "prob_spread_100_90",
+      0.00906622497132048
+    ],
+    [
+      "prob_exceed_90",
+      0.0
+    ],
+    [
+      "prob_exceed_80",
+      0.0
+    ],
+    [
+      "prob_exceed_max",
+      0.0
+    ],
+    [
+      "ori_mix_ratio",
+      0.0
+    ],
+    [
+      "branch_ori_ratio",
+      0.0
+    ],
+    [
+      "branch_mix_ratio",
+      0.0
+    ],
+    [
+      "ori_mix_diff",
+      0.0
+    ],
+    [
+      "branch_ori_diff",
+      0.0
+    ],
+    [
+      "branch_mix_diff",
+      0.0
+    ],
+    [
+      "rank_gap_mix_ori",
+      0.0
+    ]
+  ]
+}

@@ -16,7 +16,8 @@
     ],
     "class_type": "onpeak",
     "period_type": "f0",
-    "model": "v62b_baseline"
+    "model": "v62b_formula",
+    "note": "Full V6.2B formula: 0.60*da_rank + 0.30*dmix + 0.10*dori"
   },
   "per_month": {
     "2020-09": {

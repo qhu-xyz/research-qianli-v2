@@ -12,60 +12,80 @@ from pathlib import Path
 from typing import Any
 
 
-# ── V6.2B columns available as features ──
+# ── Leakage guard ──────────────────────────────────────────────────────────────
+# The V6.2B parquet includes columns derived from realized DA shadow prices.
+# V6.2B formula: rank_ori = 0.60*da_rank_value + 0.30*density_mix_rank_value + 0.10*density_ori_rank_value
+# The 60% da_rank_value component is pure leakage.
+_LEAKY_FEATURES: set[str] = {
+    # Composite outputs derived from formula (don't use as features)
+    "rank",              # = dense_rank(rank_ori), output of formula
+    "rank_ori",          # = 0.60*da_rank_value + 0.30*dmix + 0.10*dori
+    "tier",              # derived from rank
+    # Metadata / signed columns
+    "shadow_sign",
+    "shadow_price",      # = shadow_price_da * shadow_sign (signed version)
+}
+
+
+# ── V6.2B forecast-only features ──
+# These are the legitimate (non-leaky) columns from V6.2B parquet.
+# density_*_rank_value are within-month percentile ranks of flow forecasts.
+# Lower density_*_rank_value = higher flow = more binding (inverted scale).
 _V62B_FEATURES: list[str] = [
-    "mean_branch_max", "ori_mean", "mix_mean",
-    "density_mix_rank_value", "density_ori_rank_value", "da_rank_value",
+    "mean_branch_max",          # max branch loading in constraint path
+    "ori_mean",                 # mean flow, baseline scenario
+    "mix_mean",                 # mean flow, mixed scenario
+    "density_mix_rank_value",   # percentile rank of mix_mean (inverted)
+    "density_ori_rank_value",   # percentile rank of ori_mean (inverted)
+]
+_V62B_MONOTONE: list[int] = [1, 1, 1, -1, -1]
+# mean_branch_max, ori_mean, mix_mean: higher flow = more binding = positive
+# density_*_rank_value: lower value = more binding = negative monotone
+
+# ── Spice6 density features (loaded from raw parquets) ──
+_SPICE6_FEATURES: list[str] = [
+    "prob_exceed_110",   # strongest binding signal
+    "prob_exceed_100",   # flow at/above limit
+    "prob_exceed_90",    # near-limit stress
+    "prob_exceed_85",    # moderate stress
+    "prob_exceed_80",    # lower stress
+    "constraint_limit",  # MW limit
+]
+_SPICE6_MONOTONE: list[int] = [
+    1,   # prob_exceed_110
+    1,   # prob_exceed_100
+    1,   # prob_exceed_90
+    1,   # prob_exceed_85
+    1,   # prob_exceed_80
+    0,   # constraint_limit
 ]
 
-# ── Stage 3 features (34 proven) ──
-_STAGE3_FEATURES: list[str] = [
-    "prob_exceed_110", "prob_exceed_105", "prob_exceed_100",
-    "prob_exceed_95", "prob_exceed_90",
-    "prob_below_100", "prob_below_95", "prob_below_90",
-    "expected_overload",
-    "hist_da", "hist_da_trend",
-    "sf_max_abs", "sf_mean_abs", "sf_std", "sf_nonzero_frac",
-    "is_interface", "constraint_limit",
-    "density_mean", "density_variance", "density_entropy",
-    "tail_concentration",
-    "prob_band_95_100", "prob_band_100_105",
-    "hist_da_max_season",
-    "prob_exceed_85", "prob_exceed_80",
-    "recent_hist_da",
-    "season_hist_da_1", "season_hist_da_2",
-    "density_skewness", "density_kurtosis", "density_cv",
-    "season_hist_da_3",
-    "prob_below_85",
+# ── Engineered features (computed in data_loader) ──
+_ENGINEERED_FEATURES: list[str] = [
+    "flow_utilization",     # ori_mean / constraint_limit
+    "mix_utilization",      # mix_mean / constraint_limit
+    "branch_utilization",   # mean_branch_max / constraint_limit
+    "prob_exceed_max",      # max of all prob_exceed_* thresholds
 ]
+_ENGINEERED_MONOTONE: list[int] = [1, 1, 1, 1]
+# All positive: higher utilization or exceedance = more binding
 
-_STAGE3_MONOTONE: list[int] = [
-    1, 1, 1, 1, 1,    # prob_exceed_110..90
-    -1, -1, -1,        # prob_below_100..90
-    1,                  # expected_overload
-    1, 1,              # hist_da, hist_da_trend
-    1, 1, 0, 0,        # sf_*
-    0, 0,              # is_interface, constraint_limit
-    0, 0, 0,           # density_mean, variance, entropy
-    1,                  # tail_concentration
-    0, 0,              # prob_band_*
-    1,                  # hist_da_max_season
-    1, 1,              # prob_exceed_85, 80
-    1,                  # recent_hist_da
-    1, 1,              # season_hist_da_1, 2
-    0, 0, 0,           # density_skewness, kurtosis, cv
-    1,                  # season_hist_da_3
-    -1,                # prob_below_85
-]
+_ALL_FEATURES: list[str] = _V62B_FEATURES + _SPICE6_FEATURES
+_ALL_MONOTONE: list[int] = _V62B_MONOTONE + _SPICE6_MONOTONE
 
-_ALL_FEATURES: list[str] = _STAGE3_FEATURES + _V62B_FEATURES
-_ALL_MONOTONE: list[int] = _STAGE3_MONOTONE + [0] * len(_V62B_FEATURES)
+_FULL_FEATURES: list[str] = _V62B_FEATURES + _SPICE6_FEATURES + _ENGINEERED_FEATURES
+_FULL_MONOTONE: list[int] = _V62B_MONOTONE + _SPICE6_MONOTONE + _ENGINEERED_MONOTONE
 
 # ── Eval months ──
-# Screen: 12 representative months (1 per quarter, ~36s with LightGBM)
-# Full: 36 rolling months for comprehensive validation (~108s with LightGBM)
-# Strategy: screen first on 12; if promising, run full 36; else move on.
+# Screen: 4 months (fast hypothesis test, ~12s with LightGBM)
+# Eval: 12 representative months (1/quarter, comprehensive validation)
+# Full: 36 rolling months (only if needed for deep analysis)
+# Strategy: screen on 4; if promising, eval on 12; else move on.
 _SCREEN_EVAL_MONTHS: list[str] = [
+    "2020-12", "2021-09", "2022-06", "2023-03",
+]
+
+_DEFAULT_EVAL_MONTHS: list[str] = [
     "2020-09", "2020-12", "2021-03", "2021-06",
     "2021-09", "2021-12", "2022-03", "2022-06",
     "2022-09", "2022-12", "2023-03", "2023-05",
@@ -77,9 +97,6 @@ _FULL_EVAL_MONTHS: list[str] = [
     for m in range(1, 13)
     if (y, m) >= (2020, 6) and (y, m) <= (2023, 5)
 ]
-
-# Default = screen (fast hypothesis testing)
-_DEFAULT_EVAL_MONTHS: list[str] = _SCREEN_EVAL_MONTHS
 
 # ── Data paths ──
 V62B_SIGNAL_BASE = "/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1"
@@ -99,7 +116,7 @@ class LTRConfig:
     backend: str = "lightgbm"
 
     # Shared hyperparams
-    n_estimators: int = 400
+    n_estimators: int = 100
     learning_rate: float = 0.05
     min_child_weight: int = 25
 
@@ -112,7 +129,32 @@ class LTRConfig:
 
     # XGBoost-specific (used only when backend="xgboost")
     max_depth: int = 5
-    early_stopping_rounds: int = 50
+    early_stopping_rounds: int = 20
+
+    def __post_init__(self) -> None:
+        if len(self.monotone_constraints) != len(self.features):
+            raise ValueError(
+                "LTRConfig invalid: len(monotone_constraints) must match len(features) "
+                f"({len(self.monotone_constraints)} != {len(self.features)})"
+            )
+
+        filtered_features: list[str] = []
+        filtered_mono: list[int] = []
+        removed: list[str] = []
+
+        for feat, mono in zip(self.features, self.monotone_constraints):
+            if feat in _LEAKY_FEATURES:
+                removed.append(feat)
+                continue
+            filtered_features.append(feat)
+            filtered_mono.append(mono)
+
+        if removed:
+            # Keep deterministic order for logs.
+            removed_sorted = ", ".join(sorted(set(removed)))
+            print(f"[config] WARNING: dropped leaky features: {removed_sorted}")
+            self.features = filtered_features
+            self.monotone_constraints = filtered_mono
 
     def to_dict(self) -> dict[str, Any]:
         return {

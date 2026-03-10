@@ -4,13 +4,14 @@ Runs the full pipeline (load -> train -> predict -> evaluate) for each
 evaluation month independently.
 
 Two-stage evaluation:
-  --screen  12 representative months (~36s with LightGBM) — default for hypothesis testing
-  --full    36 rolling months (~108s with LightGBM) — only run if screening passes
+  --screen  4 months (~12s with LightGBM) — fast hypothesis test
+  --eval    12 representative months (~36s) — comprehensive validation (default)
+  --full    36 rolling months (~108s) — deep analysis (rare)
 
 CLI:
-  python ml/benchmark.py --version-id v2 --screen              # hypothesis screening (default)
-  python ml/benchmark.py --version-id v2 --full                 # comprehensive validation
-  python ml/benchmark.py --version-id v2 --eval-months 2021-06  # specific months
+  python ml/benchmark.py --version-id v2 --screen              # fast hypothesis test
+  python ml/benchmark.py --version-id v2                        # 12-month eval (default)
+  python ml/benchmark.py --version-id v2 --full                 # 36-month deep analysis
 """
 
 import argparse
@@ -20,7 +21,7 @@ import resource
 import statistics
 from pathlib import Path
 
-from ml.config import PipelineConfig, _SCREEN_EVAL_MONTHS, _FULL_EVAL_MONTHS
+from ml.config import PipelineConfig, _SCREEN_EVAL_MONTHS, _DEFAULT_EVAL_MONTHS, _FULL_EVAL_MONTHS
 from ml.evaluate import aggregate_months
 from ml.pipeline import run_pipeline
 
@@ -193,21 +194,24 @@ def main():
     parser.add_argument("--eval-months", nargs="+", default=None,
                         help="Eval months (overrides --screen/--full)")
     parser.add_argument("--registry-dir", default="registry", help="Registry directory")
-    parser.add_argument("--screen", action="store_true", default=True,
-                        help="Screen: 12 representative months (default)")
+    parser.add_argument("--screen", action="store_true",
+                        help="Screen: 4 months (fast hypothesis test)")
     parser.add_argument("--full", action="store_true",
-                        help="Full: 36 rolling months (run after screening passes)")
+                        help="Full: 36 rolling months (deep analysis)")
     args = parser.parse_args()
 
     if args.eval_months:
         eval_months = args.eval_months
         mode = "custom"
+    elif args.screen:
+        eval_months = _SCREEN_EVAL_MONTHS
+        mode = "screen"
     elif args.full:
         eval_months = _FULL_EVAL_MONTHS
         mode = "full"
     else:
-        eval_months = _SCREEN_EVAL_MONTHS
-        mode = "screen"
+        eval_months = _DEFAULT_EVAL_MONTHS
+        mode = "eval"
 
     run_benchmark(
         version_id=args.version_id,

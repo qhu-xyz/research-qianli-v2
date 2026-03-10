@@ -1,0 +1,13 @@
+# Cached data (large parquets, fetched via Ray)
+data/realized_da/*.parquet
+data/realized_da_daily/*.parquet
+
+# Stage6 generated experiment artifacts
+registry/
+holdout/
+human-input/
+.pytest_cache/
+
+# Python bytecode
+__pycache__/
+*.pyc

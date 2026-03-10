@@ -1,0 +1,344 @@
+{
+  "importance_type": "gain",
+  "n_months": 12,
+  "per_month": {
+    "2020-09": {
+      "prob_exceed_110": 0.012033500708639622,
+      "prob_exceed_105": 0.014015932567417622,
+      "prob_exceed_100": 0.003986461088061333,
+      "prob_exceed_95": 0.018448926508426666,
+      "prob_exceed_90": 0.03027195855975151,
+      "prob_below_100": 0.007564405910670757,
+      "prob_below_95": 0.015130642801523209,
+      "prob_below_90": 0.05498155578970909,
+      "expected_overload": 0.009026964195072651,
+      "density_skewness": 0.003486520377919078,
+      "density_kurtosis": 0.006196468137204647,
+      "density_cv": 0.0034213641192764044,
+      "hist_da": 0.11280631273984909,
+      "hist_da_trend": 0.5345883369445801,
+      "exceed_severity_ratio": 0.0025894292630255222,
+      "hist_physical_interaction": 0.16231922805309296,
+      "overload_exceedance_product": 0.009131968021392822
+    },
+    "2020-11": {
+      "prob_exceed_110": 0.00803331844508648,
+      "prob_exceed_105": 0.012510020285844803,
+      "prob_exceed_100": 0.020523274317383766,
+      "prob_exceed_95": 0.016151249408721924,
+      "prob_exceed_90": 0.03702453523874283,
+      "prob_below_100": 0.010616542771458626,
+      "prob_below_95": 0.016377484425902367,
+      "prob_below_90": 0.04896443709731102,
+      "expected_overload": 0.019611964002251625,
+      "density_skewness": 0.0029666200280189514,
+      "density_kurtosis": 0.00534165371209383,
+      "density_cv": 0.003087298944592476,
+      "hist_da": 0.11191432178020477,
+      "hist_da_trend": 0.5175693035125732,
+      "exceed_severity_ratio": 0.003946979995816946,
+      "hist_physical_interaction": 0.15905462205410004,
+      "overload_exceedance_product": 0.006306251976639032
+    },
+    "2021-01": {
+      "prob_exceed_110": 0.009320883080363274,
+      "prob_exceed_105": 0.020239640027284622,
+      "prob_exceed_100": 0.0062611401081085205,
+      "prob_exceed_95": 0.01263372227549553,
+      "prob_exceed_90": 0.027433518320322037,
+      "prob_below_100": 0.012896589934825897,
+      "prob_below_95": 0.02191757783293724,
+      "prob_below_90": 0.040631119161844254,
+      "expected_overload": 0.0160798579454422,
+      "density_skewness": 0.0029102028347551823,
+      "density_kurtosis": 0.004856432322412729,
+      "density_cv": 0.003228874644264579,
+      "hist_da": 0.11162681877613068,
+      "hist_da_trend": 0.5340328216552734,
+      "exceed_severity_ratio": 0.00404700031504035,
+      "hist_physical_interaction": 0.16507509350776672,
+      "overload_exceedance_product": 0.006808725651353598
+    },
+    "2021-04": {
+      "prob_exceed_110": 0.014394860714673996,
+      "prob_exceed_105": 0.008682888001203537,
+      "prob_exceed_100": 0.018126949667930603,
+      "prob_exceed_95": 0.02251340076327324,
+      "prob_exceed_90": 0.018796762451529503,
+      "prob_below_100": 0.018828164786100388,
+      "prob_below_95": 0.010870030149817467,
+      "prob_below_90": 0.04057857394218445,
+      "expected_overload": 0.007780521642416716,
+      "density_skewness": 0.003026926890015602,
+      "density_kurtosis": 0.005597219802439213,
+      "density_cv": 0.004120008088648319,
+      "hist_da": 0.10863807797431946,
+      "hist_da_trend": 0.5318893194198608,
+      "exceed_severity_ratio": 0.002863258356228471,
+      "hist_physical_interaction": 0.17733804881572723,
+      "overload_exceedance_product": 0.005955020897090435
+    },
+    "2021-06": {
+      "prob_exceed_110": 0.016920266672968864,
+      "prob_exceed_105": 0.029244491830468178,
+      "prob_exceed_100": 0.007662081625312567,
+      "prob_exceed_95": 0.02327745407819748,
+      "prob_exceed_90": 0.028628459200263023,
+      "prob_below_100": 0.0026283201295882463,
+      "prob_below_95": 0.0029983685817569494,
+      "prob_below_90": 0.04831115901470184,
+      "expected_overload": 0.024779295548796654,
+      "density_skewness": 0.0030505198519676924,
+      "density_kurtosis": 0.005763576831668615,
+      "density_cv": 0.004775829613208771,
+      "hist_da": 0.11686290800571442,
+      "hist_da_trend": 0.5280061364173889,
+      "exceed_severity_ratio": 0.0052870335057377815,
+      "hist_physical_interaction": 0.12996914982795715,
+      "overload_exceedance_product": 0.021834976971149445
+    },
+    "2021-08": {
+      "prob_exceed_110": 0.0142690259963274,
+      "prob_exceed_105": 0.011763526126742363,
+      "prob_exceed_100": 0.006482562515884638,
+      "prob_exceed_95": 0.023938439786434174,
+      "prob_exceed_90": 0.03784617409110069,
+      "prob_below_100": 0.024141579866409302,
+      "prob_below_95": 0.026692179962992668,
+      "prob_below_90": 0.04430321976542473,
+      "expected_overload": 0.012641810812056065,
+      "density_skewness": 0.002986702136695385,
+      "density_kurtosis": 0.005628591403365135,
+      "density_cv": 0.004737280774861574,
+      "hist_da": 0.1150880828499794,
+      "hist_da_trend": 0.5133663415908813,
+      "exceed_severity_ratio": 0.004556779749691486,
+      "hist_physical_interaction": 0.14001691341400146,
+      "overload_exceedance_product": 0.011540855281054974
+    },
+    "2021-10": {
+      "prob_exceed_110": 0.009509625844657421,
+      "prob_exceed_105": 0.007898482494056225,
+      "prob_exceed_100": 0.007933299988508224,
+      "prob_exceed_95": 0.013721833936870098,
+      "prob_exceed_90": 0.028228646144270897,
+      "prob_below_100": 0.007881483994424343,
+      "prob_below_95": 0.018227819353342056,
+      "prob_below_90": 0.04486261308193207,
+      "expected_overload": 0.009889832697808743,
+      "density_skewness": 0.0027350843884050846,
+      "density_kurtosis": 0.004583653528243303,
+      "density_cv": 0.004355539567768574,
+      "hist_da": 0.10118380188941956,
+      "hist_da_trend": 0.577781617641449,
+      "exceed_severity_ratio": 0.004102777224034071,
+      "hist_physical_interaction": 0.14356493949890137,
+      "overload_exceedance_product": 0.013538951985538006
+    },
+    "2021-12": {
+      "prob_exceed_110": 0.008729739114642143,
+      "prob_exceed_105": 0.0166656244546175,
+      "prob_exceed_100": 0.02002217061817646,
+      "prob_exceed_95": 0.018267586827278137,
+      "prob_exceed_90": 0.026112845167517662,
+      "prob_below_100": 0.019584616646170616,
+      "prob_below_95": 0.018764428794384003,
+      "prob_below_90": 0.058883119374513626,
+      "expected_overload": 0.004853120073676109,
+      "density_skewness": 0.00272190710529685,
+      "density_kurtosis": 0.005350921768695116,
+      "density_cv": 0.004310024436563253,
+      "hist_da": 0.10679822415113449,
+      "hist_da_trend": 0.5417250990867615,
+      "exceed_severity_ratio": 0.005490743089467287,
+      "hist_physical_interaction": 0.138510599732399,
+      "overload_exceedance_product": 0.003209248185157776
+    },
+    "2022-03": {
+      "prob_exceed_110": 0.011661775410175323,
+      "prob_exceed_105": 0.015171345323324203,
+      "prob_exceed_100": 0.0066712903790175915,
+      "prob_exceed_95": 0.04073295742273331,
+      "prob_exceed_90": 0.017900310456752777,
+      "prob_below_100": 0.010533620603382587,
+      "prob_below_95": 0.013993784785270691,
+      "prob_below_90": 0.07711342722177505,
+      "expected_overload": 0.014185179956257343,
+      "density_skewness": 0.003000345779582858,
+      "density_kurtosis": 0.005797838792204857,
+      "density_cv": 0.004043401684612036,
+      "hist_da": 0.11292485147714615,
+      "hist_da_trend": 0.5464023351669312,
+      "exceed_severity_ratio": 0.003363025840371847,
+      "hist_physical_interaction": 0.10715805739164352,
+      "overload_exceedance_product": 0.009346355684101582
+    },
+    "2022-06": {
+      "prob_exceed_110": 0.011218957602977753,
+      "prob_exceed_105": 0.008387117646634579,
+      "prob_exceed_100": 0.007293337490409613,
+      "prob_exceed_95": 0.017140083014965057,
+      "prob_exceed_90": 0.04254617914557457,
+      "prob_below_100": 0.012538154609501362,
+      "prob_below_95": 0.024716250598430634,
+      "prob_below_90": 0.05478910729289055,
+      "expected_overload": 0.006803775671869516,
+      "density_skewness": 0.0031502554193139076,
+      "density_kurtosis": 0.005748096387833357,
+      "density_cv": 0.0038119605742394924,
+      "hist_da": 0.12126565724611282,
+      "hist_da_trend": 0.5695486068725586,
+      "exceed_severity_ratio": 0.002510101068764925,
+      "hist_physical_interaction": 0.1038886308670044,
+      "overload_exceedance_product": 0.0046436600387096405
+    },
+    "2022-09": {
+      "prob_exceed_110": 0.012979105114936829,
+      "prob_exceed_105": 0.005877388641238213,
+      "prob_exceed_100": 0.011497452855110168,
+      "prob_exceed_95": 0.03569355234503746,
+      "prob_exceed_90": 0.04638643190264702,
+      "prob_below_100": 0.02027798630297184,
+      "prob_below_95": 0.014460867270827293,
+      "prob_below_90": 0.040333546698093414,
+      "expected_overload": 0.002793724648654461,
+      "density_skewness": 0.0034700511023402214,
+      "density_kurtosis": 0.0069104875437915325,
+      "density_cv": 0.0039021731354296207,
+      "hist_da": 0.12014655768871307,
+      "hist_da_trend": 0.5341477394104004,
+      "exceed_severity_ratio": 0.0039923712611198425,
+      "hist_physical_interaction": 0.12877045571804047,
+      "overload_exceedance_product": 0.008360125124454498
+    },
+    "2022-12": {
+      "prob_exceed_110": 0.005018054042011499,
+      "prob_exceed_105": 0.021132148802280426,
+      "prob_exceed_100": 0.01010627206414938,
+      "prob_exceed_95": 0.014135167934000492,
+      "prob_exceed_90": 0.031075064092874527,
+      "prob_below_100": 0.0050967480055987835,
+      "prob_below_95": 0.014730588532984257,
+      "prob_below_90": 0.06017542630434036,
+      "expected_overload": 0.0020714369602501392,
+      "density_skewness": 0.003537261625751853,
+      "density_kurtosis": 0.007811666466295719,
+      "density_cv": 0.003928912803530693,
+      "hist_da": 0.11418169736862183,
+      "hist_da_trend": 0.5417428016662598,
+      "exceed_severity_ratio": 0.002535989973694086,
+      "hist_physical_interaction": 0.1548970639705658,
+      "overload_exceedance_product": 0.007823697291314602
+    }
+  },
+  "aggregate": {
+    "mean": {
+      "prob_exceed_110": 0.011174092728955051,
+      "prob_exceed_105": 0.014299050516759356,
+      "prob_exceed_100": 0.010547191059837738,
+      "prob_exceed_95": 0.021387864525119465,
+      "prob_exceed_90": 0.03102090706427892,
+      "prob_below_100": 0.012715684463425228,
+      "prob_below_95": 0.01657333525751407,
+      "prob_below_90": 0.05116060872872671,
+      "expected_overload": 0.010876457012879351,
+      "density_skewness": 0.003086866461671889,
+      "density_kurtosis": 0.005798883891354005,
+      "density_cv": 0.003976889032249649,
+      "hist_da": 0.11278644266227882,
+      "hist_da_trend": 0.5392333716154099,
+      "exceed_severity_ratio": 0.003773790803582718,
+      "hist_physical_interaction": 0.1425469002376,
+      "overload_exceedance_product": 0.009041653092329701
+    },
+    "std": {
+      "prob_exceed_110": 0.0032634051987773497,
+      "prob_exceed_105": 0.006740671552059365,
+      "prob_exceed_100": 0.005772573793647973,
+      "prob_exceed_95": 0.008749400251896463,
+      "prob_exceed_90": 0.008655957761503193,
+      "prob_below_100": 0.0066825720342611585,
+      "prob_below_95": 0.006311869563356994,
+      "prob_below_90": 0.01079530403651293,
+      "expected_overload": 0.006878442168783028,
+      "density_skewness": 0.00027608882544096055,
+      "density_kurtosis": 0.0008682926763310992,
+      "density_cv": 0.0005385463291175786,
+      "hist_da": 0.00555750159483325,
+      "hist_da_trend": 0.018736904439094856,
+      "exceed_severity_ratio": 0.001028729128756312,
+      "hist_physical_interaction": 0.02266850249526295,
+      "overload_exceedance_product": 0.004931758992612849
+    }
+  },
+  "ranked": [
+    [
+      "hist_da_trend",
+      0.5392333716154099
+    ],
+    [
+      "hist_physical_interaction",
+      0.1425469002376
+    ],
+    [
+      "hist_da",
+      0.11278644266227882
+    ],
+    [
+      "prob_below_90",
+      0.05116060872872671
+    ],
+    [
+      "prob_exceed_90",
+      0.03102090706427892
+    ],
+    [
+      "prob_exceed_95",
+      0.021387864525119465
+    ],
+    [
+      "prob_below_95",
+      0.01657333525751407
+    ],
+    [
+      "prob_exceed_105",
+      0.014299050516759356
+    ],
+    [
+      "prob_below_100",
+      0.012715684463425228
+    ],
+    [
+      "prob_exceed_110",
+      0.011174092728955051
+    ],
+    [
+      "expected_overload",
+      0.010876457012879351
+    ],
+    [
+      "prob_exceed_100",
+      0.010547191059837738
+    ],
+    [
+      "overload_exceedance_product",
+      0.009041653092329701
+    ],
+    [
+      "density_kurtosis",
+      0.005798883891354005
+    ],
+    [
+      "density_cv",
+      0.003976889032249649
+    ],
+    [
+      "exceed_severity_ratio",
+      0.003773790803582718
+    ],
+    [
+      "density_skewness",
+      0.003086866461671889
+    ]
+  ]
+}

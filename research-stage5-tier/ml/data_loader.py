@@ -22,9 +22,9 @@ def mem_mb() -> float:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 
-# In-memory cache: {(month, ptype, ctype): DataFrame}
+# In-memory cache: {(month, ptype, ctype, cache_dir): DataFrame}
 # Adjacent eval months share 7/8 training months — caching cuts NFS reads by ~87%.
-_MONTH_CACHE: dict[tuple[str, str, str], pl.DataFrame] = {}
+_MONTH_CACHE: dict[tuple[str, str, str, str | None], pl.DataFrame] = {}
 
 
 def clear_month_cache() -> None:
@@ -56,7 +56,7 @@ def load_v62b_month(
     pl.DataFrame
         V6.2B data enriched with spice6 density features and realized_sp column.
     """
-    cache_key = (auction_month, period_type, class_type)
+    cache_key = (auction_month, period_type, class_type, cache_dir)
     if cache_key in _MONTH_CACHE:
         print(f"[data_loader] cache hit: {auction_month}")
         return _MONTH_CACHE[cache_key]

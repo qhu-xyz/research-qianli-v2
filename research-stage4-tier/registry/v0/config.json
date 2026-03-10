@@ -1,4 +1,5 @@
 {
-  "model": "v62b_baseline",
-  "note": "V6.2B formula ranking, no ML"
+  "model": "v62b_formula",
+  "note": "Full V6.2B formula (da_rank_value is historical, NOT leakage)",
+  "formula": "score = 0.60*da_rank_value + 0.30*density_mix_rank_value + 0.10*density_ori_rank_value"
 }

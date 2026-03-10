@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "note": "Calibrated from V6.2B baseline",
+  "version": 2,
+  "note": "Calibrated from full V6.2B formula baseline (da_rank_value included)",
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
   "eval_months": {
@@ -35,6 +35,12 @@
     "Recall@20": {
       "floor": 0.4575,
       "tail_floor": 0.4,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Recall@50": {
+      "floor": 0.516,
+      "tail_floor": 0.42,
       "direction": "higher",
       "group": "A"
     },
@@ -79,12 +85,6 @@
       "tail_floor": 0.3,
       "direction": "higher",
       "group": "B"
-    },
-    "Recall@50": {
-      "floor": 0.516,
-      "tail_floor": 0.42,
-      "direction": "higher",
-      "group": "A"
     },
     "Spearman": {
       "floor": 0.817333,

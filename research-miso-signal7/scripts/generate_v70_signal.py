@@ -74,6 +74,11 @@ def generate_v70_signal(
                 "miso", V62B_SIGNAL, ptype, ctype
             ).load_data(ts)
 
+            if len(v62b_df) == 0:
+                results[key] = "SKIP (V6.2B source empty — not yet generated?)"
+                print(f"[main] {key}: {results[key]}")
+                continue
+
             if ptype in ML_PTYPES:
                 # Extract V6.2B rank_ori per constraint_id (before overwrite)
                 v62b_cids = v62b_df.index.str.split("|").str[0]
@@ -84,6 +89,10 @@ def generate_v70_signal(
                 # ML scoring
                 cids, scores = score_ml_inference(
                     auction_month, ptype, ctype, bs[ctype]
+                )
+                assert len(cids) == len(set(cids)), (
+                    f"Duplicate constraint_ids in ML output for {key} — "
+                    f"{len(cids)} rows but {len(set(cids))} unique"
                 )
 
                 # V6.2B rank_ori as tie-breaker (lower = more binding)
@@ -131,9 +140,15 @@ def generate_v70_signal(
             print(f"[main] {key}: {status}")
 
     elapsed = time.time() - t0
+    written = [k for k, v in results.items() if not v.startswith("SKIP")]
+    skipped = [k for k, v in results.items() if v.startswith("SKIP")]
+
     print(f"\n[main] Done in {elapsed:.1f}s")
     for k, v in results.items():
         print(f"  {k}: {v}")
+
+    if not written:
+        print(f"\n[main] ERROR: no slices were written for {auction_month}")
 
     return results
 
@@ -145,7 +160,10 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Don't write to NFS")
     args = parser.parse_args()
 
-    generate_v70_signal(args.auction_month, args.signal_name, args.dry_run)
+    results = generate_v70_signal(args.auction_month, args.signal_name, args.dry_run)
+    written = [k for k, v in results.items() if not v.startswith("SKIP")]
+    if not written:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

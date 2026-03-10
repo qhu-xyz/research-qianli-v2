@@ -72,30 +72,71 @@ The actual monthly MCPs are systematically different from annual/12 at the path 
 ### Excluding f0 (still significant)
 MW factor MAE = 106.76 vs current 113.10 — **5.6% improvement, 61.1% win rate**
 
-## Factor Table (Expanding Median, All Years 2017-2025)
+### Baseline impact (end-to-end V2 formula)
+MW only changes mtm_1st_mean (1/3 of mtm avg, which is 65% of blend = ~22% of baseline weight).
+- **Pool baseline improvement: +0.6%**
+- **Trades baseline improvement: +1.6%**
+- Dilution is expected and acceptable — mtm_1st is a small piece of the V2 blend.
 
-| fx | Month | Factor | vs flat 1/12 |
-|----|-------|--------|-------------|
-| f0 | Jun | 0.067766 | -1.557% |
-| f1 | Jul | 0.078116 | -0.522% |
-| f2 | Aug | 0.076500 | -0.683% |
-| f3 | Sep | 0.078461 | -0.487% |
-| f4 | Oct | 0.080659 | -0.268% |
-| f5 | Nov | 0.072311 | -1.102% |
-| f6 | Dec | 0.077031 | -0.630% |
-| f7 | Jan | 0.080770 | -0.256% |
-| f8 | Feb | 0.072676 | -1.066% |
-| f9 | Mar | 0.067650 | -1.568% |
-| f10 | Apr | 0.065235 | -1.810% |
-| f11 | May | 0.065671 | -1.766% |
+### High-value paths (scales with value)
+| Value tier | MW improvement | Win rate |
+|------------|---------------|----------|
+| All trades | +7.9% | 62.0% |
+| $1K+ | +10.4% | 68.2% |
+| $5K+ | +14.2% | 78.0% |
 
-Sum = 0.883 (not 1.0 — by design, since monthly MCPs from June R1 systematically differ from annual R4)
+## Statistical Significance
 
-## Failed approaches (for the record)
-1. **Node-level seasonal factors**: 9x worse than naive (errors amplify through subtraction)
-2. **Per-month regression (annual only)**: ~1% improvement (beta ≈ 1/12, minimal lift)
-3. **Normalized MW factors** (sum to 1.0): Worse than unnormalized
-4. **Blends with naive**: Pure MW outperforms all blends on trades
+MW improvement is statistically unambiguous:
+- **Paired t-test**: t=47.1, p≈0
+- **Wilcoxon signed-rank**: p≈0
+- **Bootstrap 95% CI**: [12.37, 13.46] — entirely positive
+- Every individual year is significant (all p < 1e-40)
+- Every path value tier is significant (all p < 1e-6)
+
+## The 88% Factor Sum: Jensen's Inequality, Not "Market Shrinkage"
+
+The MW factors sum to ~0.88, not 1.0. This initially looks like "the market always shrinks by 12%." Investigation shows it's a mathematical artifact:
+
+- **sum of medians ≠ median of sums**: `sum(median per-month ratio) = 0.88` vs `median(sum of per-path ratios) = 0.95` — Jensen's inequality
+- **Actual path-level sum ratios vary by year**: PY2020=0.91, PY2024=0.99 — no consistent shrinkage
+- **Normalizing to sum=1.0 hurts**: +3.0% improvement vs +7.9% unnormalized
+- **MW value comes from shape correction** (which months get more/less), not level scaling
+
+## Factor Table (Expanding Median, PY2025 Training)
+
+| fx | Month | Factor | Adjustment ratio (×12) |
+|----|-------|--------|----------------------|
+| f0 | Jun | 0.065385 | 0.7846 |
+| f1 | Jul | 0.074600 | 0.8952 |
+| f2 | Aug | 0.074281 | 0.8914 |
+| f3 | Sep | 0.078534 | 0.9424 |
+| f4 | Oct | 0.081646 | 0.9798 |
+| f5 | Nov | 0.074560 | 0.8947 |
+| f6 | Dec | 0.077243 | 0.9269 |
+| f7 | Jan | 0.080911 | 0.9709 |
+| f8 | Feb | 0.074113 | 0.8894 |
+| f9 | Mar | 0.067282 | 0.8074 |
+| f10 | Apr | 0.065445 | 0.7853 |
+| f11 | May | 0.065657 | 0.7879 |
+
+Sum = 0.8797. Implementation: `adjusted_mtm_1st = mtm_1st_mean × adjustment_ratio[fx]`
+
+## Failed Approaches (for the record)
+
+1. **Node-level seasonal factors** (script 01): 9x worse than naive — errors amplify through sink-source subtraction. Node factor sums: mean=1.07, std=4.57 (extremely noisy).
+2. **Node-level traceback** (script 08): -418% — catastrophic failure. Previous year's per-node monthly/annual ratios compound noise.
+3. **Path-level traceback** (script 09): Works with 5+ years of history (+17.9%) but coverage only 6% of trades. Statistically indistinguishable from MW at 5+ years. Best hybrid saves $0.16/trade — economically negligible.
+4. **Normalized MW factors** (sum to 1.0): +3.0% vs unnormalized +7.9%. Significantly worse.
+5. **Per-month regression (annual only)**: ~1% improvement (beta ≈ 1/12, minimal lift)
+6. **Blends with naive**: Pure MW outperforms all blends on trades
+
+## Recommendation
+
+**Ship the MW seasonal factor as-is** (unnormalized, expanding median):
+- Implementation: 12-element lookup table per planning year, applied as scalar multiply on mtm_1st_mean
+- No path-level or node-level enhancements needed — they add complexity without meaningful improvement
+- Formula: `adjusted_mtm_1st = mtm_1st_mean × (factor[fx] × 12)`
 
 ## Key Scripts
 | Script | Purpose |
@@ -105,3 +146,7 @@ Sum = 0.883 (not 1.0 — by design, since monthly MCPs from June R1 systematical
 | `03_alternative_approaches.py` | Tests regression, prev-year, MW factor approaches |
 | `04_refine_market_wide.py` | MW factor refinement (windows, blends, normalization) |
 | `05_mw_trades_deep.py` | Deep-dive on trades: per-year, per-month, diagnostics |
+| `06_tail_risk.py` | Tail risk analysis |
+| `07_baseline_impact.py` | End-to-end baseline impact (+0.6% pool, +1.6% trades) |
+| `08_followup_analysis.py` | Statistical significance, normalized vs unnormalized, node traceback |
+| `09_path_level_traceback.py` | Path-level traceback: coverage, depth analysis, hybrid blending |

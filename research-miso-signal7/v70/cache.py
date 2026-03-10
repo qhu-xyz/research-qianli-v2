@@ -118,3 +118,14 @@ def ensure_realized_da_cache(
             print(f"[cache]   WARNING: failed to fetch {month}/{peak_type}: {e}")
 
     print(f"[cache] Fetched {fetched}, skipped {skipped} (may be too old for DA data)")
+
+    # Re-check: any RECENT months still missing are fatal (old gaps like 2017-2018 are OK)
+    still_missing = [(m, pt) for m, pt in sorted(needed) if not _cache_path(m, pt).exists()]
+    recent_missing = [(m, pt) for m, pt in still_missing if m >= "2019-02"]
+    if recent_missing:
+        raise RuntimeError(
+            f"[cache] {len(recent_missing)} recent realized DA files still missing after fetch — "
+            f"cannot generate reliable BF features. Missing: "
+            f"{', '.join(f'{m}/{pt}' for m, pt in recent_missing[:5])}"
+            f"{'...' if len(recent_missing) > 5 else ''}"
+        )

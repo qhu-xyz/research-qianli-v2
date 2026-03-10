@@ -1,56 +1,56 @@
 {
   "gates": {
     "VC@20": {
-      "floor": 0.2091,
-      "tail_floor": 0.0935,
+      "floor": 0.2096,
+      "tail_floor": 0.0989,
       "direction": "higher",
       "group": "A"
     },
     "VC@100": {
-      "floor": 0.5866,
-      "tail_floor": 0.3926,
+      "floor": 0.5916,
+      "tail_floor": 0.4147,
       "direction": "higher",
       "group": "A"
     },
     "Recall@20": {
-      "floor": 0.1988,
+      "floor": 0.195,
       "tail_floor": 0.05,
       "direction": "higher",
       "group": "A"
     },
     "Recall@50": {
-      "floor": 0.3405,
-      "tail_floor": 0.2,
+      "floor": 0.3435,
+      "tail_floor": 0.22,
       "direction": "higher",
       "group": "A"
     },
     "Recall@100": {
-      "floor": 0.4567,
-      "tail_floor": 0.46,
+      "floor": 0.4605,
+      "tail_floor": 0.47,
       "direction": "higher",
       "group": "A"
     },
     "NDCG": {
-      "floor": 0.5332,
-      "tail_floor": 0.4275,
+      "floor": 0.53,
+      "tail_floor": 0.4161,
       "direction": "higher",
       "group": "A"
     },
     "Spearman": {
-      "floor": 0.3083,
-      "tail_floor": 0.2573,
+      "floor": 0.3053,
+      "tail_floor": 0.2466,
       "direction": "higher",
       "group": "B"
     },
     "Tier0-AP": {
-      "floor": 0.3738,
+      "floor": 0.3767,
       "tail_floor": 0.3156,
       "direction": "higher",
       "group": "B"
     },
     "Tier01-AP": {
-      "floor": 0.5077,
-      "tail_floor": 0.4274,
+      "floor": 0.5011,
+      "tail_floor": 0.3924,
       "direction": "higher",
       "group": "B"
     }

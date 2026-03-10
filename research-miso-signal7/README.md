@@ -14,11 +14,11 @@ Replaces V6.2B's static formula (`0.60 × da_rank + 0.30 × density_mix + 0.10 �
 # Activate pmodel venv
 cd /home/xyz/workspace/pmodel && source .venv/bin/activate
 
-# Generate signal for one month
-python /path/to/research-miso-signal7/scripts/generate_v70_signal.py --auction-month 2026-04
+# Generate signal for one month (must have V6.2B source data)
+python /path/to/research-miso-signal7/scripts/generate_v70_signal.py --auction-month 2026-03
 
 # Validate
-python /path/to/research-miso-signal7/scripts/validate_v70.py --months 2026-04
+python /path/to/research-miso-signal7/scripts/validate_v70.py --months 2026-03
 
 # Full holdout validation
 python /path/to/research-miso-signal7/scripts/validate_v70.py --full-holdout

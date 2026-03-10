@@ -47,25 +47,28 @@ def run_pipeline(
 
     # Sort by query_month for proper group computation
     train_df = train_df.sort("query_month")
-    val_df = val_df.sort("query_month")
 
     X_train, _ = prepare_features(train_df, config.ltr)
     y_train = train_df["shadow_price_da"].to_numpy().astype(np.float64)
     groups_train = compute_query_groups(train_df)
 
-    X_val, _ = prepare_features(val_df, config.ltr)
-    y_val = val_df["shadow_price_da"].to_numpy().astype(np.float64)
-    groups_val = compute_query_groups(val_df)
+    X_val = y_val = groups_val = None
+    if val_df is not None and len(val_df) > 0:
+        val_df = val_df.sort("query_month")
+        X_val, _ = prepare_features(val_df, config.ltr)
+        y_val = val_df["shadow_price_da"].to_numpy().astype(np.float64)
+        groups_val = compute_query_groups(val_df)
 
-    print(f"[phase 2] train={X_train.shape} val={X_val.shape} "
-          f"groups_train={groups_train} groups_val={groups_val} "
+    val_shape = X_val.shape if X_val is not None else "(none)"
+    groups_val_str = groups_val if groups_val is not None else "(none)"
+    print(f"[phase 2] train={X_train.shape} val={val_shape} "
+          f"groups_train={groups_train} groups_val={groups_val_str} "
           f"(mem={mem_mb():.0f} MB)")
 
     del train_df, val_df
     gc.collect()
 
-    # Phase 3: Train (LightGBM uses rank-transformed labels internally,
-    # so early stopping works. XGBoost skips early stopping.)
+    # Phase 3: Train
     print(f"[phase 3] Training LTR model ({config.ltr.backend}) ... (mem={mem_mb():.0f} MB)")
     model = train_ltr_model(
         X_train, y_train, groups_train, config.ltr,

@@ -1,0 +1,226 @@
+{
+  "batch_id": "tier-fe-2-20260305-001606",
+  "iteration": 1,
+  "timestamp": "2026-03-05T06:00:08.817830+00:00",
+  "champion": "v0",
+  "noise_tolerance": 0.02,
+  "versions": {
+    "v0": {
+      "Tier-VC@100": {
+        "mean_value": 0.0708,
+        "mean_passed": false,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.0103,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Tier-VC@500": {
+        "mean_value": 0.2296,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.0564,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.3062,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1146,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.311,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1941,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Tier-NDCG": {
+        "mean_value": 0.7711,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.6585,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "QWK": {
+        "mean_value": 0.3698,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2584,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Macro-F1": {
+        "mean_value": 0.356,
+        "mean_passed": false,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2975,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": false
+      },
+      "Value-QWK": {
+        "mean_value": 0.3914,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1934,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier-Recall@0": {
+        "mean_value": 0.4389,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2041,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier-Recall@1": {
+        "mean_value": 0.0467,
+        "mean_passed": false,
+        "tail_failures": 5,
+        "tail_passed": false,
+        "bottom_2_mean": 0.003,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": false
+      }
+    },
+    "v0005": {
+      "Tier-VC@100": {
+        "mean_value": 0.0746,
+        "mean_passed": false,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.0169,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": false
+      },
+      "Tier-VC@500": {
+        "mean_value": 0.2329,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.054,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Tier0-AP": {
+        "mean_value": 0.3126,
+        "mean_passed": true,
+        "tail_failures": 1,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1114,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Tier01-AP": {
+        "mean_value": 0.3132,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.1988,
+        "tail_regression_passed": true,
+        "group": "A",
+        "overall_passed": true
+      },
+      "Tier-NDCG": {
+        "mean_value": 0.7751,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.6765,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "QWK": {
+        "mean_value": 0.3706,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2611,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Macro-F1": {
+        "mean_value": 0.356,
+        "mean_passed": false,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2966,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": false
+      },
+      "Value-QWK": {
+        "mean_value": 0.3918,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.195,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier-Recall@0": {
+        "mean_value": 0.4403,
+        "mean_passed": true,
+        "tail_failures": 0,
+        "tail_passed": true,
+        "bottom_2_mean": 0.2018,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": true
+      },
+      "Tier-Recall@1": {
+        "mean_value": 0.0447,
+        "mean_passed": false,
+        "tail_failures": 6,
+        "tail_passed": false,
+        "bottom_2_mean": 0.0027,
+        "tail_regression_passed": true,
+        "group": "B",
+        "overall_passed": false
+      }
+    }
+  },
+  "pass_summary": {
+    "v0": {
+      "group_a_passed": false,
+      "group_b_passed": false,
+      "overall_passed": false
+    },
+    "v0005": {
+      "group_a_passed": false,
+      "group_b_passed": false,
+      "overall_passed": false
+    }
+  },
+  "table": "| Version | Tier-VC@100 | Tier-VC@500 | Tier0-AP | Tier01-AP | Tier-NDCG | QWK | Macro-F1 | Value-QWK | Tier-Recall@0 | Tier-Recall@1 | Pass |\n|---------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|------|\n| v0 | 0.0708 F | 0.2296 P | 0.3062 P | 0.3110 P | 0.7711 P | 0.3698 P | 0.3560 F | 0.3914 P | 0.4389 P | 0.0467 F | NO (B:NO) |\n| v0005 | 0.0746 F | 0.2329 P | 0.3126 P | 0.3132 P | 0.7751 P | 0.3706 P | 0.3560 F | 0.3918 P | 0.4403 P | 0.0447 F | NO (B:NO) |"
+}

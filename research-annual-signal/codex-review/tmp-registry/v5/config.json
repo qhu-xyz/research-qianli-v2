@@ -1,0 +1,49 @@
+{
+  "ltr": {
+    "features": [
+      "shadow_price_da",
+      "mean_branch_max",
+      "ori_mean",
+      "mix_mean",
+      "density_mix_rank_value",
+      "density_ori_rank_value",
+      "rank_ori"
+    ],
+    "monotone_constraints": [
+      1,
+      1,
+      1,
+      1,
+      -1,
+      -1,
+      -1
+    ],
+    "backend": "lightgbm",
+    "n_estimators": 100,
+    "learning_rate": 0.05,
+    "min_child_weight": 25,
+    "num_leaves": 31,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 1.0,
+    "reg_lambda": 1.0,
+    "label_mode": "tiered"
+  },
+  "eval_config": {
+    "eval_groups": [
+      "2022-06/aq1",
+      "2022-06/aq2",
+      "2022-06/aq3",
+      "2022-06/aq4",
+      "2023-06/aq1",
+      "2023-06/aq2",
+      "2023-06/aq3",
+      "2023-06/aq4",
+      "2024-06/aq1",
+      "2024-06/aq2",
+      "2024-06/aq3",
+      "2024-06/aq4"
+    ],
+    "mode": "eval"
+  }
+}

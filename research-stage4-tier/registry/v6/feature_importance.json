@@ -1,0 +1,147 @@
+{
+  "importance_type": "gain",
+  "model": "ltr_ranker",
+  "n_months": 12,
+  "per_month": {
+    "2020-09": {
+      "da_rank_value": 1230.7540552782048,
+      "mix_mean": 54.93380692604114,
+      "density_mix_rank_value": 42.50287260301411,
+      "ori_mean": 4.201314378064126,
+      "mean_branch_max": 2.3424278795018836,
+      "density_ori_rank_value": 1.0969930354040116
+    },
+    "2020-12": {
+      "da_rank_value": 1319.2223218837753,
+      "mix_mean": 59.679066240787506,
+      "density_mix_rank_value": 26.804504963496584,
+      "mean_branch_max": 2.955275684595108,
+      "ori_mean": 1.4004440934550075,
+      "density_ori_rank_value": 0.7294719582860125
+    },
+    "2021-03": {
+      "da_rank_value": 1294.573164110836,
+      "mix_mean": 56.546859914436936,
+      "density_mix_rank_value": 7.525714382180013,
+      "mean_branch_max": 5.537855840288103,
+      "density_ori_rank_value": 3.989433214068413,
+      "ori_mean": 0.463737276604661
+    },
+    "2021-06": {
+      "da_rank_value": 1344.9632917115814,
+      "mix_mean": 54.544732589740306,
+      "density_mix_rank_value": 5.994330676505342,
+      "density_ori_rank_value": 2.633960008621216,
+      "ori_mean": 2.0801355896983296,
+      "mean_branch_max": 0.698871985077858
+    },
+    "2021-09": {
+      "da_rank_value": 1352.037053206368,
+      "density_mix_rank_value": 22.189705652650446,
+      "mix_mean": 20.942427426576614,
+      "mean_branch_max": 9.084898691624403,
+      "ori_mean": 0.6419762554578483,
+      "density_ori_rank_value": 0.03466795869280759
+    },
+    "2021-12": {
+      "da_rank_value": 1367.9899641442134,
+      "mean_branch_max": 35.99245466478169,
+      "density_ori_rank_value": 13.944253664463758,
+      "mix_mean": 10.717293080873787,
+      "ori_mean": 1.1864276323467493,
+      "density_mix_rank_value": 0.002418719930574298
+    },
+    "2022-03": {
+      "da_rank_value": 1288.5757450021338,
+      "mix_mean": 42.14168021082878,
+      "ori_mean": 5.232765174958331,
+      "mean_branch_max": 3.45687266997993,
+      "density_ori_rank_value": 2.838566020131111,
+      "density_mix_rank_value": 0.5733683789148927
+    },
+    "2022-06": {
+      "da_rank_value": 1305.3102022917137,
+      "mix_mean": 45.01241207061685,
+      "ori_mean": 7.094730875425739,
+      "mean_branch_max": 4.717115073930472,
+      "density_ori_rank_value": 0.15986406768206507,
+      "density_mix_rank_value": 0.07887149974703789
+    },
+    "2022-09": {
+      "da_rank_value": 1276.1297216794628,
+      "density_mix_rank_value": 37.76845011051046,
+      "mix_mean": 17.774034027883317,
+      "mean_branch_max": 5.244075894355774,
+      "ori_mean": 0.9417645293287933,
+      "density_ori_rank_value": 0.543692539597032
+    },
+    "2022-12": {
+      "da_rank_value": 1304.3731901688516,
+      "density_mix_rank_value": 63.931525878142565,
+      "density_ori_rank_value": 6.145634160609916,
+      "mix_mean": 1.8773883190006018,
+      "mean_branch_max": 1.2525229752063751,
+      "ori_mean": 0.011677462403895333
+    },
+    "2023-03": {
+      "da_rank_value": 1314.072558165988,
+      "mean_branch_max": 45.12627113237977,
+      "density_mix_rank_value": 19.921932263852796,
+      "mix_mean": 1.7850190235458285,
+      "ori_mean": 1.1739979148842394,
+      "density_ori_rank_value": 0.14996060937119182
+    },
+    "2023-05": {
+      "da_rank_value": 1319.2597017655207,
+      "mix_mean": 84.33826471213251,
+      "mean_branch_max": 11.054941197216976,
+      "density_mix_rank_value": 3.1466209458885714,
+      "ori_mean": 0.07332337700063363,
+      "density_ori_rank_value": 0.0
+    }
+  },
+  "aggregate": {
+    "mean": {
+      "da_rank_value": 1309.7717474507208,
+      "mix_mean": 37.524415378538684,
+      "density_mix_rank_value": 19.20335967290278,
+      "ori_mean": 2.0418578799690295,
+      "mean_branch_max": 10.621965307411529,
+      "density_ori_rank_value": 2.6888747697439612
+    },
+    "std": {
+      "da_rank_value": 36.577305501923924,
+      "mix_mean": 26.364684480318388,
+      "density_mix_rank_value": 20.46174750050453,
+      "ori_mean": 2.254925620533156,
+      "mean_branch_max": 14.432657619209158,
+      "density_ori_rank_value": 4.0276500042137435
+    }
+  },
+  "ranked": [
+    [
+      "da_rank_value",
+      1309.7717474507208
+    ],
+    [
+      "mix_mean",
+      37.524415378538684
+    ],
+    [
+      "density_mix_rank_value",
+      19.20335967290278
+    ],
+    [
+      "mean_branch_max",
+      10.621965307411529
+    ],
+    [
+      "density_ori_rank_value",
+      2.6888747697439612
+    ],
+    [
+      "ori_mean",
+      2.0418578799690295
+    ]
+  ]
+}

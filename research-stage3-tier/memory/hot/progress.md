@@ -2,7 +2,7 @@
 
 ## Current State
 - **Batch**: tier-fe-2-20260305-001606 (FE only, 3 iterations max)
-- **Iteration**: 1 COMPLETE, awaiting iter2
+- **Iteration**: 2 PLANNED, awaiting worker
 - **Champion**: v0 (baseline, unchanged — v0005 not promoted)
 - **Iterations completed**: 1 successful (v0005)
 - **Version counter**: next_id=6
@@ -19,15 +19,15 @@
 
 ## Iter 2 Plan
 
-- **Direction**: Build on v0005's 37 features, add 4 more (37→41)
-  - Log transforms: log1p_hist_da, log1p_expected_overload
-  - More interactions: overload_x_recent_hist, prob_range_high
+- **Hypothesis A** (primary): Add 4 FE features (37→41) — log1p_hist_da, log1p_expected_overload, overload_x_recent_hist, prob_range_high
+- **Hypothesis B** (alternative): Add 7 FE features (37→44) — A's 4 plus prob110_x_hist, prob105_x_hist, prob100_x_hist
+- **Screen months**: 2021-11 (weak, worst VC@100=0.0082) + 2021-09 (strong, best VC@100=0.2489)
 - **Goal**: Close the 0.0004 VC@100 gap
-- **Risk**: Low — additive features only
+- **Risk**: Low (A) to medium (B) — all additive features
 
 ## Priority Improvement Areas
-1. **Tier-VC@100** below floor by 0.0004 — ONLY blocking gate (closing this promotes v0005+)
+1. **Tier-VC@100** below floor by 0.0004 — ONLY blocking gate (closing this promotes)
 2. Value-QWK barely passing (0.3918 vs 0.3914) — fragile, monitor
 3. Tier-Recall@1 catastrophic (0.045) — BLOCKED by FE-only constraint
 4. Macro-F1 structural failure — driven by Tier-Recall@1 collapse
-5. 2022-06 worst month across most metrics — likely needs non-FE improvements
+5. 2021-11 worst month across most metrics — log transforms may help here

@@ -19,3 +19,11 @@
 
 ## trades 
 - path-level change to previous year's breakdown for pjm's june auction
+
+## check sth else
+- this imprvoement for mtm_1st_mean, is it statistically signifant?
+- you used a global scaling of 88pct right? what if you don't scale?
+- node-level adjust:
+    - did you remember we talked about node-level tracing back to previous year's june auction and extract f0-f11's distribution?
+    - does this series of ideas (it also involves scaling so there are at least 2 implementations to this idea) apply for high risk paths?
+    - coverage: you reported coverage for this node-level tracking back is really low in dataset. this is concerning.

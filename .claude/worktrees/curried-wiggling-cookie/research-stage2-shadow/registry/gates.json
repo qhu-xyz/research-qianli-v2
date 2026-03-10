@@ -1,0 +1,97 @@
+{
+  "version": 4,
+  "note": "Recalibrated 2026-03-04 from v0007 champion. Floors at 0.95x champion mean, tail_floors at 0.90x worst month.",
+  "noise_tolerance": 0.02,
+  "tail_max_failures": 1,
+  "eval_months": {
+    "primary": [
+      "2020-09",
+      "2020-11",
+      "2021-01",
+      "2021-03",
+      "2021-05",
+      "2021-07",
+      "2021-09",
+      "2021-11",
+      "2022-03",
+      "2022-06",
+      "2022-09",
+      "2022-12"
+    ]
+  },
+  "cascade_stages": [
+    {
+      "stage": 1,
+      "ptype": "f0",
+      "blocking": true
+    },
+    {
+      "stage": 2,
+      "ptype": "f1",
+      "blocking": true
+    },
+    {
+      "stage": 3,
+      "ptype": "f2p",
+      "blocking": false
+    }
+  ],
+  "gates": {
+    "EV-VC@100": {
+      "floor": 0.066396,
+      "tail_floor": 0.000135,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "EV-VC@500": {
+      "floor": 0.217926,
+      "tail_floor": 0.053646,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "EV-NDCG": {
+      "floor": 0.713706,
+      "tail_floor": 0.543359,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "Spearman": {
+      "floor": 0.373556,
+      "tail_floor": 0.236265,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "C-RMSE": {
+      "floor": 3062.208785,
+      "tail_floor": 6592.715083,
+      "direction": "lower",
+      "group": "B",
+      "pending_baseline": false
+    },
+    "C-MAE": {
+      "floor": 1209.075048,
+      "tail_floor": 2542.467527,
+      "direction": "lower",
+      "group": "B",
+      "pending_baseline": false
+    },
+    "EV-VC@1000": {
+      "floor": 0.301402,
+      "tail_floor": 0.089444,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": false
+    },
+    "R-REC@500": {
+      "floor": 0.033736,
+      "tail_floor": 0.012673,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": false
+    }
+  }
+}

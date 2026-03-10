@@ -1,0 +1,101 @@
+{
+  "version": 2,
+  "note": "v2: Group A = tier-count invariant blocking gates (VC@k, AP). Group B = whole-population monitors (no hard gates). AP gates pending v0 baseline.",
+  "noise_tolerance": 0.02,
+  "tail_max_failures": 1,
+  "eval_months": {
+    "primary": [
+      "2020-09",
+      "2020-11",
+      "2021-01",
+      "2021-03",
+      "2021-05",
+      "2021-07",
+      "2021-09",
+      "2021-11",
+      "2022-03",
+      "2022-06",
+      "2022-09",
+      "2022-12"
+    ]
+  },
+  "cascade_stages": [
+    {
+      "stage": 1,
+      "ptype": "f0",
+      "blocking": true
+    }
+  ],
+  "gates": {
+    "Tier-VC@100": {
+      "floor": 0.075047,
+      "tail_floor": 0.0083,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "Tier-VC@500": {
+      "floor": 0.217402,
+      "tail_floor": 0.046931,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "Tier0-AP": {
+      "floor": 0.306199,
+      "tail_floor": 0.114448,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "Tier01-AP": {
+      "floor": 0.311,
+      "tail_floor": 0.193494,
+      "direction": "higher",
+      "group": "A",
+      "pending_baseline": false
+    },
+    "Tier-NDCG": {
+      "floor": 0.766866,
+      "tail_floor": 0.6293,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": false
+    },
+    "QWK": {
+      "floor": 0.358666,
+      "tail_floor": 0.183913,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": false
+    },
+    "Macro-F1": {
+      "floor": 0.368946,
+      "tail_floor": 0.287588,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": false
+    },
+    "Value-QWK": {
+      "floor": 0.391395,
+      "tail_floor": 0.180416,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": false
+    },
+    "Tier-Recall@0": {
+      "floor": 0.374394,
+      "tail_floor": 0.075584,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": false
+    },
+    "Tier-Recall@1": {
+      "floor": 0.097591,
+      "tail_floor": 0.026071,
+      "direction": "higher",
+      "group": "B",
+      "pending_baseline": false
+    }
+  }
+}

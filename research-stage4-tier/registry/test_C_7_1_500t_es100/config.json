@@ -1,0 +1,57 @@
+{
+  "ltr": {
+    "features": [
+      "mean_branch_max",
+      "ori_mean",
+      "mix_mean",
+      "density_mix_rank_value",
+      "density_ori_rank_value",
+      "da_rank_value",
+      "prob_exceed_110",
+      "prob_exceed_100",
+      "prob_exceed_90",
+      "prob_exceed_85",
+      "prob_exceed_80",
+      "constraint_limit"
+    ],
+    "monotone_constraints": [
+      1,
+      1,
+      1,
+      -1,
+      -1,
+      -1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "backend": "lightgbm",
+    "n_estimators": 500,
+    "learning_rate": 0.05,
+    "min_child_weight": 25,
+    "num_leaves": 31,
+    "max_depth": 5,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 1.0,
+    "reg_lambda": 1.0,
+    "early_stopping_rounds": 100
+  },
+  "pipeline": {
+    "train_months": 7,
+    "val_months": 1
+  },
+  "eval_config": {
+    "eval_months": [
+      "2021-09"
+    ],
+    "class_type": "onpeak",
+    "period_type": "f0",
+    "train_months": 7,
+    "val_months": 1,
+    "mode": "screen"
+  }
+}

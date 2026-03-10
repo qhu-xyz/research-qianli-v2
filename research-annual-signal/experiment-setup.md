@@ -350,9 +350,27 @@ Add spice6 density exceedance probabilities.
 
 **Purpose:** Do additional density features help beyond what V6.1 already captures?
 
-### v3+: Iterations
+### v3: LightGBM LambdaRank (Set A — 6 features, tiered labels)
 
-Add constraint_limit, rate_a, or other features. Tune hyperparams only if v1/v2 show promise.
+Same as v1 but with tiered labels: 0=non-binding (58% of constraints), 1-4=quantile buckets of positive shadow prices. Avoids rank-transform noise where ~58% of constraints get arbitrary distinct ranks despite all having sp=0.
+
+**Purpose:** Do tiered labels improve ranking quality?
+
+### v4: LightGBM LambdaRank (Set AF — 7 features, rank labels)
+
+Set A plus `rank_ori` (V6.1 formula output) as 7th feature, with raw rank labels. This lets the model see the formula's own ranking while learning to improve on it.
+
+**Purpose:** Does providing the formula score as a feature help ML improve beyond it?
+
+### v5: LightGBM LambdaRank (Set AF — 7 features, tiered labels)
+
+Combines both improvements: formula-as-feature + tiered labels. Best of v3 and v4.
+
+**Purpose:** Are the two improvements additive?
+
+### v6+: Iterations (Planned)
+
+Better baselines (alternative formulas, raw shadow_price_da), blending ML + formula (score blend, rank blend, RRF).
 
 ---
 
@@ -395,39 +413,60 @@ Same framework as monthly stage5 (reuse `ml/evaluate.py`):
 
 ```
 research-annual-signal/
-    experiment-setup.md          # this file
-    mem.md                       # working memory
+    experiment-setup.md          # this file — problem spec and design
+    mem.md                       # working memory — results, findings, next steps
+    audit.md                     # 20-point integrity audit
+    runbook.md                   # how to run everything
     ml/
         __init__.py
-        config.py                # feature sets, data paths, eval groups
-        data_loader.py           # load V6.1 + spice6 features + ground truth
-        ground_truth.py          # fetch realized DA shadow prices via MisoApTools
-        evaluate.py              # copy from stage4 (reuse)
-        compare.py               # copy from stage4 (reuse)
-        benchmark.py             # multi-group runner
-        train.py                 # LightGBM lambdarank (copy from stage4)
-        pipeline.py              # train-predict-evaluate
-        features.py              # prepare features, query groups
+        config.py                # feature sets, data paths, eval groups, leaky feature guard
+        data_loader.py           # load V6.1 + spice6 features (cached)
+        ground_truth.py          # fetch realized DA shadow prices via MisoApTools (cached)
+        evaluate.py              # all 13 metrics + aggregation
+        compare.py               # 3-layer gate system + comparison tables
+        benchmark.py             # multi-group runner (train per year, eval per quarter)
+        train.py                 # LightGBM lambdarank + XGBoost (fallback)
+        pipeline.py              # train-predict-evaluate workflow
+        features.py              # prepare feature matrix, query groups
     scripts/
-        run_v0_baseline.py       # evaluate V6.1 formula vs realized GT
-        run_v1_experiment.py     # ML with Set A features
-        run_v2_experiment.py     # ML with Set B features
+        run_v0_baseline.py       # evaluate V6.1 formula vs realized GT + calibrate gates
+        run_v1_experiment.py     # ML with Set A (6 features)
+        run_v2_experiment.py     # ML with Set B (11 features)
+        run_v3_experiment.py     # ML with Set A + tiered labels
+        run_v4_experiment.py     # ML with Set AF (7 features, formula-as-feature)
+        run_v5_experiment.py     # ML with Set AF + tiered labels
+        cache_all_ground_truth.py  # pre-cache all 28 ground truth files (requires Ray)
+    cache/
+        enriched/                # V6.1 + spice6 per (year, aq) — auto-created on first load
+        ground_truth/            # realized DA shadow prices per (year, aq) — requires Ray
     registry/
-        gates.json               # calibrated from v0
-        champion.json
-        v0/                      # baseline metrics
-        v1/                      # first ML version
+        gates.json               # quality gates (calibrated from v0)
+        champion.json            # current champion version
+        comparisons/             # auto-generated comparison JSONs
+        v0/ .. v5/               # version metrics, config, metadata
+        v1_holdout/              # v1 holdout (2025) results
+    reports/
+        v1_comparison.md .. v5_comparison.md  # comparison reports
+    docs/plans/
+        2026-03-08-annual-tier-prediction-plan.md  # implementation plan
 ```
 
 ---
 
-## 11. Execution Plan (Priority Order)
+## 11. Execution History
 
-1. **Ground truth pipeline** — Fetch realized DA shadow prices for all 28 (year, round) groups. Cache to parquet. Verify constraint mapping coverage.
-2. **v0 baseline** — Evaluate V6.1 formula rank against realized GT. Calibrate gates. This is the "can we reproduce V6.1 exactly and benchmark it" step.
-3. **v1 ML (6 features)** — Can ML beat the formula using the same inputs?
-4. **v2 ML (11 features)** — Does adding spice6 density features help?
-5. **Iterate** — hyperparams, additional features, etc.
+| Step | Version | Status | Key Result |
+|------|---------|--------|------------|
+| 1 | Ground truth pipeline | DONE | 28 parquet files cached, ~31-42% binding rate |
+| 2 | v0 baseline | DONE | VC@20=0.2323, gates calibrated |
+| 3 | v1 ML (6 feat) | DONE | VC@20=0.2934 (+26%), ALL gates PASS |
+| 4 | v2 ML (11 feat) | DONE | VC@20=0.2904, spice6 doesn't help annual |
+| 5 | v1 holdout (2025) | DONE | VC@20=0.2152 (+38% vs v0 holdout) |
+| 6 | v3 tiered labels | DONE | VC@20=0.2871, tiered hurts VC@20 alone |
+| 7 | v4 formula-as-feature | DONE | VC@20=0.3030, +3.3% vs v1 |
+| 8 | v5 both improvements | DONE | VC@20=0.3075, best on 5/9 metrics |
+| 9 | Full audit | DONE | 20/20 checks PASS |
+| 10 | Better baselines + blending | PLANNED | Explore alternative formulas and ML+formula blending |
 
 ---
 
@@ -474,7 +513,7 @@ research-annual-signal/
 | **Rows per group** | ~500-800 | ~315-767 |
 | **Total eval groups** | 12 months | 12 groups (3 years x 4 rounds) |
 | **Training** | Rolling 8-month window | Expanding-window (all prior years) |
-| **v0 results** | VC@20=0.28, Spearman=0.20 | TBD |
+| **v0 results** | VC@20=0.3336, Spearman=0.1964 | VC@20=0.2323, Spearman=0.3425 |
 | **Generation code** | Not found | Not found |
 | **Formula verified** | Yes (max_abs_diff=0) | Yes (max_abs_diff=0) |
 

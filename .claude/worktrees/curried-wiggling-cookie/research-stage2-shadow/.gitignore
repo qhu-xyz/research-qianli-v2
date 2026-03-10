@@ -1,0 +1,12 @@
+state.json
+state.lock
+.logs/
+!.logs/sessions/.gitkeep
+handoff/
+!handoff/.gitkeep
+.claude/worktrees/
+ml/**/*.parquet
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/

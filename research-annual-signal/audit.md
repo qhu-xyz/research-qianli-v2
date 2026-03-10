@@ -1,8 +1,8 @@
 # Annual FTR Constraint Tier Prediction — Full Audit
 
-**Date**: 2026-03-08
+**Date**: 2026-03-08 (updated 2026-03-08 after Codex review)
 **Scope**: Data integrity, leakage, target correctness, evaluation, design
-**Verdict**: **PASS — No critical issues found**
+**Verdict**: **PARTIAL — 2 high-severity issues found (see section 12A)**
 
 ---
 
@@ -291,9 +291,9 @@ recall = len(intersection) / k
 | 5 | Ground truth fetched independently | **PASS** |
 | 6 | Cache directories separated | **PASS** |
 | 7 | Leaky feature guard active | **PASS** |
-| 8 | Constraint mapping chain correct | **PASS** |
+| 8 | Constraint mapping chain correct | **FAIL — see 12A.1** |
 | 9 | VC@K denominator correct (V6.1 universe) | **PASS** |
-| 10 | Recall@K correctly computed | **PASS** |
+| 10 | Recall@K correctly computed | **WARN — see 12A.3** |
 | 11 | NDCG correctly computed | **PASS** |
 | 12 | tier_ap bug fixed | **PASS** |
 | 13 | Aggregate means correct | **PASS** |
@@ -307,9 +307,95 @@ recall = len(intersection) / k
 
 ---
 
-## 12. Recommendations (Non-Critical)
+## 12A. Codex Review Findings (2026-03-08)
 
-1. **Add unit tests** for `tier_ap()` edge cases (all zeros, single constraint, threshold=0 fallback)
-2. **Document V6.1 generation process** — parquet files exist but no generation code in this repo
-3. **Monitor 2025 data completeness** — aq4 (Mar-May 2026) expected to be incomplete
-4. **Consider adding rate_a to V6.1 enrichment** — currently only in Set C which isn't used by any version
+External audit by Codex (see `codex-review/audit.md` for full report). The original audit was **too optimistic** — "PASS — No critical issues found" is revised to "PARTIAL".
+
+### 12A.1 HIGH: Many-to-many constraint_id -> branch_name join in ground truth
+
+**Location**: `ml/ground_truth.py:37-50`
+
+`_load_cid_to_branch()` loads ALL rows from `MISO_SPICE_CONSTRAINT_INFO` without filtering by `auction_type`, `auction_month`, or `period_type`. The same constraint_id can map to different branch_names across time periods:
+- 17,559 of 19,644 unique constraint_ids map to >1 branch_name
+- Worst case: 1 constraint_id -> 24 different branch_names
+
+This fans out DA shadow prices to multiple branches, contaminating `realized_shadow_price` (the training label AND evaluation target).
+
+**Codex verification (2024-06/aq1):**
+- Current (unfiltered): 969 realized branches, total value $2,009,760
+- Partition-filtered: 898 realized branches, total value $1,871,222
+- 2 specific branches changed values
+
+**Status**: OPEN — must fix by filtering bridge table to target partition before trusting results.
+
+### 12A.2 HIGH: 2025/aq4 holdout includes incomplete future quarter
+
+**Location**: `registry/v1_holdout/metrics.json`, `ml/config.py:112-114`
+
+`2025-06/aq4` covers Mar-May 2026. As of March 8, 2026, April and May are still in the future. The holdout aggregate includes this incomplete quarter, making holdout numbers unreliable.
+
+**Status**: ACKNOWLEDGED — already noted as caveat in mem.md ("2025/aq4 has only 76/418 (18.2%) binding — likely partial/incomplete data") but holdout aggregate should be flagged or aq4 excluded.
+
+### 12A.3 MEDIUM: Recall@100 order-dependent when <100 constraints bind
+
+**Location**: `ml/evaluate.py:26-31`
+
+`recall_at_k()` defines the true top-K as `np.argsort(actual)[::-1][:k]`. When fewer than K rows have positive target value, the remainder is filled by arbitrary zero-valued ties — selection depends on row order.
+
+**Codex verification:**
+- `2022-06/aq3`: 92 positive rows, Recall@100 varied from 0.44 to 0.49 under permutation
+- `2025-06/aq4`: 76 positive rows, Recall@100 varied from 0.39 to 0.44 under permutation
+
+**Impact**: The Recall@100 L2 tail gate (which v2-v5 fail) is partly determined by row ordering rather than model quality.
+
+**Status**: OPEN — should restrict true set to positive-value rows, or break ties consistently.
+
+### 12A.4 LOW: XGBoost fallback path broken
+
+**Location**: `ml/train.py:140-167`, `ml/config.py:136-151`
+
+`_train_xgboost()` references `cfg.max_depth` which doesn't exist in `LTRConfig`. Running XGBoost raises `AttributeError`.
+
+**Status**: Non-blocking (only LightGBM used), but should fix or remove dead code.
+
+---
+
+## 12B. Per-Year Analysis (v0 vs v5, added 2026-03-08)
+
+| Year | v0 VC@20 | v5 VC@20 | Delta | v0 NDCG | v5 NDCG | Delta |
+|------|----------|----------|-------|---------|---------|-------|
+| 2022 | 0.2870 | 0.3817 | +33.0% | 0.5831 | 0.6111 | +4.8% |
+| 2023 | 0.2590 | 0.2934 | +13.3% | 0.6234 | 0.6117 | -1.9% |
+| 2024 | 0.1508 | 0.2475 | +64.1% | 0.5711 | 0.6067 | +6.2% |
+
+### Caveats
+- ML doesn't win every group: v5 loses 4/12 on VC@20
+- 2023 NDCG actually regresses vs formula (-1.9%)
+- Gains are lumpy — driven by a few strong quarters (2022/aq2, 2024/aq1)
+- Small N (12 eval groups) — limited statistical power
+- Top-K focused: VC@100+ flat or slightly down
+- Holdout VC@20 is ~30% below dev eval
+
+### Gate Analysis
+- **v1 is the only ML version passing ALL gates**
+- v2-v5 all fail Recall@100 L2 tail gate (2 groups below floor, max allowed = 1)
+- The tail weakness is on 2022/aq4 (Recall@100=0.45) and 2024/aq2 (Recall@100=0.44)
+
+---
+
+## 13. Recommendations
+
+### Critical (from Codex review)
+1. **FIX: Filter bridge table in ground truth** — `_load_cid_to_branch()` must filter by `auction_type='annual'`, `auction_month`, `period_type`, `class_type='onpeak'`. Then rebuild all 28 ground truth cache files and re-run all versions.
+2. **FIX: Exclude 2025/aq4 from holdout** until June 2026, or add code to refuse incomplete target windows.
+3. **FIX: Recall@100 tie-breaking** — restrict true set to positive-value rows only, or use stable tie-breaking (e.g., `kind='stable'` in argsort).
+4. **FIX or REMOVE: XGBoost path** — add `max_depth` to LTRConfig, or remove dead code.
+
+### Non-Critical
+5. **Add unit tests** for `tier_ap()` edge cases (all zeros, single constraint, threshold=0 fallback)
+6. **Document V6.1 generation process** — parquet files exist but no generation code in this repo
+7. **Monitor 2025 data completeness** — aq4 (Mar-May 2026) expected to be incomplete
+8. **Consider adding rate_a to V6.1 enrichment** — currently only in Set C which isn't used by any version
+9. **Explore better baselines** — shadow_price_da alone, reweighted formula, product features
+10. **Explore blending** — ML + formula score/rank blend, RRF
+11. **Investigate Recall@100 tail failures** — 2022/aq4 and 2024/aq2 consistently weak across v2-v5 (may partly be the tie-breaking issue)

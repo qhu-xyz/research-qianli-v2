@@ -17,7 +17,9 @@ def _rank_transform_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
     """Rank-transform continuous labels to integers within each query group.
 
     LightGBM lambdarank requires integer relevance labels.
-    Rank-transform preserves ordering while satisfying this constraint.
+    Raw rank-transform preserves full ordering (~600 levels per group).
+    Cost: ~1.5s/iteration on this data size. With n_estimators=100 and
+    early_stopping=20, training takes ~30-150s per month.
     """
     y_rank = np.zeros(len(y), dtype=np.int32)
     offset = 0
@@ -85,7 +87,8 @@ def _train_lightgbm(
         )
         valid_sets = [val_data]
         valid_names = ["val"]
-        callbacks.append(lgb.early_stopping(50, verbose=False))
+        if cfg.early_stopping_rounds > 0:
+            callbacks.append(lgb.early_stopping(cfg.early_stopping_rounds, verbose=False))
 
     model = lgb.train(
         params,

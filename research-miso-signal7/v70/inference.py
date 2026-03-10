@@ -74,12 +74,12 @@ def _compute_bf(
     n = len(prior)
     if n == 0:
         return np.zeros(len(cids), dtype=np.float64)
+    cid_set = set(cids)
     freq = np.zeros(len(cids), dtype=np.float64)
+    cid_to_idx = {cid: i for i, cid in enumerate(cids)}
     for m in prior:
-        s = bs[m]
-        for i, cid in enumerate(cids):
-            if cid in s:
-                freq[i] += 1
+        for cid in bs[m] & cid_set:
+            freq[cid_to_idx[cid]] += 1
     return freq / n
 
 
@@ -167,7 +167,7 @@ def score_ml_inference(
     # Load and enrich training data
     parts = []
     for tm in train_month_strs:
-        part = load_v62b_month(tm, period_type, class_type)
+        part = load_v62b_month(tm, period_type, class_type, cache_dir=REALIZED_DA_CACHE)
         part = part.with_columns(pl.lit(tm).alias("query_month"))
         part = _enrich_df(part, tm, bs, blend)
         parts.append(part)

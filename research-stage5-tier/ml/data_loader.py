@@ -36,6 +36,7 @@ def load_v62b_month(
     auction_month: str,
     period_type: str = "f0",
     class_type: str = "onpeak",
+    cache_dir: str | None = None,
 ) -> pl.DataFrame:
     """Load V6.2B signal data enriched with spice6 density + realized DA ground truth.
 
@@ -47,6 +48,8 @@ def load_v62b_month(
         Period type (f0, f1, etc.).
     class_type : str
         onpeak or offpeak.
+    cache_dir : str or None
+        Override realized DA cache directory. If None, uses ml.config.REALIZED_DA_CACHE.
 
     Returns
     -------
@@ -87,7 +90,8 @@ def load_v62b_month(
     # For fN, ground truth = realized DA for delivery_month (= auction_month + N)
     from ml.config import delivery_month as _delivery_month
     gt_month = _delivery_month(auction_month, period_type)
-    realized = load_realized_da(gt_month, peak_type=class_type)
+    da_kwargs = {"cache_dir": cache_dir} if cache_dir else {}
+    realized = load_realized_da(gt_month, peak_type=class_type, **da_kwargs)
     df = df.join(realized, on="constraint_id", how="left")
     df = df.with_columns(pl.col("realized_sp").fill_null(0.0))
 

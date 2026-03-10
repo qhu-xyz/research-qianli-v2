@@ -1,0 +1,89 @@
+=== Gate A: Improvement over V6.2B ===
+=== Gate B: Holdout reproduction ===
+
+=== Validating 2025-01 ===
+
+=== Validating 2025-07 ===
+
+=== Validating 2026-03 ===
+
+[PASS] A: f0/onpeak: +92.3% vs V6.2B (min 40%), V6.2B=0.1835 → V7.0=0.3529
+[PASS] A: f0/offpeak: +82.2% vs V6.2B (min 40%), V6.2B=0.2075 → V7.0=0.3780
+[PASS] A: f1/onpeak: +66.5% vs V6.2B (min 30%), V6.2B=0.2209 → V7.0=0.3677
+[PASS] A: f1/offpeak: +42.9% vs V6.2B (min 20%), V6.2B=0.2492 → V7.0=0.3561
+[PASS] B: f0/onpeak: all 24 holdout months match stage5 (mean VC@20=0.3529)
+[PASS] B: f0/offpeak: all 24 holdout months match stage5 (mean VC@20=0.3780)
+[PASS] B: f1/onpeak: all 19 holdout months match stage5 (mean VC@20=0.3677)
+[PASS] B: f1/offpeak: all 19 holdout months match stage5 (mean VC@20=0.3561)
+[PASS] D: 2025-01 f0/onpeak: schema valid (489 rows)
+[PASS] E: 2025-01 f0/onpeak: rank/tier invariants valid
+[PASS] F: 2025-01 f0/onpeak: scores valid (std=0.8156)
+[PASS] D: 2025-01 f0/offpeak: schema valid (485 rows)
+[PASS] E: 2025-01 f0/offpeak: rank/tier invariants valid
+[PASS] F: 2025-01 f0/offpeak: scores valid (std=0.8500)
+[PASS] D: 2025-01 f1/onpeak: schema valid (477 rows)
+[PASS] E: 2025-01 f1/onpeak: rank/tier invariants valid
+[PASS] F: 2025-01 f1/onpeak: scores valid (std=0.8205)
+[PASS] D: 2025-01 f1/offpeak: schema valid (470 rows)
+[PASS] E: 2025-01 f1/offpeak: rank/tier invariants valid
+[PASS] F: 2025-01 f1/offpeak: scores valid (std=0.9097)
+[PASS] C: 2025-01 q4/onpeak: passthrough bit-identical
+[PASS] C: 2025-01 q4/offpeak: passthrough bit-identical
+[PASS] G: 2025-01 f0/onpeak: SF bit-identical
+[PASS] G: 2025-01 f0/offpeak: SF bit-identical
+[PASS] G: 2025-01 f1/onpeak: SF bit-identical
+[PASS] G: 2025-01 f1/offpeak: SF bit-identical
+[PASS] G: 2025-01 q4/onpeak: SF bit-identical
+[PASS] G: 2025-01 q4/offpeak: SF bit-identical
+[PASS] D: 2025-07 f0/onpeak: schema valid (504 rows)
+[PASS] E: 2025-07 f0/onpeak: rank/tier invariants valid
+[PASS] F: 2025-07 f0/onpeak: scores valid (std=0.8358)
+[PASS] D: 2025-07 f0/offpeak: schema valid (498 rows)
+[PASS] E: 2025-07 f0/offpeak: rank/tier invariants valid
+[PASS] F: 2025-07 f0/offpeak: scores valid (std=0.7577)
+[PASS] D: 2025-07 f1/onpeak: schema valid (441 rows)
+[PASS] E: 2025-07 f1/onpeak: rank/tier invariants valid
+[PASS] F: 2025-07 f1/onpeak: scores valid (std=0.8244)
+[PASS] D: 2025-07 f1/offpeak: schema valid (422 rows)
+[PASS] E: 2025-07 f1/offpeak: rank/tier invariants valid
+[PASS] F: 2025-07 f1/offpeak: scores valid (std=0.7355)
+[PASS] C: 2025-07 q2/onpeak: passthrough bit-identical
+[PASS] C: 2025-07 q2/offpeak: passthrough bit-identical
+[PASS] C: 2025-07 q3/onpeak: passthrough bit-identical
+[PASS] C: 2025-07 q3/offpeak: passthrough bit-identical
+[PASS] C: 2025-07 q4/onpeak: passthrough bit-identical
+[PASS] C: 2025-07 q4/offpeak: passthrough bit-identical
+[PASS] G: 2025-07 f0/onpeak: SF bit-identical
+[PASS] G: 2025-07 f0/offpeak: SF bit-identical
+[PASS] G: 2025-07 f1/onpeak: SF bit-identical
+[PASS] G: 2025-07 f1/offpeak: SF bit-identical
+[PASS] G: 2025-07 q2/onpeak: SF bit-identical
+[PASS] G: 2025-07 q2/offpeak: SF bit-identical
+[PASS] G: 2025-07 q3/onpeak: SF bit-identical
+[PASS] G: 2025-07 q3/offpeak: SF bit-identical
+[PASS] G: 2025-07 q4/onpeak: SF bit-identical
+[PASS] G: 2025-07 q4/offpeak: SF bit-identical
+[PASS] D: 2026-03 f0/onpeak: schema valid (585 rows)
+[PASS] E: 2026-03 f0/onpeak: rank/tier invariants valid
+[PASS] F: 2026-03 f0/onpeak: scores valid (std=0.9721)
+[PASS] D: 2026-03 f0/offpeak: schema valid (576 rows)
+[PASS] E: 2026-03 f0/offpeak: rank/tier invariants valid
+[PASS] F: 2026-03 f0/offpeak: scores valid (std=1.0855)
+[PASS] D: 2026-03 f1/onpeak: schema valid (684 rows)
+[PASS] E: 2026-03 f1/onpeak: rank/tier invariants valid
+[PASS] F: 2026-03 f1/onpeak: scores valid (std=0.9278)
+[PASS] D: 2026-03 f1/offpeak: schema valid (665 rows)
+[PASS] E: 2026-03 f1/offpeak: rank/tier invariants valid
+[PASS] F: 2026-03 f1/offpeak: scores valid (std=0.9719)
+[PASS] C: 2026-03 f2/onpeak: passthrough bit-identical
+[PASS] C: 2026-03 f2/offpeak: passthrough bit-identical
+[PASS] G: 2026-03 f0/onpeak: SF bit-identical
+[PASS] G: 2026-03 f0/offpeak: SF bit-identical
+[PASS] G: 2026-03 f1/onpeak: SF bit-identical
+[PASS] G: 2026-03 f1/offpeak: SF bit-identical
+[PASS] G: 2026-03 f2/onpeak: SF bit-identical
+[PASS] G: 2026-03 f2/offpeak: SF bit-identical
+
+============================================================
+PASSED: 76  WARNINGS: 0  FAILED: 0
+STATUS: READY FOR DEPLOYMENT

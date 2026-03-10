@@ -23,6 +23,9 @@ REALIZED_DA_CACHE = os.environ.get(
     "/opt/temp/qianli/spice_data/miso/realized_da",
 )
 
+# Maximum BF lookback window used in inference
+_MAX_BF_LOOKBACK = 15
+
 
 def _cache_path(month: str, peak_type: str) -> Path:
     if peak_type == "onpeak":
@@ -30,25 +33,58 @@ def _cache_path(month: str, peak_type: str) -> Path:
     return Path(REALIZED_DA_CACHE) / f"{month}_{peak_type}.parquet"
 
 
+def _prev_month(m: str) -> str:
+    import pandas as pd
+    ts = pd.Timestamp(m)
+    return (ts - pd.DateOffset(months=1)).strftime("%Y-%m")
+
+
+def _months_before(month: str, n: int) -> list[str]:
+    """Return the n months strictly before `month`, newest first."""
+    import pandas as pd
+    ts = pd.Timestamp(month)
+    return [
+        (ts - pd.DateOffset(months=i)).strftime("%Y-%m")
+        for i in range(1, n + 1)
+    ]
+
+
 def required_realized_da_months(
     auction_month: str,
     ptypes: list[str],
     ctypes: list[str],
 ) -> set[tuple[str, str]]:
-    """Compute all (month, peak_type) pairs needed for training.
+    """Compute all (month, peak_type) pairs needed for training + BF features.
 
-    For each ML ptype, we need realized DA for delivery_month of each
-    training month (ground truth labels).
+    Two sources of requirements:
+    1. Training labels: realized DA for delivery_month of each training month.
+    2. BF lookback: binding_freq_15 needs 15 months of realized DA before
+       prev_month(auction_month). Also need BF months for each training month.
     """
     needed: set[tuple[str, str]] = set()
     for ptype in ptypes:
         if not has_period_type(auction_month, ptype):
             continue
         train_months = collect_usable_months(auction_month, ptype, n_months=8)
+
         for tm in train_months:
+            # Labels: delivery month GT
             dm = delivery_month(tm, ptype)
             for ct in ctypes:
                 needed.add((dm, ct))
+
+            # BF features for each training month: months before prev_month(tm)
+            bf_cutoff = _prev_month(tm)
+            for bf_month in _months_before(bf_cutoff, _MAX_BF_LOOKBACK):
+                for ct in ctypes:
+                    needed.add((bf_month, ct))
+
+        # BF features for inference month itself
+        bf_cutoff = _prev_month(auction_month)
+        for bf_month in _months_before(bf_cutoff, _MAX_BF_LOOKBACK):
+            for ct in ctypes:
+                needed.add((bf_month, ct))
+
     return needed
 
 
@@ -65,14 +101,20 @@ def ensure_realized_da_cache(
         print(f"[cache] All {len(needed)} required realized DA files present")
         return
 
-    print(f"[cache] {len(missing)} missing realized DA files, fetching...")
+    print(f"[cache] {len(missing)}/{len(needed)} missing realized DA files, fetching...")
     from ml.realized_da import fetch_and_cache_month
 
+    fetched, skipped = 0, 0
     for month, peak_type in missing:
-        print(f"[cache]   fetching {month}/{peak_type}...")
-        out = fetch_and_cache_month(month, peak_type, cache_dir=REALIZED_DA_CACHE)
-        if not out.exists() or out.stat().st_size == 0:
-            raise RuntimeError(f"Failed to fetch realized DA for {month}/{peak_type}")
-        print(f"[cache]   done: {out}")
+        try:
+            out = fetch_and_cache_month(month, peak_type, cache_dir=REALIZED_DA_CACHE)
+            if out.exists() and out.stat().st_size > 0:
+                fetched += 1
+            else:
+                skipped += 1
+                print(f"[cache]   WARNING: empty result for {month}/{peak_type}")
+        except Exception as e:
+            skipped += 1
+            print(f"[cache]   WARNING: failed to fetch {month}/{peak_type}: {e}")
 
-    print(f"[cache] All {len(needed)} realized DA files now present")
+    print(f"[cache] Fetched {fetched}, skipped {skipped} (may be too old for DA data)")

@@ -2936,6 +2936,8 @@ Re-run v2 (with optimized blend from Task 12) on held-out months (2024-2025).
 
 This is a thin wrapper that runs `run_variant()` from `run_v2_ml.py` on holdout months. It reads `BLEND_WEIGHTS` from `run_v2_ml.py` (already updated by blend search in Task 12), ensuring holdout uses the same blend as the dev evaluation.
 
+**Important**: In addition to saving metrics, the holdout script must save **per-month predictions** to `holdout/{ptype}/{ctype}/v2/predictions/{month}.parquet` with columns `[constraint_id, rank]`. These are consumed by Task 14 (new-binding analysis) to compare V7.0b ranks against V6.2B ranks.
+
 - [ ] **Step 2: Run holdout and commit**
 
 ```bash
@@ -3004,9 +3006,380 @@ if p.exists():
 
 ---
 
+### Task 14: Create `scripts/new_binding_analysis.py` — V7.0b vs V6.2B signal distinctiveness
+
+Replicate the MISO new-binding analysis (`research-miso-signal7/docs/new-binding-analysis.md`) for PJM. The ML model should dominate overall discrimination, but V6.2B retains structural advantages for truly new binders (constraints that have never bound before). This analysis validates that the PJM ML model has the same strengths/weaknesses as MISO's, and quantifies the V6.2B residual value.
+
+**Motivation**: V7.0's top features are binding_freq windows (bf_1..bf_15), which are zero for constraints with no binding history. V6.2B's `da_rank_value` carries forward-looking historical congestion information that flags constraints before they ever bind. Understanding this trade-off is critical for deployment decisions and future model improvements.
+
+**Reference**: `research-miso-signal7/docs/new-binding-analysis.md`
+
+**Files:**
+- Create: `scripts/new_binding_analysis.py`
+- Create: `docs/new-binding-analysis.md` (results report)
+
+- [ ] **Step 1: Write analysis script**
+
+The script should compute, for each holdout month and for f0/onpeak (primary slice):
+
+1. **Overall discrimination** (Study 1): For each month, compute avg rank of binding constraints and top-20% capture count for both V6.2B (`rank_ori`) and V7.0b (`rank`). V7.0b should win on aggregate.
+
+2. **AUC** (Study 2): For each month, compute AUC (probability that a random binding constraint has lower rank than a random non-binding constraint) for both signals. V7.0b should have higher AUC.
+
+3. **New binder early alarm** (Study 3): Identify constraints that **first bind** during holdout with **no prior binding** in any training month. For each lead time (1, 2, 3, 6 months before first binding), check what tier V6.2B and V7.0b assigned. V6.2B should win here (V7.0b assigns T3-T4 because all bf features are zero).
+
+4. **Recurring binder early alarm** (Study 4): For constraints that bound, stopped for 3+ months, then re-bound during holdout, check tier assignment 1 month before re-binding. V7.0b should win here (bf_12/bf_15 retain memory).
+
+```python
+"""V7.0b vs V6.2B: Signal distinctiveness and new-binding analysis for PJM.
+
+Replicates the MISO analysis from research-miso-signal7/docs/new-binding-analysis.md.
+"""
+import sys, json
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import polars as pl
+import numpy as np
+
+from ml.config import HOLDOUT_MONTHS, V62B_SIGNAL_BASE, REALIZED_DA_CACHE
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+def load_v62b_raw(auction_month: str, period_type: str, class_type: str) -> pl.DataFrame:
+    """Load raw V6.2B signal (rank_ori only, no enrichment)."""
+    path = Path(V62B_SIGNAL_BASE) / auction_month / period_type / class_type
+    df = pl.read_parquet(str(path))
+    return df.select(
+        pl.col("constraint_id").cast(pl.String),
+        pl.col("branch_name").cast(pl.String),
+        pl.col("rank_ori").cast(pl.Float64),
+    )
+
+
+def load_v70b_results(auction_month: str, period_type: str, class_type: str) -> pl.DataFrame:
+    """Load V7.0b holdout results (rank column from holdout metrics)."""
+    # V7.0b results stored as holdout per-month data
+    # Read from holdout registry: the run_holdout script saves per-month predictions
+    holdout_pred_dir = Path(f"holdout/{period_type}/{class_type}/v2/predictions")
+    pred_path = holdout_pred_dir / f"{auction_month}.parquet"
+    if not pred_path.exists():
+        raise FileNotFoundError(f"No V7.0b predictions for {auction_month}: {pred_path}")
+    return pl.read_parquet(str(pred_path)).select(
+        pl.col("constraint_id").cast(pl.String),
+        pl.col("rank").cast(pl.Float64),
+    )
+
+
+def load_realized_binding(month: str, peak_type: str) -> set:
+    """Return set of branch_names that bound in this month."""
+    from ml.realized_da import load_realized_da
+    try:
+        da = load_realized_da(month, peak_type=peak_type)
+        return set(da.filter(pl.col("realized_sp") > 0)["branch_name"].to_list())
+    except FileNotFoundError:
+        return set()
+
+
+def compute_auc(ranks: np.ndarray, labels: np.ndarray) -> float:
+    """AUC: P(rank_binding < rank_nonbinding). Lower rank = higher priority."""
+    binding = ranks[labels == 1]
+    nonbinding = ranks[labels == 0]
+    if len(binding) == 0 or len(nonbinding) == 0:
+        return 0.5
+    # For each binding constraint, count how many non-binding have higher rank
+    auc = np.mean([np.mean(nonbinding > b) for b in binding])
+    return auc
+
+
+def rank_to_tier(rank: float) -> int:
+    """Convert rank (0-1) to tier (0-4). T0 = top 20%."""
+    if rank <= 0.20: return 0
+    if rank <= 0.40: return 1
+    if rank <= 0.60: return 2
+    if rank <= 0.80: return 3
+    return 4
+
+
+# ── Main analysis ────────────────────────────────────────────────────────
+
+def main():
+    period_type = "f0"
+    class_type = "onpeak"
+    months = sorted(HOLDOUT_MONTHS)
+
+    print("=" * 80)
+    print("V7.0b vs V6.2B: Signal Distinctiveness Analysis (PJM)")
+    print(f"Scope: {period_type}/{class_type}, {len(months)} holdout months")
+    print("=" * 80)
+
+    # ── Study 1 & 2: Overall discrimination ──
+    print("\n## Study 1: Overall Discrimination")
+    print(f"{'Month':>8} {'#Bound':>7} {'V6.2B avgR':>11} {'V7.0b avgR':>11} "
+          f"{'Delta':>7} {'V6.2B T20':>9} {'V7.0b T20':>9} "
+          f"{'V6.2B AUC':>9} {'V7.0b AUC':>9}")
+    print("-" * 95)
+
+    total_v62b_t20, total_v70b_t20 = 0, 0
+    all_v62b_auc, all_v70b_auc = [], []
+
+    for m in months:
+        try:
+            v62b = load_v62b_raw(m, period_type, class_type)
+            v70b = load_v70b_results(m, period_type, class_type)
+        except FileNotFoundError as e:
+            print(f"{m:>8} SKIP: {e}")
+            continue
+
+        # Determine ground truth delivery month
+        from ml.config import delivery_month
+        gt_month = delivery_month(m, period_type)
+        binding_branches = load_realized_binding(gt_month, class_type)
+
+        # Merge
+        merged = v62b.join(v70b, on="constraint_id", how="inner")
+        merged = merged.with_columns(
+            pl.col("branch_name").is_in(list(binding_branches)).cast(pl.Int8).alias("bound")
+        )
+
+        n_bound = merged.filter(pl.col("bound") == 1).height
+        if n_bound == 0:
+            continue
+
+        # Avg rank of binding constraints
+        binding_df = merged.filter(pl.col("bound") == 1)
+        v62b_avg = binding_df["rank_ori"].mean()
+        v70b_avg = binding_df["rank"].mean()
+
+        # Top-20% captures
+        v62b_t20 = binding_df.filter(pl.col("rank_ori") <= 0.20).height
+        v70b_t20 = binding_df.filter(pl.col("rank") <= 0.20).height
+        total_v62b_t20 += v62b_t20
+        total_v70b_t20 += v70b_t20
+
+        # AUC
+        ranks_62b = merged["rank_ori"].to_numpy()
+        ranks_70b = merged["rank"].to_numpy()
+        labels = merged["bound"].to_numpy()
+        auc_62b = compute_auc(ranks_62b, labels)
+        auc_70b = compute_auc(ranks_70b, labels)
+        all_v62b_auc.append(auc_62b)
+        all_v70b_auc.append(auc_70b)
+
+        print(f"{m:>8} {n_bound:>7} {v62b_avg:>11.4f} {v70b_avg:>11.4f} "
+              f"{v62b_avg - v70b_avg:>+7.3f} {v62b_t20:>9} {v70b_t20:>9} "
+              f"{auc_62b:>9.3f} {auc_70b:>9.3f}")
+
+    print(f"\nAggregate Top-20 captures: V6.2B={total_v62b_t20}, V7.0b={total_v70b_t20} "
+          f"(V7.0b {total_v70b_t20/max(total_v62b_t20,1)*100 - 100:+.0f}%)")
+    if all_v62b_auc:
+        print(f"Mean AUC: V6.2B={np.mean(all_v62b_auc):.3f}, V7.0b={np.mean(all_v70b_auc):.3f}")
+
+    # ── Study 3: New binder early alarm ──
+    print("\n## Study 3: New Binder Early Alarm")
+    print("Constraints that first bind during holdout with NO prior binding history.")
+
+    # Build binding history from training months (pre-holdout)
+    from ml.config import delivery_month as dm
+    pre_holdout_binding = {}  # branch_name -> set of months it bound
+    # Use all months before first holdout month
+    first_holdout = months[0]
+    all_months = sorted(Path(V62B_SIGNAL_BASE).iterdir())
+    for mp in all_months:
+        m_str = mp.name
+        if m_str >= first_holdout:
+            break
+        gt = dm(m_str, period_type)
+        for bn in load_realized_binding(gt, class_type):
+            pre_holdout_binding.setdefault(bn, set()).add(m_str)
+
+    # Find truly new binders in holdout
+    new_binder_events = []  # (branch_name, first_binding_month)
+    holdout_binding = {}
+    for m in months:
+        gt = dm(m, period_type)
+        binding = load_realized_binding(gt, class_type)
+        for bn in binding:
+            if bn not in pre_holdout_binding and bn not in holdout_binding:
+                holdout_binding[bn] = m
+                new_binder_events.append((bn, m))
+
+    print(f"Total truly new binders in holdout: {len(new_binder_events)}")
+
+    # For each lead time, check tier assignment
+    for lead in [1, 2, 3, 6]:
+        v62b_t0, v70b_t0, v62b_t01, v70b_t01, n_obs = 0, 0, 0, 0, 0
+        for bn, first_month in new_binder_events:
+            # Find the month that is `lead` months before first_month
+            from dateutil.relativedelta import relativedelta
+            import datetime
+            dt = datetime.datetime.strptime(first_month, "%Y-%m")
+            check_dt = dt - relativedelta(months=lead)
+            check_month = check_dt.strftime("%Y-%m")
+            if check_month not in months and check_month < months[0]:
+                continue  # before holdout, skip (or check in pre-holdout data)
+
+            try:
+                v62b = load_v62b_raw(check_month, period_type, class_type)
+                v70b = load_v70b_results(check_month, period_type, class_type)
+            except FileNotFoundError:
+                continue
+
+            # Find this branch_name's constraints
+            v62b_rows = v62b.filter(pl.col("branch_name") == bn)
+            if v62b_rows.height == 0:
+                continue
+
+            cids = v62b_rows["constraint_id"].to_list()
+            v70b_rows = v70b.filter(pl.col("constraint_id").is_in(cids))
+            if v70b_rows.height == 0:
+                continue
+
+            # Use best (lowest) rank across all constraint_ids for this branch
+            best_v62b = v62b_rows["rank_ori"].min()
+            best_v70b = v70b_rows["rank"].min()
+
+            n_obs += 1
+            if rank_to_tier(best_v62b) == 0: v62b_t0 += 1
+            if rank_to_tier(best_v70b) == 0: v70b_t0 += 1
+            if rank_to_tier(best_v62b) <= 1: v62b_t01 += 1
+            if rank_to_tier(best_v70b) <= 1: v70b_t01 += 1
+
+        if n_obs > 0:
+            winner = "V6.2B" if v62b_t0 > v70b_t0 else ("V7.0b" if v70b_t0 > v62b_t0 else "TIE")
+            print(f"  Lead={lead}mo: n={n_obs}, V6.2B T0={v62b_t0/n_obs:.1%}, "
+                  f"V7.0b T0={v70b_t0/n_obs:.1%}, "
+                  f"V6.2B T0+T1={v62b_t01/n_obs:.1%}, "
+                  f"V7.0b T0+T1={v70b_t01/n_obs:.1%} [{winner}]")
+
+    # ── Study 4: Recurring binder early alarm ──
+    print("\n## Study 4: Recurring Binder Early Alarm")
+    print("Constraints that bound, stopped 3+ months, then re-bound during holdout.")
+
+    # Build full binding timeline
+    full_binding = {}  # branch_name -> sorted list of binding months
+    for bn, ms in pre_holdout_binding.items():
+        full_binding.setdefault(bn, set()).update(ms)
+    for m in months:
+        gt = dm(m, period_type)
+        for bn in load_realized_binding(gt, class_type):
+            full_binding.setdefault(bn, set()).add(m)
+
+    # Find gap-resume events: bound, then 3+ months gap, then re-bound in holdout
+    gap_events = []
+    for bn, bound_months in full_binding.items():
+        sorted_months = sorted(bound_months)
+        for i in range(1, len(sorted_months)):
+            prev = datetime.datetime.strptime(sorted_months[i-1], "%Y-%m")
+            curr = datetime.datetime.strptime(sorted_months[i], "%Y-%m")
+            gap = (curr.year - prev.year) * 12 + curr.month - prev.month
+            if gap >= 4 and sorted_months[i] in months:  # 3+ month gap, re-bind in holdout
+                gap_events.append((bn, sorted_months[i]))
+
+    print(f"Total gap-resume events: {len(gap_events)}")
+
+    v62b_t0, v70b_t0, v62b_t01, v70b_t01, n_obs = 0, 0, 0, 0, 0
+    for bn, resume_month in gap_events:
+        # Check tier 1 month before re-binding
+        dt = datetime.datetime.strptime(resume_month, "%Y-%m")
+        check_dt = dt - relativedelta(months=1)
+        check_month = check_dt.strftime("%Y-%m")
+
+        try:
+            v62b = load_v62b_raw(check_month, period_type, class_type)
+            v70b = load_v70b_results(check_month, period_type, class_type)
+        except FileNotFoundError:
+            continue
+
+        v62b_rows = v62b.filter(pl.col("branch_name") == bn)
+        if v62b_rows.height == 0:
+            continue
+        cids = v62b_rows["constraint_id"].to_list()
+        v70b_rows = v70b.filter(pl.col("constraint_id").is_in(cids))
+        if v70b_rows.height == 0:
+            continue
+
+        best_v62b = v62b_rows["rank_ori"].min()
+        best_v70b = v70b_rows["rank"].min()
+
+        n_obs += 1
+        if rank_to_tier(best_v62b) == 0: v62b_t0 += 1
+        if rank_to_tier(best_v70b) == 0: v70b_t0 += 1
+        if rank_to_tier(best_v62b) <= 1: v62b_t01 += 1
+        if rank_to_tier(best_v70b) <= 1: v70b_t01 += 1
+
+    if n_obs > 0:
+        print(f"  1mo before re-bind: n={n_obs}, V6.2B T0={v62b_t0/n_obs:.1%}, "
+              f"V7.0b T0={v70b_t0/n_obs:.1%}, "
+              f"V6.2B T0+T1={v62b_t01/n_obs:.1%}, "
+              f"V7.0b T0+T1={v70b_t01/n_obs:.1%}")
+
+    # ── Write report ──
+    print("\n## Summary written to docs/new-binding-analysis.md")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+- [ ] **Step 2: Run analysis and write report**
+
+```bash
+python scripts/new_binding_analysis.py | tee docs/new-binding-analysis-raw.txt
+```
+
+Write `docs/new-binding-analysis.md` with the same structure as the MISO reference (`research-miso-signal7/docs/new-binding-analysis.md`):
+- Executive summary
+- Study 1: Overall discrimination table
+- Study 2: AUC comparison
+- Study 3: New binder early alarm (expected: V6.2B wins)
+- Study 4: Recurring binder early alarm (expected: V7.0b wins)
+- Synthesis table
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add scripts/new_binding_analysis.py docs/new-binding-analysis.md
+git commit -m "feat: V7.0b vs V6.2B signal distinctiveness analysis for PJM"
+```
+
+**NOTE**: This task requires V7.0b holdout predictions to be saved per-month during Task 13. Update `run_holdout.py` (Task 13) to save per-month predictions to `holdout/{ptype}/{ctype}/v2/predictions/{month}.parquet` with columns `[constraint_id, rank]`. This is needed for the new-binding analysis to compare V7.0b ranks against V6.2B ranks.
+
+#### Review: Task 14
+
+**Verify commands:**
+```bash
+# 1. Script runs without error
+python scripts/new_binding_analysis.py 2>&1 | tail -20
+
+# 2. Report exists
+test -f docs/new-binding-analysis.md && echo "Report exists" || echo "MISSING"
+
+# 3. Expected outcomes match MISO pattern
+python -c "
+# Quick sanity: V7.0b should have higher AUC and more top-20 captures
+# V6.2B should have non-zero T0 for new binders where V7.0b has ~0%
+print('Check docs/new-binding-analysis.md for:')
+print('  1. V7.0b AUC > V6.2B AUC (overall)')
+print('  2. V7.0b top-20 captures > V6.2B (overall)')
+print('  3. V6.2B T0 > V7.0b T0 for new binders (Study 3)')
+print('  4. V7.0b T0 > V6.2B T0 for recurring binders (Study 4)')
+print('If all 4 hold, the PJM model matches the MISO pattern.')
+"
+```
+
+**Acceptance criteria:**
+- [ ] Script runs end-to-end on holdout data
+- [ ] Report follows same structure as MISO reference
+- [ ] V7.0b dominates overall discrimination (AUC, top-20 captures)
+- [ ] V6.2B has non-trivial advantage for truly new binders (Study 3)
+- [ ] Results documented in `docs/new-binding-analysis.md`
+
+---
+
 ## Chunk 3: Deployment Signal Writer
 
-### Task 14: Create `v70/` deployment modules
+### Task 15: Create `v70/` deployment modules
 
 Adapt from `research-miso-signal7/v70/` for PJM.
 
@@ -3172,7 +3545,7 @@ git add v70/ scripts/generate_v70_signal.py
 git commit -m "feat: PJM V7.0 signal deployment pipeline"
 ```
 
-#### Review: Task 14
+#### Review: Task 15
 
 **Verify commands:**
 ```bash
@@ -3324,10 +3697,11 @@ The tasks must be executed in this order:
 10. **Task 10**: Create `scripts/run_v0_formula_baseline.py` + **run it**
 11. **Task 11**: Create `scripts/run_v2_ml.py` + **run it**
 12. **Task 12**: Create `scripts/run_blend_search.py` + **run it**
-13. **Task 13**: Create `scripts/run_holdout.py` + **run it**
-14. **Task 14**: Create `v70/` deployment modules
+13. **Task 13**: Create `scripts/run_holdout.py` + **run it** (save per-month predictions for Task 14)
+14. **Task 14**: Create `scripts/new_binding_analysis.py` — V7.0b vs V6.2B distinctiveness
+15. **Task 15**: Create `v70/` deployment modules
 
-Tasks 1-8 can be done without Ray. Task 9 requires Ray and must complete before Tasks 10-13. Task 14 can be done after all research is validated.
+Tasks 1-8 can be done without Ray. Task 9 requires Ray and must complete before Tasks 10-14. Task 14 depends on Task 13 holdout predictions. Task 15 can be done after all research is validated.
 
 ---
 
@@ -3343,6 +3717,10 @@ Facts confirmed by probing actual data on disk:
 6. **V6.2B spans 105 months**: 2017-06 to 2026-03.
 7. **Spice6 ml_pred starts 2018-06** (92 auction months). Pre-2018-06 features fill with 0.
 8. **MISO modules to copy**: `train.py` imports `ml.config`, `compare.py` imports `ml.registry_paths`. Others (`evaluate`, `v62b_formula`, `registry_paths`) have no ml-internal imports.
+9. **PjmApTools accepts all 5 peak_types**: `onpeak`, `offpeak`, `dailyoffpeak`, `wkndonpeak`, `24h`. The V6.2B class_type strings are directly usable as `peak_type` arguments — no mapping needed.
+10. **V6.2B path structure**: `{base}/{auction_month}/{period_type}/{class_type}/` (non-hive, not `period_type=f0`). SF uses same structure.
+11. **6 compound V6.2B branch_names not in constraint_info**: These are multi-branch names (comma-separated). They affect ~2.4% of rows (13/535 for 2025-01). These constraints have mid-range da_rank_value (0.29-0.95) — not heavily binding. Impact: they will get `realized_sp=0` in the branch-level join. Acceptable loss.
+12. **f1 eval coverage**: 33 of 36 months usable (May excluded per auction schedule). All 33 months have sufficient training history (8 months each).
 
 ## Critical Invariants to Verify
 

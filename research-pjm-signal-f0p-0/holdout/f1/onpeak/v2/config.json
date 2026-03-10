@@ -15,8 +15,8 @@
   "period_type": "f1",
   "class_type": "onpeak",
   "blend_weights": {
-    "da": 0.7,
-    "dmix": 0.0,
-    "dori": 0.3
+    "da": 0.0,
+    "dmix": 0.9,
+    "dori": 0.1
   }
 }

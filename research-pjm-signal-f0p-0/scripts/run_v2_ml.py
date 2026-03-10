@@ -41,14 +41,14 @@ REGISTRY = ROOT / "registry"
 HOLDOUT_DIR = ROOT / "holdout"
 
 # Per-(period_type, class_type) blend weights for v7_formula_score.
-# Start with MISO defaults. Will be tuned by blend search script.
+# Smoothed per-ptype blends (robust across ctypes, from blend search step=0.10).
 BLEND_WEIGHTS: dict[tuple[str, str], tuple[float, float, float]] = {
-    ("f0", "onpeak"): (0.85, 0.00, 0.15),
-    ("f0", "dailyoffpeak"): (0.85, 0.00, 0.15),
-    ("f0", "wkndonpeak"): (0.85, 0.00, 0.15),
-    ("f1", "onpeak"): (0.70, 0.00, 0.30),
-    ("f1", "dailyoffpeak"): (0.80, 0.00, 0.20),
-    ("f1", "wkndonpeak"): (0.80, 0.00, 0.20),
+    ("f0", "onpeak"): (0.00, 0.20, 0.80),
+    ("f0", "dailyoffpeak"): (0.00, 0.20, 0.80),
+    ("f0", "wkndonpeak"): (0.00, 0.20, 0.80),
+    ("f1", "onpeak"): (0.00, 0.90, 0.10),
+    ("f1", "dailyoffpeak"): (0.00, 0.90, 0.10),
+    ("f1", "wkndonpeak"): (0.00, 0.90, 0.10),
 }
 _DEFAULT_BLEND = (0.85, 0.00, 0.15)
 

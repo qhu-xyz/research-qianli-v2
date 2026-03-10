@@ -15,8 +15,8 @@
   "period_type": "f0",
   "class_type": "dailyoffpeak",
   "blend_weights": {
-    "da": 0.85,
-    "dmix": 0.0,
-    "dori": 0.15
+    "da": 0.0,
+    "dmix": 0.2,
+    "dori": 0.8
   }
 }

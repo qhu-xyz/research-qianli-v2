@@ -28,12 +28,12 @@ from ml.train import predict_scores, train_ltr_model
 
 # Per-slice blend weights (updated by blend search)
 BLEND_WEIGHTS: dict[tuple[str, str], tuple[float, float, float]] = {
-    ("f0", "onpeak"): (0.85, 0.00, 0.15),
-    ("f0", "dailyoffpeak"): (0.85, 0.00, 0.15),
-    ("f0", "wkndonpeak"): (0.85, 0.00, 0.15),
-    ("f1", "onpeak"): (0.70, 0.00, 0.30),
-    ("f1", "dailyoffpeak"): (0.80, 0.00, 0.20),
-    ("f1", "wkndonpeak"): (0.80, 0.00, 0.20),
+    ("f0", "onpeak"): (0.00, 0.20, 0.80),
+    ("f0", "dailyoffpeak"): (0.00, 0.20, 0.80),
+    ("f0", "wkndonpeak"): (0.00, 0.20, 0.80),
+    ("f1", "onpeak"): (0.00, 0.90, 0.10),
+    ("f1", "dailyoffpeak"): (0.00, 0.90, 0.10),
+    ("f1", "wkndonpeak"): (0.00, 0.90, 0.10),
 }
 
 _DEFAULT_BLEND = (0.85, 0.00, 0.15)

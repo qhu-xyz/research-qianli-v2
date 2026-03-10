@@ -15,8 +15,8 @@
   "period_type": "f1",
   "class_type": "wkndonpeak",
   "blend_weights": {
-    "da": 0.8,
-    "dmix": 0.0,
-    "dori": 0.2
+    "da": 0.0,
+    "dmix": 0.9,
+    "dori": 0.1
   }
 }

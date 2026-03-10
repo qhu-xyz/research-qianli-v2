@@ -75,6 +75,20 @@ SET_B_MONOTONE = _V61_MONOTONE + _SPICE6_MONOTONE
 SET_C_FEATURES = _V61_FEATURES + _SPICE6_FEATURES + _STRUCTURAL_FEATURES
 SET_C_MONOTONE = _V61_MONOTONE + _SPICE6_MONOTONE + _STRUCTURAL_MONOTONE
 
+# -- Binding frequency features (from realized DA monthly data) --
+_BF_FEATURES: list[str] = ["bf_1", "bf_3", "bf_6", "bf_12", "bf_24"]
+_BF_MONOTONE: list[int] = [1, 1, 1, 1, 1]  # higher freq = more likely to bind
+
+# -- V8 feature sets: V6.1 + binding frequency --
+SET_V8_FEATURES = list(_V61_FEATURES) + ["da_rank_value"] + _BF_FEATURES  # 12f
+SET_V8_MONOTONE = list(_V61_MONOTONE) + [-1] + _BF_MONOTONE
+
+SET_V8_LEAN_FEATURES = ["shadow_price_da", "da_rank_value"] + _BF_FEATURES  # 7f
+SET_V8_LEAN_MONOTONE = [1, -1] + _BF_MONOTONE
+
+SET_V8_BF_ONLY_FEATURES = list(_BF_FEATURES)  # 5f — pure BF, no V6.1
+SET_V8_BF_ONLY_MONOTONE = list(_BF_MONOTONE)
+
 # -- Eval groups --
 # Each group = (planning_year, aq_round) as "YYYY-06/aqN"
 PLANNING_YEARS = [

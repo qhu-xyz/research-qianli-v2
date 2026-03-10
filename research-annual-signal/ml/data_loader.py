@@ -108,6 +108,7 @@ def load_spice6_density_annual(
 
 
 _CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "enriched"
+_BF_CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "enriched_bf"
 
 
 def load_v61_enriched(planning_year: str, aq_round: str) -> pl.DataFrame:
@@ -142,6 +143,33 @@ def load_v61_enriched(planning_year: str, aq_round: str) -> pl.DataFrame:
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     df.write_parquet(str(cache_path))
     print(f"[data_loader] cached to {cache_path.name}")
+    return df
+
+
+def load_v61_enriched_bf(planning_year: str, aq_round: str) -> pl.DataFrame:
+    """Load V6.1 data enriched with spice6 density AND binding frequency features.
+
+    Caches separately from non-BF enriched data.
+    """
+    cache_path = _BF_CACHE_DIR / f"{planning_year}_{aq_round}.parquet"
+    if cache_path.exists():
+        df = pl.read_parquet(str(cache_path))
+        print(f"[data_loader] loaded from BF cache: {cache_path.name}")
+        return df
+
+    # Start from existing enriched data (has spice6 features)
+    df = load_v61_enriched(planning_year, aq_round)
+
+    # Add binding frequency features
+    from ml.binding_freq import enrich_with_binding_freq
+
+    df = enrich_with_binding_freq(df, planning_year, aq_round)
+    n_bf = int((df["bf_12"] > 0).sum())
+    print(f"[data_loader] bf enrichment: {n_bf}/{len(df)} with bf_12 > 0")
+
+    _BF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(str(cache_path))
+    print(f"[data_loader] BF cached to {cache_path.name}")
     return df
 
 

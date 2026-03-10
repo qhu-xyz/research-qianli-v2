@@ -6,7 +6,13 @@
       "ori_mean",
       "mix_mean",
       "density_mix_rank_value",
-      "density_ori_rank_value"
+      "density_ori_rank_value",
+      "da_rank_value",
+      "bf_1",
+      "bf_3",
+      "bf_6",
+      "bf_12",
+      "bf_24"
     ],
     "monotone_constraints": [
       1,
@@ -14,7 +20,13 @@
       1,
       1,
       -1,
-      -1
+      -1,
+      -1,
+      1,
+      1,
+      1,
+      1,
+      1
     ],
     "backend": "lightgbm",
     "n_estimators": 100,
@@ -25,23 +37,7 @@
     "colsample_bytree": 0.8,
     "reg_alpha": 1.0,
     "reg_lambda": 1.0,
-    "label_mode": "rank"
+    "label_mode": "tiered"
   },
-  "eval_config": {
-    "eval_groups": [
-      "2022-06/aq1",
-      "2022-06/aq2",
-      "2022-06/aq3",
-      "2022-06/aq4",
-      "2023-06/aq1",
-      "2023-06/aq2",
-      "2023-06/aq3",
-      "2023-06/aq4",
-      "2024-06/aq1",
-      "2024-06/aq2",
-      "2024-06/aq3",
-      "2024-06/aq4"
-    ],
-    "mode": "eval"
-  }
+  "variant": "V6.1 + da_rank + BF (12f), tiered"
 }

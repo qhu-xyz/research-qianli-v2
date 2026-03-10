@@ -1,5 +1,0 @@
-{
-  "formula": "rank_ori = 0.60*da_rank_value + 0.30*density_mix_rank_value + 0.10*density_ori_rank_value",
-  "score": "1 - rank (inverted so higher = more binding)",
-  "note": "No training. Evaluates stored V6.1 formula rank against realized DA ground truth."
-}

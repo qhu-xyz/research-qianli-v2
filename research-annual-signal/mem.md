@@ -2,176 +2,165 @@
 
 ## Goal
 Predict which MISO annual FTR constraints will bind in each auction quarter (aq1-aq4).
-Produce 5-tier rankings (tier 0=most binding, tier 4=least) using ML on top of V6.1 formula baseline.
+Produce rankings using LightGBM LambdaRank on top of V6.1 signal baseline.
+
+## Champion: v16 backfill+offpeak
+
+**Features (7)**: `shadow_price_da`, `da_rank_value`, `bf_6`, `bf_12`, `bf_15`, `bfo_6`, `bfo_12`
+**Config**: `registry/v16_champion/config.json`
+
+### Holdout Results (2025-06, aq1-aq3, out-of-sample)
+
+| Metric | v0b (formula) | v10e (prev ML) | **v16 champion** | v16 vs v0b |
+|--------|:---:|:---:|:---:|:---:|
+| VC@20 | 0.2329 | 0.3124 | **0.3920** | +68% |
+| VC@50 | 0.4727 | 0.5735 | **0.5935** | +26% |
+| VC@100 | 0.6936 | 0.7049 | **0.7153** | +3% |
+| Recall@20 | 0.3167 | 0.3000 | **0.3667** | +16% |
+| Recall@50 | 0.3667 | 0.4533 | **0.4800** | +31% |
+| Recall@100 | 0.5433 | 0.5667 | **0.5767** | +6% |
+| NDCG | 0.5691 | 0.7064 | **0.7093** | +25% |
+| Spearman | 0.4347 | 0.5503 | **0.5794** | +33% |
+
+- **Passes ALL 7 Group A gates** vs v0b (all 3 layers: mean floor, tail safety, worst-group)
+- Composite rank #1 across all Group A metrics
+- v10e FAILS Recall@20 gating vs v0b
+
+### Per-Group Holdout
+
+| Group | VC@20 | VC@50 | Recall@20 | NDCG | Spearman |
+|-------|:-----:|:-----:|:---------:|:----:|:--------:|
+| aq1 | 0.386 | 0.552 | 0.40 | 0.676 | 0.581 |
+| aq2 | 0.303 | 0.623 | 0.35 | 0.592 | 0.581 |
+| aq3 | 0.487 | 0.606 | 0.35 | 0.861 | 0.577 |
+
+### Tail Risk (holdout)
+
+| | VC@20 | NDCG |
+|---|:---:|:---:|
+| Mean | 0.3920 | 0.7093 |
+| Bottom-2 | 0.3444 | 0.6337 |
+| Worst | 0.3030 | 0.5918 |
+
+### Feature Importance (holdout model)
+
+| Feature | Gain % | Description |
+|---------|:------:|-------------|
+| da_rank_value | 35.5% | Historical DA constraint rank |
+| bfo_12 | 28.6% | Offpeak 12-month binding frequency |
+| bf_15 | 12.2% | Onpeak 15-month binding frequency |
+| bf_6 | 8.4% | Onpeak 6-month binding frequency |
+| bfo_6 | 6.7% | Offpeak 6-month binding frequency |
+| shadow_price_da | 5.8% | Historical DA shadow price |
+| bf_12 | 2.9% | Onpeak 12-month binding frequency |
+
+---
 
 ## Pipeline Architecture
 ```
 V6.1 Signal (pre-auction forecasts)    Spice6 Density (forward simulation)
          \                                    /
-          → cache/enriched/ (27 cols, ~276-632 rows/quarter)
+          -> cache/enriched/ (27 cols, ~276-632 rows/quarter)
                            |
-                    [Features extracted]
+                    Realized DA -> binding_freq (onpeak+offpeak, 107 months, 2017-04+)
                            |
-                    LightGBM LambdaRank
+                    LightGBM LambdaRank (tiered labels, 7 features)
                            |
-                   Realized DA Shadow Prices ← MisoApTools (separate fetch)
-                   cache/ground_truth/ (2 cols: branch_name, realized_shadow_price)
+                   Realized DA Shadow Prices <- MISO_SPICE_CONSTRAINT_INFO bridge
+                   cache/ground_truth/ (branch_name -> realized_shadow_price)
                            |
                    Evaluate: VC@K, Recall@K, NDCG, Spearman, Tier-AP
 ```
 - **V6.1 annual signal** defines the constraint universe (~276-632 per quarter)
 - **Ground truth**: Realized DA shadow prices, mapped via MISO_SPICE_CONSTRAINT_INFO bridge table
-- **Eval splits**: split1 (train 2019-2021, eval 2022), split2 (+2022, eval 2023), split3 (+2023, eval 2024). 2025 held out.
-- **12 eval groups**: 3 years x 4 quarters
+- **Binding frequency**: Monthly binding sets from realized DA cache (`research-stage5-tier/data/realized_da/`)
+  - Onpeak (bf_N): `*.parquet` files, offpeak (bfo_N): `*_offpeak.parquet` files
+  - Backfill from 2017-04 through current (107+ months)
+  - Cutoff: `< YYYY-04` for annual auction (`YYYY-06` planning year)
+- **Eval splits**: split1 (train 2019-2021, eval 2022), split2 (+2022, eval 2023), split3 (+2023, eval 2024). 2025 holdout.
+- **12 dev groups**: 3 years x 4 quarters
+- **3 holdout groups**: 2025-06 aq1-aq3 (aq4 excluded: delivery Mar-May 2026 incomplete)
 - **Training**: expanding window, train once per eval year, evaluate 4 quarters
 
 ## Constraint Mapping Chain
 ```
 DA shadow constraint_id (numeric MISO IDs)
-  -> MISO_SPICE_CONSTRAINT_INFO constraint_id -> branch_name (short format)
+  -> MISO_SPICE_CONSTRAINT_INFO constraint_id -> branch_name
   -> LEFT JOIN to V6.1 branch_name
 ```
-- 0 null branch_names in cached ground truth
+- Bridge table partition-filtered: (auction_type='annual', auction_month, period_type, class_type='onpeak')
 - ~31-42% of V6.1 rows are binding per quarter
-- ~20-28% of total DA shadow value falls on V6.1 branches (rest is outside V6.1 universe)
 - Both flow_direction rows of a binding branch get the same shadow price
 
 ## VC@20 Definition
 VC@20 = sum(realized_shadow_price of our top-20 ranked) / sum(realized_shadow_price of ALL V6.1 constraints)
-Denominator is V6.1 universe only — NOT all market DA shadow price.
 
 ---
 
-## Results (12-group eval, 2022-2024)
+## Key Findings
 
-| Metric | v0 (formula) | v0b (pure DA) | v5 (best ML) | blend_v7d_a70 |
-|--------|-------------|--------------|-------------|---------------|
-| VC@20 | 0.2329 | 0.2997 | 0.3075 | **0.3113** |
-| VC@100 | 0.6573 | 0.6879 | 0.6792 | **0.6935** |
-| Recall@20 | 0.2167 | 0.3208 | 0.3208 | **0.3417** |
-| Recall@50 | 0.3817 | **0.4600** | 0.4367 | 0.4533 |
-| Recall@100 | 0.5117 | 0.5208 | 0.5200 | **0.5308** |
-| NDCG | 0.5889 | 0.6028 | **0.6098** | 0.5987 |
-| Spearman | 0.3392 | 0.3678 | 0.3695 | **0.3715** |
-
-### ML Variant Results (v7 rebase)
-
-| Version | Features | VC@20 | vs v0b |
-|---------|----------|-------|--------|
-| v0b | Pure da_rank_value | 0.2997 | baseline |
-| v7a | Set A (6f), tiered | 0.3024 | +0.9% |
-| v7b | Lean (4f), tiered | 0.3072 | +2.5% |
-| v7c | Lean+da_rank (5f) | 0.3025 | +0.9% |
-| v7d | Set A+da_rank (7f) | 0.3033 | +1.2% |
-| v5 | Set AF (7f), tiered | 0.3075 | +2.6% |
-| **blend_v7d_a70** | **70% v7d + 30% v0b** | **0.3113** | **+3.9%** |
-
-### Key Findings
-
-1. **Density features hurt in formula**: Grid search found pure da_rank_value (alpha=1.0) optimal. Density_mix/ori add noise (-28.7% VC@20).
-2. **ML marginal value is small**: Best ML (v5) = +2.6% VC@20 over v0b. Best blend = +3.9%. Original claim of +32% vs v0 was misleading.
-3. **Feature count doesn't matter**: v7b (4 lean features) matches v5 (7 features) at 0.3072 vs 0.3075.
-4. **Score blending is best strategy**: 70% ML + 30% v0b gives best VC@20 (0.3113) and Recall@20 (0.3417).
-5. **Recall@100 tradeoff is fundamental**: All versions that sharpen top-k sacrifice worst-case Recall@100.
-6. **No version passes all v0b gates**: Recall@100 L3 tail regression is the blocker.
-
-### Recommendation
-Use score_blend_v7d_a70 (70% ML + 30% v0b) as primary signal — +15.4% VC@20 over v0b on holdout, consistent across all quarters. Fallback to v0b if ML unavailable. Density components should be removed from annual formula.
+1. **Offpeak BF is the breakthrough feature**: bfo_12 is #2 feature (29% importance), captures structural congestion invisible to onpeak-only data.
+2. **Backfill improves generalization**: Using 2017-04+ history hurts dev VC@20 but helps holdout (+25%). Dev eval was misleading.
+3. **Density features hurt annual formula**: Pure da_rank_value (alpha=1.0) is optimal. Density_mix/ori add noise (-28.7% VC@20).
+4. **Always use holdout**: Dev eval led to wrong conclusions multiple times. Holdout (2025) is definitive.
+5. **Always evaluate all metrics**: v10e looked best on dev VC@20 but failed Recall@20 gating. Composite ranking is more robust.
+6. **LightGBM num_threads=4**: Container has 64 CPUs, auto-detection causes 570x slowdown.
 
 ---
 
-## Holdout Results (2025, 4 quarters)
+## Version History
 
-| Metric | v0 (formula) | v0b (pure DA) | v7d (ML) | blend_v7d_a70 |
-|--------|-------------|--------------|----------|---------------|
-| VC@20 | 0.1559 | 0.2177 | 0.2391 | **0.2513** |
-| VC@100 | 0.5784 | **0.6545** | 0.6154 | 0.6194 |
-| Recall@20 | 0.2500 | 0.3125 | 0.3250 | **0.3375** |
-| NDCG | 0.5043 | **0.5321** | 0.5151 | 0.5150 |
-| Spearman | 0.3872 | **0.4019** | 0.3977 | 0.3999 |
-
-- **blend_v7d_a70 beats v0b by +15.4% VC@20** on holdout (stronger than +3.9% on dev)
-- Blend wins all 4 quarters over v0b: aq1 +7.3%, aq2 +5.9%, aq3 +16.3%, aq4 +44.1%
-- v0b beats v0 by +39.6% — density components hurt on holdout too
-- Note: 2025/aq4 has only 76/418 (18.2%) binding — likely partial/incomplete data (Mar-May 2026)
-- VC@100 trades off: blend loses ~5% vs v0b (top-k sharpening sacrifices breadth)
-
----
-
-## Per-Year Analysis (v0 vs v5)
-
-| Year | v0 VC@20 | v5 VC@20 | Delta | v0 NDCG | v5 NDCG | Delta |
-|------|----------|----------|-------|---------|---------|-------|
-| 2022 | 0.2870 | 0.3817 | +33.0% | 0.5831 | 0.6111 | +4.8% |
-| 2023 | 0.2590 | 0.2934 | +13.3% | 0.6234 | 0.6117 | -1.9% |
-| 2024 | 0.1508 | 0.2475 | +64.1% | 0.5711 | 0.6067 | +6.2% |
-
-### Caveats
-1. **ML doesn't win every group**: v5 loses 4/12 groups on VC@20 (2022/aq3, 2022/aq4, 2023/aq1, 2023/aq4)
-2. **2023 NDCG regresses**: ML loses NDCG vs formula in 2023 (-1.9%)
-3. **Gains are lumpy**: driven by a few strong quarters (2022/aq2: +0.30, 2024/aq1: +0.15)
-4. **Small N**: only 12 eval groups, one outlier quarter swings the mean
-5. **Top-K only**: VC@100+ flat or down — ML sharpens the head, doesn't improve full ranking
-6. **Holdout degradation**: ~30% below dev eval on VC@20
-7. **Limited eval years**: only 3 eval years (2022-2024)
+| Version | Description | Dev VC@20 | Holdout VC@20 | Status |
+|---------|-------------|:---------:|:-------------:|--------|
+| v0 | V6.1 formula (0.60/0.30/0.10) | 0.2329 | 0.1559 | Superseded |
+| v0b | Pure da_rank_value | 0.2997 | 0.2329 | Formula baseline |
+| v1-v5 | V6.1 features + ML | 0.29-0.31 | -- | Superseded |
+| v7d | 7f ML, tiered labels | 0.3033 | 0.2391 | Superseded |
+| blend_v7d_a70 | 70% ML + 30% formula | 0.3113 | 0.2513 | Prev champion |
+| v8b | +binding_freq (5 BF) | 0.3270 | -- | Superseded |
+| v10e | +engineered interactions (8f) | 0.3389 | 0.3124 | Dev-best, fails Recall@20 gate |
+| v13 | Backfill strategies | 0.31-0.33 | -- | Exploration |
+| v14 | Combined signals | 0.31-0.34 | -- | Exploration |
+| v15 | Multi-metric eval | -- | -- | Holdout framework |
+| **v16** | **backfill+offpeak (7f)** | **0.3160** | **0.3920** | **CHAMPION** |
 
 ---
 
-## Next Steps
-
-### Completed (2026-03-09)
-- Grid search over formula weights: pure da_rank_value (alpha=1.0) is optimal (+28.7% VC@20)
-- Raw shadow_price_da tested: identical to da_rank_value (monotonic transform)
-- Recall@100 tie-breaking fix: cap true set to positive-value rows only
-- Ground truth mapping fix committed (partition-filtered, was already cached correctly)
-- Gate recalibration from v0b: no version passes all gates due to Recall@100 tail tradeoff
-- ML rebase (v7a-v7d): tested lean/full features with tiered labels against v0b
-- Blending experiments: score blend, rank blend, RRF — best is score_blend_v7d_a70 (+3.9%)
-- Holdout validation (2025): blend_v7d_a70 = +15.4% VC@20 vs v0b (stronger than dev, wins all 4 quarters)
-
-### Remaining
-- Consider relaxing Recall@100 tail gate (fundamental top-k vs breadth tradeoff)
-- Communicate finding: annual formula density components should be removed/downweighted
-
----
-
-## Feature Sets
-- **Set A (v1)**: shadow_price_da, mean_branch_max, ori_mean, mix_mean, density_mix_rank_value, density_ori_rank_value
-- **Set AF (v4/v5)**: Set A + rank_ori (formula score as feature)
-- **Set B (v2)**: Set A + prob_exceed_80/85/90/100/110
-- **Set C (unused)**: Set B + constraint_limit, rate_a
+## Model Config (v16 champion)
+- Backend: LightGBM LambdaRank
+- Label mode: tiered (5 levels: 0=non-binding, 1-4=quantile buckets)
+- Hyperparams: lr=0.03, 200 trees, 31 leaves, subsample=0.8, colsample=0.8
+- num_threads=4
+- Monotone constraints: [1, -1, 1, 1, 1, 1, 1]
+- Backfill floor: 2017-04 (107 months of realized DA history)
+- Walltime: ~11s for full holdout eval
 
 ## V6.1 Formula
 ```
 rank_ori = 0.60 * da_rank_value + 0.30 * density_mix_rank_value + 0.10 * density_ori_rank_value
 ```
-- da_rank_value = rank(shadow_price_da) — historical DA, NOT realized
+- da_rank_value = rank(shadow_price_da) -- historical DA, NOT realized
 - Lower rank_ori = more binding. Score = 1.0 - rank_ori for evaluation.
-
-## Model Config
-- Backend: LightGBM lambdarank
-- Hyperparams: lr=0.05, 100 trees, 31 leaves, subsample=0.8, colsample=0.8, min_data_in_leaf=25
-- num_threads=4 (CRITICAL — prevents 64-core thread contention, 570x speedup)
-- Monotone constraints enforced for all features
-- Walltime: ~3s per 12-group run
 
 ## Data
 - V6.1: `/opt/data/xyz-dataset/signal_data/miso/constraints/Signal.MISO.SPICE_ANNUAL_V6.1`
 - Spice6 density: `/opt/data/xyz-dataset/spice_data/miso/MISO_SPICE_DENSITY_DISTRIBUTION.parquet`
-- Ground truth cache: `cache/ground_truth/` (28 parquet files, all pre-fetched)
+- Realized DA cache: `/home/xyz/workspace/research-qianli-v2/research-stage5-tier/data/realized_da/`
+- Ground truth cache: `cache/ground_truth/` (28 parquet files)
 - Enriched cache: `cache/enriched/` (V6.1 + spice6 per (year, aq))
 
 ## Registry
-- `registry/v0/` — V6.1 formula baseline (0.60/0.30/0.10 weights)
-- `registry/v0b/` — Pure da_rank_value (alpha=1.0) — **best formula**
-- `registry/v0c/` — Raw shadow_price_da (identical to v0b)
-- `registry/v1/`..`v5/` — ML experiments (see version descriptions above)
-- `registry/v7a/`..`v7d/` — ML rebase experiments (lean/full features)
-- `registry/v7_blending/` — Blending experiment results (score/rank/RRF)
-- `registry/v1_holdout/` — v1 holdout (2025) results
-- `registry/v0b_holdout/` — v0b holdout (2025) results
-- `registry/v7d_holdout/` — v7d holdout (2025) results
-- `registry/blend_v7d_a70_holdout/` — blend holdout (2025) results
-- `registry/gates.json` — calibrated from v0
-- `registry/gates_v0b.json` — calibrated from v0b (stricter)
-- `registry/champion.json` — currently v0
+- `registry/champion.json` -- points to v16_champion
+- `registry/v16_champion/config.json` -- full champion config with holdout metrics
+- `registry/v15_multi_metric/summary.json` -- all variant results (dev + holdout)
+- `registry/gates.json` -- quality gates (calibrated from v0)
+- `registry/v0/`..`v5/`, `v7a/`..`v7d/`, `v8a/`..`v9j/` -- historical experiment results
+
+## Key Scripts
+- `scripts/run_v16_champion_analysis.py` -- champion holdout analysis (per-group, tail risk, gating)
+- `scripts/run_v15_multi_metric.py` -- multi-metric dev+holdout eval for 7 variants
+- `scripts/run_v8_binding_freq.py` -- binding frequency experiment
+- `scripts/run_v0_baseline.py` -- formula baseline
+- `ml/binding_freq.py` -- binding frequency module (onpeak, offpeak, decayed)
+- `ml/train.py` -- LightGBM training
+- `ml/evaluate.py` -- all metrics

@@ -1,0 +1,33 @@
+{
+  "ltr": {
+    "features": [
+      "shadow_price_da",
+      "da_rank_value",
+      "bf_1",
+      "bf_3",
+      "bf_6",
+      "bf_12",
+      "bf_24"
+    ],
+    "monotone_constraints": [
+      1,
+      -1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "backend": "lightgbm",
+    "n_estimators": 100,
+    "learning_rate": 0.05,
+    "min_child_weight": 25,
+    "num_leaves": 31,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 1.0,
+    "reg_lambda": 1.0,
+    "label_mode": "tiered"
+  },
+  "variant": "Lean: shadow_price_da + da_rank + BF (7f), tiered"
+}

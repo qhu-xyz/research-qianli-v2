@@ -26,28 +26,24 @@ PYTHONPATH=. python scripts/run_v1_experiment.py --screen
 PYTHONPATH=. python scripts/run_v1_experiment.py
 ```
 
-### Available versions
-| Script | Version | Features | Labels | Description | VC@20 | Gates |
-|--------|---------|----------|--------|-------------|-------|-------|
-| `run_v0_baseline.py` | v0 | formula (rank_ori) | — | V6.1 formula baseline | 0.2323 | PASS |
-| `run_v1_experiment.py` | v1 | Set A (6 V6.1 feat) | rank | First ML version | 0.2934 | PASS |
-| `run_v2_experiment.py` | v2 | Set B (11 = A+spice6) | rank | ML + spice6 density | 0.2904 | FAIL |
-| `run_v3_experiment.py` | v3 | Set A (6 V6.1 feat) | tiered | Tiered labels only | 0.2871 | FAIL |
-| `run_v4_experiment.py` | v4 | Set AF (7 = A+rank_ori) | rank | Formula-as-feature only | 0.3030 | FAIL |
-| `run_v5_experiment.py` | v5 | Set AF (7 = A+rank_ori) | tiered | Both improvements | 0.3075 | FAIL |
+### Key scripts
 
-**Gate failures**: v2-v5 all fail Recall@100 L2 tail gate (2 groups below floor, max=1).
+| Script | Description |
+|--------|-------------|
+| `run_v16_champion_analysis.py` | **Champion holdout analysis** (per-group, tail risk, gating) |
+| `run_v15_multi_metric.py` | Multi-metric dev+holdout eval for 7 variants + blends |
+| `run_v8_binding_freq.py` | Binding frequency experiments (v8a-v8d) |
+| `run_v9_feature_eng.py` | Feature engineering experiments (v9a-v9j) |
+| `run_v13_backfill_strategies.py` | Backfill strategy exploration |
+| `run_v14_combined_signals.py` | Combined signal exploration |
+| `run_v0_baseline.py` | Formula baseline (v0, v0b, v0c) |
+| `run_v1_experiment.py`..`run_v5_experiment.py` | Early ML experiments (superseded) |
 
-### Comparing versions
+### Running the champion analysis
 ```bash
-PYTHONPATH=. python -m ml.compare
+PYTHONPATH=. python scripts/run_v16_champion_analysis.py
 ```
-Outputs markdown comparison table to `reports/` and JSON to `registry/comparisons/`.
-
-### Holdout evaluation (2025, 4 groups)
-```bash
-PYTHONPATH=. python ml/benchmark.py --version-id v1_holdout --eval-groups 2025-06/aq1 2025-06/aq2 2025-06/aq3 2025-06/aq4
-```
+Runs 4 variants on holdout (v0b, backfill+offpeak, backfill_lean, v10e), prints per-group metrics, tail risk, gating check, feature importance, and saves champion config.
 
 ---
 
@@ -56,8 +52,7 @@ PYTHONPATH=. python ml/benchmark.py --version-id v1_holdout --eval-groups 2025-0
 ### Enriched data cache (`cache/enriched/`)
 - V6.1 signal + spice6 density per (year, aq), cached as parquet
 - Auto-created on first load, reused across versions
-- Safe to delete and regenerate (no ground truth stored)
-- Avoids re-scanning 18GB density distribution parquet on NFS
+- Safe to delete and regenerate
 
 ### Ground truth cache (`cache/ground_truth/`)
 - Realized DA shadow prices per (year, aq)
@@ -65,9 +60,10 @@ PYTHONPATH=. python ml/benchmark.py --version-id v1_holdout --eval-groups 2025-0
 - Required for all experiment runs
 - 28 parquet files (2019-2025, aq1-aq4)
 
-### Model caching
-- Benchmark trains once per eval year, evaluates 4 quarters with same model
-- No model files persisted to disk — retrained each run (~3s total)
+### Binding frequency
+- NOT cached on disk — computed on-the-fly from `research-stage5-tier/data/realized_da/`
+- In-memory caches (_BRIDGE_CACHE, _BINDING_SETS_CACHE) reuse across groups within a run
+- 107 months of data (2017-04 through 2026-02), onpeak + offpeak
 
 ---
 
@@ -75,22 +71,15 @@ PYTHONPATH=. python ml/benchmark.py --version-id v1_holdout --eval-groups 2025-0
 
 ```
 registry/
-  v0/          # formula baseline (calibrates gates)
-  v1/          # ML, 6 features (only ML version passing all gates)
-  v2/          # ML + spice6 (fails Recall@100 tail)
-  v3/          # tiered labels (fails Recall@100 tail)
-  v4/          # formula-as-feature (fails Recall@100 tail)
-  v5/          # tiered + formula (fails Recall@100 tail)
-  v1_holdout/  # v1 holdout (2025) results
-  gates.json   # quality gates (calibrated from v0)
-  champion.json
-  comparisons/ # auto-generated comparison JSONs
+  champion.json            # -> v16_champion
+  v16_champion/config.json # full champion config + holdout metrics
+  v15_multi_metric/        # multi-metric comparison (all variants)
+  gates.json               # quality gates (calibrated from v0)
+  v0/..v5/                 # early experiments
+  v7a/..v7d/               # ML rebase
+  v8a/..v9j/               # BF + feature engineering
+  v13../v14..               # exploration summaries
 ```
-
-Each version dir contains:
-- `config.json` — LTR config + eval config
-- `metrics.json` — per-group + aggregate metrics
-- `meta.json` — version metadata
 
 ---
 
@@ -98,16 +87,14 @@ Each version dir contains:
 
 | File | Purpose |
 |------|---------|
-| `experiment-setup.md` | Full problem spec, data sources, features, evaluation design |
-| `mem.md` | Working memory — results, findings, next steps |
-| `audit.md` | 20-point integrity audit (leakage, data, target, eval, design) |
+| `mem.md` | Working memory — champion results, findings, architecture |
 | `runbook.md` | This file — how to run everything |
+| `audit.md` | 20-point integrity audit |
+| `ml/binding_freq.py` | Binding frequency module (onpeak, offpeak, decayed) |
 | `ml/config.py` | Feature sets, monotone constraints, eval splits, data paths |
-| `ml/benchmark.py` | Multi-group runner (train per year, eval per quarter) |
-| `ml/evaluate.py` | All 13 metrics, aggregation logic |
-| `ml/pipeline.py` | Train/eval workflow (expanding window) |
+| `ml/evaluate.py` | All metrics (VC@K, Recall@K, NDCG, Spearman, Tier-AP) |
 | `ml/data_loader.py` | V6.1 load, Spice6 enrichment, caching |
-| `ml/ground_truth.py` | Ray-based realized DA fetch, mapping, caching |
-| `ml/train.py` | LightGBM/XGBoost training, label transforms |
+| `ml/ground_truth.py` | Realized DA fetch, MISO_SPICE_CONSTRAINT_INFO mapping |
+| `ml/train.py` | LightGBM LambdaRank training, tiered labels |
 | `ml/features.py` | Feature matrix extraction, query group computation |
 | `ml/compare.py` | Gate checking, comparison table, three-layer detail |

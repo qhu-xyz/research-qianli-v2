@@ -46,6 +46,15 @@ V3_FEATURES = [
 ]
 V3_MONOTONE = [1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1, 1, 0, 1]
 
+# ── V5P features (5, predictive-only — ZERO historical info) ──
+# Only forward-looking / physics-based features. No binding_freq, no DA history.
+# da_rank_value, shadow_price_da, hist_da are all historical → excluded.
+V5P_FEATURES = [
+    "ori_mean", "binding_probability", "predicted_shadow_price",
+    "prob_exceed_100", "constraint_limit",
+]
+V5P_MONOTONE = [1, 1, 1, 1, 0]
+
 # ── Eval months (PJM-specific, based on V6.2B availability from 2017-06) ──
 # Dev: 36 months (2020-06 to 2023-05), same range as MISO
 _FULL_EVAL_MONTHS: list[str] = [

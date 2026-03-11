@@ -1,0 +1,20 @@
+{
+  "method": "lightgbm_lambdarank_tiered",
+  "variant": "v5p",
+  "features": [
+    "ori_mean",
+    "binding_probability",
+    "predicted_shadow_price",
+    "prob_exceed_100",
+    "constraint_limit"
+  ],
+  "label_mode": "tiered",
+  "lag": 1,
+  "period_type": "f0",
+  "class_type": "wkndonpeak",
+  "blend_weights": {
+    "da": 0.8,
+    "dmix": 0.15,
+    "dori": 0.05
+  }
+}

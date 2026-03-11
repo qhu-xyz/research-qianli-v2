@@ -26,17 +26,18 @@ from ml.features import compute_query_groups, prepare_features
 from ml.spice6_loader import load_constraint_limits, load_spice6_mlpred
 from ml.train import predict_scores, train_ltr_model
 
-# Per-slice blend weights (updated by blend search)
+# Per-slice blend weights: (w_da, w_dmix, w_dori) for v7_formula_score
+# v0b optimized: 0.80/0.15/0.05 beats V6.2B default 0.60/0.30/0.10
 BLEND_WEIGHTS: dict[tuple[str, str], tuple[float, float, float]] = {
-    ("f0", "onpeak"): (0.00, 0.20, 0.80),
-    ("f0", "dailyoffpeak"): (0.00, 0.20, 0.80),
-    ("f0", "wkndonpeak"): (0.00, 0.20, 0.80),
-    ("f1", "onpeak"): (0.00, 0.90, 0.10),
-    ("f1", "dailyoffpeak"): (0.00, 0.90, 0.10),
-    ("f1", "wkndonpeak"): (0.00, 0.90, 0.10),
+    ("f0", "onpeak"): (0.80, 0.15, 0.05),
+    ("f0", "dailyoffpeak"): (0.80, 0.15, 0.05),
+    ("f0", "wkndonpeak"): (0.80, 0.15, 0.05),
+    ("f1", "onpeak"): (0.80, 0.15, 0.05),
+    ("f1", "dailyoffpeak"): (0.80, 0.15, 0.05),
+    ("f1", "wkndonpeak"): (0.80, 0.15, 0.05),
 }
 
-_DEFAULT_BLEND = (0.85, 0.00, 0.15)
+_DEFAULT_BLEND = (0.80, 0.15, 0.05)
 
 
 def _prev_month(m: str) -> str:

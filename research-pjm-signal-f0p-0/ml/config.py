@@ -26,12 +26,25 @@ _LEAKY_FEATURES: set[str] = {
 }
 
 # ── V10E features (9, same as MISO champion) ──
+# ori_mean = density score (prob of exceeding 110% line rating), already in V6.2B.
+# Replaces the old prob_exceed_110 which was redundantly loaded from spice6 density.
 V10E_FEATURES = [
     "binding_freq_1", "binding_freq_3", "binding_freq_6", "binding_freq_12",
-    "binding_freq_15", "v7_formula_score", "prob_exceed_110", "constraint_limit",
+    "binding_freq_15", "v7_formula_score", "ori_mean", "constraint_limit",
     "da_rank_value",
 ]
 V10E_MONOTONE = [1, 1, 1, 1, 1, -1, 1, 0, -1]
+
+# ── V3 features (14, enriched with value-predictive signals) ──
+# ori_mean replaces prob_exceed_110 (identical, already in V6.2B).
+# prob_exceed_100 comes from spice6 ml_pred (NOT density — density only has one score).
+V3_FEATURES = [
+    "binding_freq_1", "binding_freq_3", "binding_freq_6", "binding_freq_12",
+    "binding_freq_15", "v7_formula_score", "da_rank_value",
+    "shadow_price_da", "binding_probability", "predicted_shadow_price",
+    "ori_mean", "prob_exceed_100", "constraint_limit", "hist_da",
+]
+V3_MONOTONE = [1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1, 1, 0, 1]
 
 # ── Eval months (PJM-specific, based on V6.2B availability from 2017-06) ──
 # Dev: 36 months (2020-06 to 2023-05), same range as MISO

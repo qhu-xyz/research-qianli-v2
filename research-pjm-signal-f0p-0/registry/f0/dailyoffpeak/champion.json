@@ -1,5 +1,5 @@
 {
-  "version": "v0",
-  "promoted_at": "2026-03-10T19:19:05.370622+00:00",
-  "reason": "initial baseline (f0/dailyoffpeak)"
+  "version": "v0b",
+  "promoted_at": "2026-03-11T13:56:37.685830+00:00",
+  "reason": "formula baseline (f0/dailyoffpeak, blend=0.80/0.15/0.05)"
 }

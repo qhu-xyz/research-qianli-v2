@@ -1,0 +1,30 @@
+{
+  "method": "lightgbm_lambdarank_log_value",
+  "variant": "v3d",
+  "features": [
+    "binding_freq_1",
+    "binding_freq_3",
+    "binding_freq_6",
+    "binding_freq_12",
+    "binding_freq_15",
+    "v7_formula_score",
+    "da_rank_value",
+    "shadow_price_da",
+    "binding_probability",
+    "predicted_shadow_price",
+    "prob_exceed_110",
+    "prob_exceed_100",
+    "constraint_limit",
+    "hist_da"
+  ],
+  "label_mode": "log_value",
+  "two_stage": true,
+  "lag": 1,
+  "period_type": "f0",
+  "class_type": "onpeak",
+  "blend_weights": {
+    "da": 0.0,
+    "dmix": 0.2,
+    "dori": 0.8
+  }
+}

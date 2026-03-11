@@ -65,6 +65,36 @@ def _tiered_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
     return y_tier
 
 
+def _log_value_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    """Convert continuous shadow prices to log-scaled integer relevance labels.
+
+    Non-binding (y=0) -> 0. Binding -> log1p(y) scaled and discretized.
+    Winsorizes at p99 within each group to prevent outlier domination.
+    Produces ~10-100 distinct label levels (vs 4 in tiered mode).
+    """
+    y_label = np.zeros(len(y), dtype=np.int32)
+    offset = 0
+    for g in groups:
+        chunk = y[offset : offset + g]
+        binding_mask = chunk > 0
+        n_binding = binding_mask.sum()
+        if n_binding > 0:
+            binding_vals = chunk[binding_mask]
+            p99 = np.percentile(binding_vals, 99)
+            clipped = np.minimum(binding_vals, p99)
+            log_vals = np.log1p(clipped)
+            max_log = log_vals.max()
+            if max_log > 0:
+                scaled = (log_vals / max_log * 99).astype(np.int32) + 1
+            else:
+                scaled = np.ones(n_binding, dtype=np.int32)
+            labels = np.zeros(g, dtype=np.int32)
+            labels[binding_mask] = scaled
+            y_label[offset : offset + g] = labels
+        offset += g
+    return y_label
+
+
 def _train_lightgbm(
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -79,6 +109,8 @@ def _train_lightgbm(
 
     if cfg.label_mode == "tiered":
         y_rank = _tiered_labels(y_train, groups_train)
+    elif cfg.label_mode == "log_value":
+        y_rank = _log_value_labels(y_train, groups_train)
     else:
         y_rank = _rank_transform_labels(y_train, groups_train)
     max_label = int(y_rank.max())
@@ -118,6 +150,8 @@ def _train_lightgbm(
     if X_val is not None and y_val is not None and groups_val is not None:
         if cfg.label_mode == "tiered":
             y_val_rank = _tiered_labels(y_val, groups_val)
+        elif cfg.label_mode == "log_value":
+            y_val_rank = _log_value_labels(y_val, groups_val)
         else:
             y_val_rank = _rank_transform_labels(y_val, groups_val)
         max_val_label = int(y_val_rank.max())

@@ -1,44 +1,80 @@
 {
   "gates": {
     "VC@20": {
-      "floor": 0.2841,
-      "tail_floor": 0.0297,
+      "floor": 0.2166,
+      "tail_floor": 0.0737,
+      "direction": "higher",
+      "group": "A"
+    },
+    "VC@50": {
+      "floor": 0.4189,
+      "tail_floor": 0.2332,
       "direction": "higher",
       "group": "A"
     },
     "VC@100": {
-      "floor": 0.6225,
-      "tail_floor": 0.216,
+      "floor": 0.6016,
+      "tail_floor": 0.3835,
       "direction": "higher",
       "group": "A"
     },
     "Recall@20": {
-      "floor": 0.2332,
-      "tail_floor": 0.1,
+      "floor": 0.1882,
+      "tail_floor": 0.125,
       "direction": "higher",
       "group": "A"
     },
     "Recall@50": {
-      "floor": 0.2798,
-      "tail_floor": 0.14,
+      "floor": 0.2661,
+      "tail_floor": 0.21,
       "direction": "higher",
       "group": "A"
     },
     "Recall@100": {
-      "floor": 0.279,
-      "tail_floor": 0.17,
+      "floor": 0.3366,
+      "tail_floor": 0.29,
       "direction": "higher",
       "group": "A"
     },
     "NDCG": {
-      "floor": 0.4924,
-      "tail_floor": 0.2416,
+      "floor": 0.3463,
+      "tail_floor": 0.2276,
+      "direction": "higher",
+      "group": "A"
+    },
+    "Spearman": {
+      "floor": 0.2128,
+      "tail_floor": 0.1439,
+      "direction": "higher",
+      "group": "A"
+    },
+    "NewBind_Recall@50": {
+      "floor": 0.211,
+      "tail_floor": 0.13,
+      "direction": "higher",
+      "group": "A"
+    },
+    "NewBind_Recall@100": {
+      "floor": 0.3922,
+      "tail_floor": 0.33,
+      "direction": "higher",
+      "group": "A"
+    },
+    "NewBind_VC@50": {
+      "floor": 0.2261,
+      "tail_floor": 0.017,
+      "direction": "higher",
+      "group": "A"
+    },
+    "NewBind_VC@100": {
+      "floor": 0.4553,
+      "tail_floor": 0.1921,
       "direction": "higher",
       "group": "A"
     }
   },
   "noise_tolerance": 0.02,
   "tail_max_failures": 1,
-  "calibrated_from": "v0",
-  "calibrated_at": "2026-03-10T19:19:08.280296+00:00"
+  "calibrated_from": "v0b",
+  "calibrated_at": "2026-03-11T13:56:43.824738+00:00"
 }

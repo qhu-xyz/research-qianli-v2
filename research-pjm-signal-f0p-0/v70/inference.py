@@ -23,7 +23,7 @@ from ml.config import (
 )
 from ml.data_loader import load_v62b_month
 from ml.features import compute_query_groups, prepare_features
-from ml.spice6_loader import load_spice6_density
+from ml.spice6_loader import load_constraint_limits, load_spice6_mlpred
 from ml.train import predict_scores, train_ltr_model
 
 # Per-slice blend weights (updated by blend search)
@@ -113,7 +113,11 @@ def load_v62b_features_only(
     period_type: str,
     class_type: str,
 ) -> pl.DataFrame:
-    """Load V6.2B + spice6 WITHOUT realized DA ground truth (inference-only)."""
+    """Load V6.2B + constraint_limit + ml_pred WITHOUT realized DA (inference-only).
+
+    V6.2B already contains density scores (ori_mean, mix_mean) and DA scores.
+    We only enrich with constraint_limit and ml_pred features.
+    """
     path = Path(V62B_SIGNAL_BASE) / auction_month / period_type / class_type
     if not path.exists():
         raise FileNotFoundError(f"V6.2B data not found: {path}")
@@ -126,15 +130,24 @@ def load_v62b_features_only(
         pl.col("branch_name").cast(pl.String),
     )
 
-    spice6 = load_spice6_density(auction_month, period_type)
-    if len(spice6) > 0:
-        df = df.join(spice6, on=["constraint_id", "flow_direction"], how="left")
-        spice6_cols = [c for c in spice6.columns if c not in ("constraint_id", "flow_direction")]
-        df = df.with_columns([pl.col(c).fill_null(0.0) for c in spice6_cols])
+    # Enrich with constraint_limit (NOT in V6.2B)
+    limits = load_constraint_limits(auction_month, period_type)
+    if len(limits) > 0:
+        df = df.join(limits, on="constraint_id", how="left")
+        df = df.with_columns(pl.col("constraint_limit").fill_null(0.0))
     else:
-        for col in ["prob_exceed_110", "prob_exceed_100", "prob_exceed_90",
-                     "prob_exceed_85", "prob_exceed_80", "constraint_limit"]:
-            df = df.with_columns(pl.lit(0.0).alias(col))
+        df = df.with_columns(pl.lit(0.0).alias("constraint_limit"))
+
+    # Enrich with ml_pred features
+    mlpred = load_spice6_mlpred(auction_month, period_type, class_type)
+    if len(mlpred) > 0:
+        df = df.join(mlpred, on=["constraint_id", "flow_direction"], how="left")
+        mlpred_cols = [c for c in mlpred.columns if c not in ("constraint_id", "flow_direction")]
+        df = df.with_columns([pl.col(c).fill_null(0.0) for c in mlpred_cols])
+    else:
+        for col in ["binding_probability", "predicted_shadow_price", "hist_da", "prob_exceed_100"]:
+            if col not in df.columns:
+                df = df.with_columns(pl.lit(0.0).alias(col))
 
     return df
 

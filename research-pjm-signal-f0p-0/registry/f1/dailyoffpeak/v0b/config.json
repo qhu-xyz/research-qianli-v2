@@ -1,0 +1,11 @@
+{
+  "method": "formula",
+  "version": "v0b",
+  "formula": "-(0.80*da + 0.15*dmix + 0.05*dori)",
+  "blend_weights": {
+    "da": 0.8,
+    "dmix": 0.15,
+    "dori": 0.05
+  },
+  "ground_truth": "realized_da (branch-level sum, dailyoffpeak)"
+}

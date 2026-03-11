@@ -1,8 +1,15 @@
 """Evaluation harness for LTR ranking pipeline.
 
-Group A (blocking): VC@20, VC@100, Recall@20, Recall@50, Recall@100, NDCG.
-Group B (monitor): VC@10, VC@25, VC@50, VC@200, Recall@10,
-                   Spearman, Tier0-AP, Tier01-AP.
+Group A (blocking, 12 gates):
+  VC@20, VC@50, VC@100,
+  Recall@20, Recall@50, Recall@100,
+  NDCG, Spearman,
+  NewBind_Recall@50, NewBind_Recall@100, NewBind_VC@50, NewBind_VC@100.
+
+Group B (monitor): VC@10, VC@25, VC@200, Recall@10.
+
+NewBind metrics require new_mask (BF-zero: not bound in prior 6 months).
+Context metrics (n_new, new_value_share, new_row_share) reported but not gated.
 
 All metrics are higher-is-better.
 """
@@ -75,29 +82,66 @@ def tier_ap(
 def evaluate_ltr(
     actual_shadow_price: np.ndarray,
     scores: np.ndarray,
+    new_mask: np.ndarray | None = None,
 ) -> dict:
-    """Compute all LTR metrics."""
+    """Compute all LTR metrics.
+
+    Parameters
+    ----------
+    actual_shadow_price : array of realized shadow prices (ground truth)
+    scores : array of model scores (higher = more likely to bind)
+    new_mask : boolean array, True for BF-zero constraints (not bound in
+        prior 6 months). When provided, NewBind metrics are computed.
+    """
     n = len(actual_shadow_price)
 
-    return {
+    result = {
         # Group A (blocking)
         "VC@20": value_capture_at_k(actual_shadow_price, scores, 20),
+        "VC@50": value_capture_at_k(actual_shadow_price, scores, 50),
         "VC@100": value_capture_at_k(actual_shadow_price, scores, 100),
         "Recall@20": recall_at_k(actual_shadow_price, scores, 20),
+        "Recall@50": recall_at_k(actual_shadow_price, scores, 50),
         "Recall@100": recall_at_k(actual_shadow_price, scores, 100),
         "NDCG": ndcg(actual_shadow_price, scores),
+        "Spearman": spearman_corr(actual_shadow_price, scores),
         # Group B (monitor)
         "VC@10": value_capture_at_k(actual_shadow_price, scores, 10),
         "VC@25": value_capture_at_k(actual_shadow_price, scores, 25),
-        "VC@50": value_capture_at_k(actual_shadow_price, scores, 50),
         "VC@200": value_capture_at_k(actual_shadow_price, scores, 200),
         "Recall@10": recall_at_k(actual_shadow_price, scores, 10),
-        "Recall@50": recall_at_k(actual_shadow_price, scores, 50),
-        "Spearman": spearman_corr(actual_shadow_price, scores),
-        # Tier0-AP and Tier01-AP removed: degenerate (always 1.0) when binding rate < 20%
         # Monitoring
         "n_samples": n,
     }
+
+    # NewBind metrics for BF-zero cohort
+    if new_mask is not None:
+        new_actual = actual_shadow_price[new_mask]
+        new_scores = scores[new_mask]
+        new_binding = new_actual > 0
+
+        # Context metrics (reported, not gated)
+        n_new_binders = int(new_binding.sum())
+        result["n_new"] = n_new_binders
+        result["new_value_share"] = (
+            float(new_actual.sum() / actual_shadow_price.sum())
+            if actual_shadow_price.sum() > 0 else 0.0
+        )
+        result["new_row_share"] = float(new_mask.sum() / n) if n > 0 else 0.0
+
+        # Performance metrics (gated) — only if there are new binders
+        if n_new_binders > 0 and len(new_actual) >= 2:
+            result["NewBind_Recall@50"] = recall_at_k(new_actual, new_scores, 50)
+            result["NewBind_Recall@100"] = recall_at_k(new_actual, new_scores, 100)
+            result["NewBind_VC@50"] = value_capture_at_k(new_actual, new_scores, 50)
+            result["NewBind_VC@100"] = value_capture_at_k(new_actual, new_scores, 100)
+        else:
+            result["NewBind_Recall@50"] = 0.0
+            result["NewBind_Recall@100"] = 0.0
+            result["NewBind_VC@50"] = 0.0
+            result["NewBind_VC@100"] = 0.0
+
+    return result
 
 
 def aggregate_months(per_month: dict[str, dict]) -> dict:

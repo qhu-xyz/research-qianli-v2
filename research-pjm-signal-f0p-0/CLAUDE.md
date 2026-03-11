@@ -70,6 +70,38 @@ NOT `from pbase.data.pjm.ap_tools` (does not exist).
 | Passthrough | f2-f3 | f2-f11 (up to 10) |
 | Period schedule | f0-f3 | f0-f11, varies by month (May: f0 only, June: all 12) |
 
+## PJM Data Pipeline (CRITICAL — Audited 2026-03-11)
+
+Three data sources exist for PJM:
+
+| # | Source | Path | Content | Coverage |
+|---|--------|------|---------|----------|
+| 1 | **V6.2B Signal** | `signal_data/pjm/constraints/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1/` | 21 cols: pre-computed rankings + raw scores | 106 months |
+| 2 | **Spice6 prod** | `/opt/temp/tmp/pw_data/spice6/prod_f0p_model_pjm/` | density, ml_pred, constraint_info | 106 months density, 92 months ml_pred |
+| 3 | **spice_data** (new canonical) | `/opt/data/xyz-dataset/spice_data/pjm/PJM_SPICE_DENSITY_SIGNAL_SCORE.parquet` | Same `(constraint_id, flow_direction, score)` | **Only 2026-01** (1 month!) |
+
+### What V6.2B already contains (DO NOT re-load):
+- `ori_mean` = density score (prob of exceeding 110% line rating). **Identical to spice6 density `score` (Spearman = 1.0).**
+- `mix_mean` = mixed density score
+- `shadow_price_da`, `da_rank_value` = historical DA (NOT realized)
+- `density_ori_rank_value` = `-rank(ori_mean)`, `density_mix_rank_value` = `-rank(mix_mean)`
+- `rank_ori` = `0.60*da_rank_value + 0.30*density_mix_rank_value + 0.10*density_ori_rank_value`
+- `branch_name`, `constraint_id`, `flow_direction`, `equipment`, `tier`, etc.
+
+### What we enrich from spice6 (NOT in V6.2B):
+- `constraint_limit` — from `density/{auction_month}/.../limit.parquet`
+- `binding_probability`, `predicted_shadow_price`, `hist_da`, `prob_exceed_100` — from `ml_pred/`
+
+### Key redundancy eliminated:
+The old `load_spice6_density()` re-loaded the density score as `prob_exceed_110`, which was identical
+to V6.2B's `ori_mean`. It also hardcoded `prob_exceed_80/85/90/100` to 0.0 (PJM density only has one
+`score` column), which caused a column collision with ml_pred's real `prob_exceed_100`.
+Now we use `ori_mean` directly from V6.2B and only load `constraint_limit` from density.
+
+### spice_data vs spice6:
+`spice_data` is the new canonical dataset that will eventually replace spice6 on NFS.
+MISO has 95 auction months; PJM has only 1 (2026-01). For research backtesting, use V6.2B + spice6.
+
 ## PJM-Specific: Data Paths
 
 | Data | Path |
@@ -78,8 +110,9 @@ NOT `from pbase.data.pjm.ap_tools` (does not exist).
 | SF | `/opt/data/xyz-dataset/signal_data/pjm/sf/TEST.TEST.Signal.PJM.SPICE_F0P_V6.2B.R1/` |
 | Spice6 base | `/opt/temp/tmp/pw_data/spice6/prod_f0p_model_pjm/` |
 | ml_pred | `{spice6}/ml_pred/auction_month={A}/market_month={M}/class_type={C}/final_results.parquet` |
-| Density | `{spice6}/density/auction_month={A}/...` |
+| Density limits | `{spice6}/density/auction_month={A}/.../limit.parquet` (constraint_limit only) |
 | constraint_info | `{spice6}/constraint_info/auction_month={A}/market_round=1/period_type={P}/class_type=onpeak/` |
+| spice_data | `/opt/data/xyz-dataset/spice_data/pjm/` (new canonical, PJM only has 2026-01) |
 
 constraint_info is stored only under `class_type=onpeak` — this is by design (physical topology, class-invariant).
 

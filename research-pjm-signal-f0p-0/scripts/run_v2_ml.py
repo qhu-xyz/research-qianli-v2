@@ -30,7 +30,7 @@ from ml.config import (
     _FULL_EVAL_MONTHS, HOLDOUT_MONTHS, PJM_CLASS_TYPES,
     has_period_type, collect_usable_months,
 )
-from ml.data_loader import load_v62b_month
+from ml.data_loader import load_v62b_month, compute_new_mask
 from ml.evaluate import aggregate_months, evaluate_ltr
 from ml.features import compute_query_groups, prepare_features
 from ml.registry_paths import registry_root, holdout_root
@@ -190,7 +190,11 @@ def run_variant(
         scores = predict_scores(model, X_test)
         actual = test_df["realized_sp"].to_numpy().astype(np.float64)
 
-        metrics = evaluate_ltr(actual, scores)
+        # Compute new_mask (BF-zero)
+        test_branches = test_df["branch_name"].to_list()
+        new_mask = compute_new_mask(test_branches, m, bs, lookback=6)
+
+        metrics = evaluate_ltr(actual, scores, new_mask=new_mask)
         per_month[m] = metrics
 
         if hasattr(model, "feature_importance"):
@@ -201,7 +205,7 @@ def run_variant(
         n_bind = int((actual > 0).sum())
         print(f"  {m}: VC@20={metrics['VC@20']:.4f} binding={n_bind} ({elapsed:.1f}s)")
 
-        del train_df, test_df, parts, X_train, y_train, groups, model, X_test, actual, scores
+        del train_df, test_df, parts, X_train, y_train, groups, model, X_test, actual, scores, new_mask
         gc.collect()
 
     if per_month:

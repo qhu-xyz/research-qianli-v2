@@ -30,5 +30,20 @@
     "v0b": {"formula": "0.60*da_rank_norm + 0.40*right_tail_norm", "holdout_VC@50": 0.2748, "holdout_NDCG": 0.7847},
     "v0c": {"formula": "0.40*da_rank_norm + 0.30*right_tail_norm + 0.30*bf_combined_12_norm", "holdout_VC@50": 0.3547, "holdout_NDCG": 0.8599}
   },
-  "frozen_date": "2026-03-12"
+  "frozen_date": "2026-03-12",
+  "nb_baseline": {
+    "NB12_Recall@50": 0.0,
+    "NB12_Count@50": 0,
+    "NB12_SP@50": 0.0,
+    "NB6_Recall@50": 0.0,
+    "NB24_Recall@50": 0.0,
+    "note": "All NB metrics are 0.0 for v0c — single-model global ranking never selects NB candidates into top-50."
+  },
+  "gate_changes": {
+    "phase3.0.1": {
+      "removed": "NB12_Recall@50 from TIER1_GATE_METRICS — permanently inert (0.0 vs 0.0)",
+      "added": "TWO_TRACK_GATE_METRICS = [VC@50, Recall@50, Abs_SP@50] for two-track candidates",
+      "nb_gate": "check_nb_threshold() — cross-group NB gate separate from check_gates()"
+    }
+  }
 }

@@ -278,3 +278,22 @@ def test_nb6_nb24_recall():
     m2 = evaluate_group(gdf, k=5, top_k_override=override)
     assert m2["NB6_Recall@5"] > 0.0
     assert m2["NB24_Recall@5"] > 0.0
+
+
+# ─── Task 4: check_nb_threshold tests ──────────────────────────────────
+
+
+def test_check_nb_threshold_passes():
+    from ml.evaluate import check_nb_threshold
+    per_group = {"2025-06/aq1": {"NB12_Count@50": 2}, "2025-06/aq2": {"NB12_Count@50": 0}, "2025-06/aq3": {"NB12_Count@50": 1}}
+    result = check_nb_threshold(per_group, holdout_groups=["2025-06/aq1", "2025-06/aq2", "2025-06/aq3"], min_total_count=3)
+    assert result["passed"] is True
+    assert result["total_count"] == 3
+
+
+def test_check_nb_threshold_fails():
+    from ml.evaluate import check_nb_threshold
+    per_group = {"2025-06/aq1": {"NB12_Count@50": 1}, "2025-06/aq2": {"NB12_Count@50": 0}, "2025-06/aq3": {"NB12_Count@50": 1}}
+    result = check_nb_threshold(per_group, holdout_groups=["2025-06/aq1", "2025-06/aq2", "2025-06/aq3"], min_total_count=3)
+    assert result["passed"] is False
+    assert result["total_count"] == 2

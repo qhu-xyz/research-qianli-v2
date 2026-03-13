@@ -252,6 +252,34 @@ def cohort_contribution(
     return result
 
 
+# ─── NB threshold gate ─────────────────────────────────────────────────
+
+
+def check_nb_threshold(
+    per_group: dict,
+    holdout_groups: list[str],
+    min_total_count: int = 3,
+) -> dict:
+    """Cross-group NB gate: sum NB12_Count@50 across holdout groups >= min_total_count."""
+    per_group_counts: dict[str, int] = {}
+    total = 0
+    for g in holdout_groups:
+        count = per_group.get(g, {}).get("NB12_Count@50", 0)
+        per_group_counts[g] = count
+        total += count
+    passed = total >= min_total_count
+    logger.info(
+        "NB threshold: total=%d (min=%d) -> %s | per-group: %s",
+        total, min_total_count, "PASS" if passed else "FAIL", per_group_counts,
+    )
+    return {
+        "passed": passed,
+        "total_count": total,
+        "min_total_count": min_total_count,
+        "per_group_counts": per_group_counts,
+    }
+
+
 # ─── Gate checking ──────────────────────────────────────────────────────
 
 

@@ -223,7 +223,7 @@ from band_utils import (
 
 For `run_v4_bands.py`, also replace `from run_v3_bands import (...)` with `from band_utils import (...)`.
 
-For `test_annual_replication.py`, update `from run_v9_bands import` → `from run_v8_bands import` (after rename in Task 4).
+**Note:** `test_annual_replication.py` import update is deferred to Task 5 (depends on Task 4 rename).
 
 - [ ] **Step 2: Verify all scripts parse**
 
@@ -420,6 +420,7 @@ Update version references in:
 - `runbook.md` (repo root) — §15 band calibration
 - `segment_analysis.md` (repo root) — "v3 is working well" → "v2"
 - `versions/bands/bg2_gate_revision_proposal.md` — v4/v5 → v3/v4
+- `design-planning.md` (repo root) — minimal updates if it references band version numbers
 
 - [ ] **Step 6: Commit**
 
@@ -460,7 +461,16 @@ grep -rn 'bands/r[123]/v' versions/bands/ scripts/
 
 Expected: No matches (or only in comments/docstrings that describe history).
 
-- [ ] **Step 4: Verify directory structure is uniform**
+- [ ] **Step 4: Verify imports actually resolve (not just parse)**
+
+```bash
+cd /home/xyz/workspace/research-qianli-v2/research-annual-band/scripts
+for f in run_v2_bands run_v3_bands run_v4_bands run_v5_bands run_v6_bands run_v7_bands run_v8_bands run_r2r3_bands; do
+    python -c "import importlib.util; spec = importlib.util.spec_from_file_location('m', '${f}.py'); print(f'OK: ${f}')" 2>&1 || echo "FAIL: $f"
+done
+```
+
+- [ ] **Step 5: Verify directory structure is uniform**
 
 ```bash
 for v in versions/bands/v*/; do
@@ -606,6 +616,10 @@ def calibrate_asymmetric_per_class(
                     pairs[clabel] = (lo, hi)
                 pairs["n"] = n_cls
             else:
+                print(f"  WARNING: Cell ({label}, {cls}) has {n_cls} rows < {MIN_CELL_ROWS}, "
+                      f"falling back to pooled ({n_pooled} rows)")
+                if n_pooled == 0:
+                    raise ValueError(f"Cell ({label}, {cls}): both class ({n_cls}) and pooled ({n_pooled}) have insufficient rows")
                 pairs = dict(pooled_pairs)
                 pairs["n"] = n_cls
                 pairs["_fallback"] = "pooled"
@@ -642,7 +656,12 @@ def apply_asymmetric_bands_per_class_fast(
         cell = bin_pairs.get(bin_label, {})
         for cls in CLASSES:
             entry = {"_bin": bin_label, CLASS_COL: cls}
-            data = cell.get(cls, cell.get("_pooled", {}))
+            if cls in cell:
+                data = cell[cls]
+            elif "_pooled" in cell:
+                data = cell["_pooled"]
+            else:
+                raise ValueError(f"No calibration data for bin={bin_label}, class={cls}")
             for clabel in COVERAGE_LABELS:
                 lo_hi = data.get(clabel)
                 if isinstance(lo_hi, (list, tuple)):
@@ -678,7 +697,12 @@ def apply_asymmetric_bands_per_class_fast(
 - Width summary: iterate over bins × classes only (not signs)
 - **Remove LOO secondary validation entirely** — only run temporal CV
 - **No silent fallbacks:** When a cell falls back to pooled, log: `logger.warning(f"Cell ({bin_label}, {cls}) has {n_cls} rows < {MIN_CELL_ROWS}, falling back to pooled ({n_pooled} rows)")`
-- **Validate class_type at entry:** `assert set(df[CLASS_COL].unique().to_list()) <= {"onpeak", "offpeak"}, f"Unexpected class_type values: {df[CLASS_COL].unique().to_list()}"`
+- **Validate class_type at entry (raise, not assert):**
+```python
+actual_classes = set(df[CLASS_COL].unique().to_list())
+if not actual_classes <= {"onpeak", "offpeak"}:
+    raise ValueError(f"Unexpected class_type values: {actual_classes - {'onpeak', 'offpeak'}}")
+```
 
 ```python
 # Width summary (simplified — no sign dimension)
@@ -760,10 +784,14 @@ This artifact contains everything needed to apply bands to new trades without re
 - `prior_version_part="bands/v8/r1"` etc.
 - Reference comparisons: `"v2 (promoted)"`, `"v4"`, `"v5"`, `"v6"`, `"v7"`, `"v8"`
 
-- [ ] **Step 2: Verify script parses**
+- [ ] **Step 2: Verify script parses and has no sign_seg or LOO remnants**
 
 ```bash
-python -c "import ast; ast.parse(open('scripts/run_v9_bands.py').read()); print('OK')"
+python -c "import ast; ast.parse(open('scripts/run_v9_bands.py').read()); print('Parse OK')"
+# Must return nothing:
+grep -n 'sign_seg\|SIGN_SEGS\|add_sign_seg' scripts/run_v9_bands.py
+# Must return nothing:
+grep -n 'loo\|LOO\|leave.*one.*out' scripts/run_v9_bands.py
 ```
 
 - [ ] **Step 3: Commit**
@@ -835,13 +863,39 @@ Fewer cells = more data per cell = more stable quantile estimates.
  but more stable across folds]
 ```
 
-- [ ] **Step 4: Run pipeline validate**
+- [ ] **Step 4: Validate calibration artifacts**
+
+```bash
+python3 -c "
+import json
+from pathlib import Path
+for r in ['r1', 'r2', 'r3']:
+    p = Path(f'versions/bands/v9/{r}/calibration_artifact.json')
+    if not p.exists():
+        print(f'MISSING: {p}')
+        continue
+    a = json.load(open(p))
+    for q in ['aq1', 'aq2', 'aq3', 'aq4']:
+        cal = a['calibration'].get(q)
+        if cal is None:
+            print(f'MISSING quarter: {r}/{q}')
+            continue
+        n_bins = len(cal['bin_labels'])
+        n_pairs = sum(1 for bl in cal['bin_labels'] for cls in ['onpeak','offpeak'] if cls in cal['bin_pairs'].get(bl, {}))
+        print(f'  {r}/{q}: {n_bins} bins, {n_pairs} cells, {cal[\"n_rows\"]} rows')
+print('Artifact validation complete')
+"
+```
+
+- [ ] **Step 5: Run pipeline validate**
 
 ```bash
 python /home/xyz/workspace/research-qianli-v2/research-annual-band/pipeline/pipeline.py validate bands
 ```
 
-- [ ] **Step 5: Commit**
+If validate fails, check which config.json field is missing/wrong and fix before committing.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add versions/bands/v9/

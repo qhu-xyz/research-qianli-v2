@@ -1,0 +1,367 @@
+{
+  "per_group": {
+    "2022-06/aq1": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 573807.95
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2022-06/aq2": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.004975124378109453,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 1047728.3200000002
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2022-06/aq3": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.007142857142857143,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 819766.4700000001
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2022-06/aq4": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.00625,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 840289.17
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2023-06/aq1": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 584229.0499999999
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2023-06/aq2": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 1428810.4500000002
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2023-06/aq3": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 751688.53
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2023-06/aq4": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 1045502.3500000001
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2024-06/aq1": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 368944.81000000006
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2024-06/aq2": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 730879.68
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2024-06/aq3": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 547407.4
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2024-06/aq4": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 562351.4700000001
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2025-06/aq1": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 545461.35
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2025-06/aq2": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 733471.6700000002
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2025-06/aq3": {
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NB12_Recall@20": 0.0,
+      "NB12_Recall@100": 0.0,
+      "cohort_contribution": {
+        "established": {
+          "count_in_top_k": 50,
+          "sp_captured": 878597.4
+        },
+        "history_dormant": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    }
+  },
+  "dev_mean": {
+    "NB12_Recall@20": 0.0,
+    "NB12_Count@50": 0.0,
+    "NB12_Recall@100": 0.0005208333333333333,
+    "NB12_SP@50": 0.0,
+    "NB12_Recall@50": 0.0,
+    "NB6_Recall@50": 0.001009831793413883,
+    "NB24_Recall@50": 0.0
+  },
+  "holdout_mean": {
+    "NB12_Recall@20": 0.0,
+    "NB12_Count@50": 0.0,
+    "NB12_Recall@100": 0.0,
+    "NB12_SP@50": 0.0,
+    "NB12_Recall@50": 0.0,
+    "NB6_Recall@50": 0.0,
+    "NB24_Recall@50": 0.0
+  }
+}

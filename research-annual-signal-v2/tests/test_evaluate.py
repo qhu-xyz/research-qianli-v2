@@ -141,3 +141,9 @@ def test_gates_restrict_to_tier1_metrics():
     # Only Tier 1 metrics that have data should appear
     for metric in gates:
         assert metric in TIER1_GATE_METRICS, f"Gate metric '{metric}' is not in TIER1_GATE_METRICS"
+
+
+def test_nb12_recall_not_in_tier1_gates():
+    """NB12_Recall@50 was removed from TIER1_GATE_METRICS (Phase 3.0.1)."""
+    from ml.config import TIER1_GATE_METRICS
+    assert "NB12_Recall@50" not in TIER1_GATE_METRICS

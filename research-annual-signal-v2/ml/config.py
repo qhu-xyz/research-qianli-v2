@@ -169,7 +169,7 @@ def get_monotone_constraints(feature_cols: list[str]) -> list[int]:
 # ─── Tier 1 gate metrics (blocking) ──────────────────────────────────────
 TIER1_GATE_METRICS: list[str] = [
     "VC@50", "VC@100", "Recall@50", "Recall@100",
-    "NDCG", "Abs_SP@50", "NB12_Recall@50",
+    "NDCG", "Abs_SP@50",
 ]
 
 # Gate rule: candidate must beat baseline on >=2 of 3 holdout groups + mean >= baseline

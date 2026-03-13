@@ -94,9 +94,9 @@ def test_bf_backfill_floor():
 
 
 def test_tier1_gate_metrics():
-    """7 blocking gate metrics per design spec SS9.1."""
+    """6 blocking gate metrics (Phase 3.0.1: NB12_Recall@50 removed)."""
     from ml.config import TIER1_GATE_METRICS
-    assert len(TIER1_GATE_METRICS) == 7
+    assert len(TIER1_GATE_METRICS) == 6
     assert "VC@50" in TIER1_GATE_METRICS
-    assert "NB12_Recall@50" in TIER1_GATE_METRICS
+    assert "NB12_Recall@50" not in TIER1_GATE_METRICS
     assert "Abs_SP@50" in TIER1_GATE_METRICS

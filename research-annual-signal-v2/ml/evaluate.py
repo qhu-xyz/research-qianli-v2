@@ -1,6 +1,6 @@
 """Evaluation metrics, per-group evaluation, and gate checking.
 
-Tier 1 (blocking gates): VC@K, Recall@K, NDCG, Abs_SP@K, NB12_Recall@K
+Tier 1 (blocking gates): VC@K, Recall@K, NDCG, Abs_SP@K
 Tier 2 (monitoring): Spearman, cohort contribution
 """
 from __future__ import annotations

@@ -1,0 +1,29 @@
+{
+  "version": "d4_blend_v0c",
+  "diagnostic": "d4_blend_v0c",
+  "description": "Regressor on log1p(SP) with v0c_score as extra feature",
+  "objective": "regression",
+  "target": "log1p_sp",
+  "features": [
+    "da_rank_value",
+    "bf_6",
+    "bf_12",
+    "bf_15",
+    "bfo_6",
+    "bfo_12",
+    "bf_combined_6",
+    "bf_combined_12",
+    "v0c_score"
+  ],
+  "feature_importance_dev_averaged": {
+    "da_rank_value": 0.11152822652609648,
+    "bf_6": 0.016566221053904425,
+    "bf_12": 0.032904226859058916,
+    "bf_15": 0.039325753021861545,
+    "bfo_6": 0.025026550813045754,
+    "bfo_12": 0.08181281874655108,
+    "bf_combined_6": 0.01565496806999983,
+    "bf_combined_12": 0.13472173477815655,
+    "v0c_score": 0.5424595001313254
+  }
+}

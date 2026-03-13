@@ -176,3 +176,105 @@ def test_check_gates_with_custom_gate_metrics():
     assert "VC@50" in gates
     assert "Recall@50" in gates
     assert "VC@100" not in gates, "VC@100 should be excluded by gate_metrics override"
+
+
+# ─── Task 3: top_k_override tests ──────────────────────────────────────
+
+import polars as pl
+
+
+def _make_group_df(n=10, nb_indices=None, binding_indices=None, scores=None):
+    """Helper to create a minimal group_df for evaluate_group tests."""
+    if binding_indices is None:
+        binding_indices = [0, 1, 2, 3]
+    if nb_indices is None:
+        nb_indices = []
+    if scores is None:
+        scores = list(range(n, 0, -1))
+    sp = [0.0] * n
+    for i in binding_indices:
+        sp[i] = 100.0 - i * 10
+    label_tier = [0] * n
+    for i in binding_indices:
+        label_tier[i] = 2
+    is_nb_12 = [False] * n
+    for i in nb_indices:
+        is_nb_12[i] = True
+    is_nb_6 = is_nb_12[:]
+    is_nb_24 = is_nb_12[:]
+    cohort = ["established"] * n
+    for i in nb_indices:
+        cohort[i] = "history_dormant"
+    return pl.DataFrame({
+        "score": scores,
+        "realized_shadow_price": sp,
+        "label_tier": label_tier,
+        "total_da_sp_quarter": [1000.0] * n,
+        "is_nb_12": is_nb_12,
+        "is_nb_6": is_nb_6,
+        "is_nb_24": is_nb_24,
+        "cohort": cohort,
+        "onpeak_sp": [s * 0.6 for s in sp],
+        "offpeak_sp": [s * 0.4 for s in sp],
+    })
+
+
+def test_evaluate_group_top_k_override():
+    from ml.evaluate import evaluate_group
+    gdf = _make_group_df(n=10, binding_indices=[0, 1, 2, 3, 8, 9], nb_indices=[8, 9],
+                         scores=[10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
+    m_default = evaluate_group(gdf, k=5)
+    assert m_default["NB12_Count@5"] == 0
+    override = np.array([0, 1, 2, 8, 9])
+    m_override = evaluate_group(gdf, k=5, top_k_override=override)
+    assert m_override["NB12_Count@5"] == 2
+
+
+def test_evaluate_group_backward_compat():
+    from ml.evaluate import evaluate_group
+    gdf = _make_group_df(n=100, binding_indices=list(range(20)), nb_indices=[15, 16, 17, 18, 19],
+                         scores=list(range(100, 0, -1)))
+    m = evaluate_group(gdf)
+    for key in ["VC@20", "VC@50", "VC@100", "Recall@20", "Recall@50", "Recall@100",
+                "Abs_SP@20", "Abs_SP@50", "Abs_SP@100", "NB12_Recall@20", "NB12_Recall@50", "NB12_Recall@100",
+                "NDCG", "Spearman", "n_branches", "n_binding", "cohort_contribution"]:
+        assert key in m, f"Missing metric key: {key}"
+    for key in ["NB12_Count@50", "NB12_SP@50", "NB6_Recall@50", "NB24_Recall@50"]:
+        assert key in m, f"Missing new NB metric key: {key}"
+    actual = gdf["realized_shadow_price"].to_numpy().astype(np.float64)
+    scores = gdf["score"].to_numpy().astype(np.float64)
+    top_50 = np.argsort(scores)[::-1][:50]
+    expected_vc50 = actual[top_50].sum() / actual.sum()
+    assert abs(m["VC@50"] - expected_vc50) < 1e-10
+
+
+def test_cohort_contribution_with_override():
+    from ml.evaluate import cohort_contribution
+    gdf = _make_group_df(n=10, binding_indices=[0, 1, 8, 9], nb_indices=[8, 9],
+                         scores=[10, 9, 8, 7, 6, 5, 4, 3, 2, 1])
+    override = np.array([0, 1, 8, 9, 4])
+    cc = cohort_contribution(gdf, k=5, top_k_override=override)
+    assert cc["history_dormant"]["count_in_top_k"] == 2
+    assert cc["established"]["count_in_top_k"] == 3
+
+
+def test_nb12_sp_calculation():
+    from ml.evaluate import evaluate_group
+    gdf = _make_group_df(n=8, binding_indices=[0, 1, 6, 7], nb_indices=[6, 7],
+                         scores=[8, 7, 6, 5, 4, 3, 2, 1])
+    override = np.array([0, 1, 2, 3, 6])
+    m = evaluate_group(gdf, k=5, top_k_override=override)
+    assert m["NB12_SP@5"] > 0
+
+
+def test_nb6_nb24_recall():
+    from ml.evaluate import evaluate_group
+    gdf = _make_group_df(n=8, binding_indices=[0, 1, 6, 7], nb_indices=[6, 7],
+                         scores=[8, 7, 6, 5, 4, 3, 2, 1])
+    m = evaluate_group(gdf, k=5)
+    assert m["NB6_Recall@5"] == 0.0
+    assert m["NB24_Recall@5"] == 0.0
+    override = np.array([0, 1, 2, 6, 7])
+    m2 = evaluate_group(gdf, k=5, top_k_override=override)
+    assert m2["NB6_Recall@5"] > 0.0
+    assert m2["NB24_Recall@5"] > 0.0

@@ -259,12 +259,18 @@ def test_cohort_contribution_with_override():
 
 
 def test_nb12_sp_calculation():
+    """NB12_SP@K is a ratio: captured NB12 SP / total NB12 SP."""
     from ml.evaluate import evaluate_group
+    # binding_indices=[0,1,6,7], nb_indices=[6,7]
+    # sp: idx0=100, idx1=90, idx6=40, idx7=30
+    # NB12 branches: idx6 (sp=40), idx7 (sp=30) → total_nb12_sp = 70
+    # override includes idx6 but not idx7 → captured_nb12_sp = 40
+    # expected ratio = 40/70
     gdf = _make_group_df(n=8, binding_indices=[0, 1, 6, 7], nb_indices=[6, 7],
                          scores=[8, 7, 6, 5, 4, 3, 2, 1])
     override = np.array([0, 1, 2, 3, 6])
     m = evaluate_group(gdf, k=5, top_k_override=override)
-    assert m["NB12_SP@5"] > 0
+    assert abs(m["NB12_SP@5"] - 40.0 / 70.0) < 1e-6
 
 
 def test_nb6_nb24_recall():

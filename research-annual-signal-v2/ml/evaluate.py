@@ -147,7 +147,9 @@ def evaluate_group(
         # New NB metrics at policy K
         nb12_in_top = is_nb_12[top_k_mask]
         metrics[f"NB12_Count@{k}"] = int(nb12_in_top.sum())
-        metrics[f"NB12_SP@{k}"] = float(actual[top_k_mask & is_nb_12].sum())
+        total_nb12_sp = actual[is_nb_12].sum()
+        captured_nb12_sp = actual[top_k_mask & is_nb_12].sum()
+        metrics[f"NB12_SP@{k}"] = float(captured_nb12_sp / total_nb12_sp) if total_nb12_sp > 0 else 0.0
 
         nb6_binders = (actual > 0) & is_nb_6
         n_nb6_binders = nb6_binders.sum()

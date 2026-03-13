@@ -1,0 +1,30 @@
+{
+  "high_corr_pairs": [
+    {
+      "feat_a": "bin_100_cid_max",
+      "feat_b": "bin_110_cid_max",
+      "correlation": 0.8515859906865209
+    },
+    {
+      "feat_a": "bin_100_cid_min",
+      "feat_b": "bin_110_cid_min",
+      "correlation": 0.8504216967838127
+    },
+    {
+      "feat_a": "limit_min",
+      "feat_b": "limit_mean",
+      "correlation": 0.9992612135335088
+    },
+    {
+      "feat_a": "limit_min",
+      "feat_b": "limit_max",
+      "correlation": 0.9983278783807915
+    },
+    {
+      "feat_a": "limit_mean",
+      "feat_b": "limit_max",
+      "correlation": 0.9997657309329999
+    }
+  ],
+  "n_features": 26
+}

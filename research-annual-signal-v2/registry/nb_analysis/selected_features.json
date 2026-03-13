@@ -1,0 +1,25 @@
+{
+    "track_b_features": [
+        "count_cids",
+        "bin_80_cid_max",
+        "bin_70_cid_max",
+        "bin_90_cid_max",
+        "count_active_cids",
+        "bin_60_cid_max",
+        "bin_100_cid_max",
+        "bin_110_cid_max",
+        "bin_-50_cid_max",
+        "bin_120_cid_max",
+        "bin_-100_cid_max",
+        "bin_150_cid_max"
+    ],
+    "selection_criteria": "AUC > 0.55 on Track B dev, pruned |r| > 0.85 pairs",
+    "pruned": {
+        "bin_110_cid_max": "kept despite r=0.852 with bin_100_cid_max — both above threshold",
+        "limit_min": "dropped — r=0.999 with limit_mean",
+        "limit_max": "dropped — r=1.000 with limit_mean",
+        "limit_mean": "dropped — AUC=0.4355, below 0.55 threshold",
+        "limit_std": "dropped — AUC=0.5183, below 0.55 threshold"
+    },
+    "notes": "12 density_max features + 2 metadata features. All _min features excluded (AUC < 0.55). Limit features excluded (below threshold or redundant)."
+}

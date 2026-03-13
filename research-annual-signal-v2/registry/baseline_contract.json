@@ -1,0 +1,10 @@
+{
+  "authoritative_baseline": "v0c",
+  "rationale": "v0c has strongest holdout performance: VC@50=0.3547, NDCG=0.8599. Uses all three signal families (da_rank, density, BF). v0a is stronger on dev VC@50 but weaker on NDCG; v0b is weakest on holdout.",
+  "baselines_evaluated": {
+    "v0a": {"formula": "-da_rank_value", "holdout_VC@50": 0.3453, "holdout_NDCG": 0.7899},
+    "v0b": {"formula": "0.60*da_rank_norm + 0.40*right_tail_norm", "holdout_VC@50": 0.2748, "holdout_NDCG": 0.7847},
+    "v0c": {"formula": "0.40*da_rank_norm + 0.30*right_tail_norm + 0.30*bf_combined_12_norm", "holdout_VC@50": 0.3547, "holdout_NDCG": 0.8599}
+  },
+  "frozen_date": "2026-03-12"
+}

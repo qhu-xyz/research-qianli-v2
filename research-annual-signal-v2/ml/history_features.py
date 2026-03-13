@@ -1,0 +1,262 @@
+"""History features: BF (binding frequency) + da_rank_value from monthly binding table.
+
+Builds one monthly branch-binding table per eval PY (single DA scan), then derives
+BF windows and da_rank_value from it.
+
+Bridge rule: always uses eval PY's annual bridge for ALL historical months.
+Monthly fallback for unmapped cids uses month M's f0 bridge.
+"""
+from __future__ import annotations
+
+import logging
+
+import polars as pl
+
+from ml.config import (
+    get_bf_cutoff_month,
+    BF_FLOOR_MONTH, BF_WINDOWS_ONPEAK, BF_WINDOWS_OFFPEAK, BF_WINDOWS_COMBINED,
+)
+from ml.bridge import map_cids_to_branches
+from ml.realized_da import load_month
+
+logger = logging.getLogger(__name__)
+
+
+def _generate_month_range(floor_month: str, cutoff_month: str) -> list[str]:
+    """Generate YYYY-MM strings from floor_month through cutoff_month inclusive."""
+    fy, fm = int(floor_month[:4]), int(floor_month[5:7])
+    cy, cm = int(cutoff_month[:4]), int(cutoff_month[5:7])
+    months = []
+    y, m = fy, fm
+    while (y, m) <= (cy, cm):
+        months.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return months
+
+
+def build_monthly_binding_table(
+    eval_py: str,
+    aq_quarter: str,
+    cutoff_month: str,
+    floor_month: str,
+) -> pl.DataFrame:
+    """Build monthly branch-binding table for one eval PY and quarter.
+
+    For each month in [floor_month, cutoff_month]:
+      - Load onpeak + offpeak DA
+      - Map cids -> branches via eval PY's annual bridge for the given quarter
+        + monthly fallback
+      - Per branch per month: bound flags + SP columns
+
+    Bridge is quarter-sensitive: aq1/aq2/aq3/aq4 may have different constraint universes.
+
+    Returns DataFrame with columns:
+      month, branch_name, onpeak_bound, offpeak_bound, combined_bound,
+      onpeak_sp, offpeak_sp, combined_sp
+    """
+    months = _generate_month_range(floor_month, cutoff_month)
+    assert len(months) > 0, f"No months in range [{floor_month}, {cutoff_month}]"
+
+    all_rows: list[pl.DataFrame] = []
+
+    for month in months:
+        # Load DA for this month
+        try:
+            onpeak_da = load_month(month, "onpeak")
+        except FileNotFoundError:
+            continue
+        try:
+            offpeak_da = load_month(month, "offpeak")
+        except FileNotFoundError:
+            offpeak_da = pl.DataFrame(schema={"constraint_id": pl.Utf8, "realized_sp": pl.Float64})
+
+        # Combine all cids from both ctypes for bridge mapping
+        all_cids = pl.concat([
+            onpeak_da.select("constraint_id"),
+            offpeak_da.select("constraint_id"),
+        ]).unique()
+
+        # Map via eval PY's annual bridge for this quarter
+        mapped, _ = map_cids_to_branches(
+            cid_df=all_cids,
+            auction_type="annual",
+            auction_month=eval_py,
+            period_type=aq_quarter,
+        )
+        mapped_cids_set = set(mapped["constraint_id"].to_list())
+
+        # Monthly fallback for unmapped cids
+        unmapped_cids = all_cids.filter(
+            ~pl.col("constraint_id").is_in(list(mapped_cids_set))
+        )
+        if len(unmapped_cids) > 0:
+            try:
+                monthly_mapped, _ = map_cids_to_branches(
+                    cid_df=unmapped_cids,
+                    auction_type="monthly",
+                    auction_month=month,
+                    period_type="f0",
+                )
+                if len(monthly_mapped) > 0:
+                    mapped = pl.concat([
+                        mapped.select(["constraint_id", "branch_name"]),
+                        monthly_mapped.select(["constraint_id", "branch_name"]),
+                    ])
+            except FileNotFoundError:
+                pass
+
+        cid_to_branch = mapped.select(["constraint_id", "branch_name"])
+
+        # Map DA to branches
+        on_with_branch = onpeak_da.join(cid_to_branch, on="constraint_id", how="inner")
+        off_with_branch = offpeak_da.join(cid_to_branch, on="constraint_id", how="inner")
+
+        # Aggregate to branch level
+        branch_on = on_with_branch.group_by("branch_name").agg(
+            pl.col("realized_sp").sum().alias("onpeak_sp")
+        )
+        branch_off = off_with_branch.group_by("branch_name").agg(
+            pl.col("realized_sp").sum().alias("offpeak_sp")
+        )
+
+        # All branches that appear in either ctype
+        all_branches = pl.concat([
+            branch_on.select("branch_name"),
+            branch_off.select("branch_name"),
+        ]).unique()
+
+        month_df = (
+            all_branches
+            .join(branch_on, on="branch_name", how="left")
+            .join(branch_off, on="branch_name", how="left")
+            .with_columns(
+                pl.col("onpeak_sp").fill_null(0.0),
+                pl.col("offpeak_sp").fill_null(0.0),
+            )
+            .with_columns(
+                (pl.col("onpeak_sp") + pl.col("offpeak_sp")).alias("combined_sp"),
+                (pl.col("onpeak_sp") > 0).alias("onpeak_bound"),
+                (pl.col("offpeak_sp") > 0).alias("offpeak_bound"),
+            )
+            .with_columns(
+                (pl.col("onpeak_bound") | pl.col("offpeak_bound")).alias("combined_bound"),
+            )
+            .with_columns(pl.lit(month).alias("month"))
+        )
+        all_rows.append(month_df)
+
+    assert len(all_rows) > 0, f"No DA data found in [{floor_month}, {cutoff_month}]"
+    return pl.concat(all_rows)
+
+
+def compute_history_features(
+    eval_py: str,
+    aq_quarter: str,
+    universe_branches: list[str],
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Compute BF features + da_rank_value for branches in universe.
+
+    Returns (hist_df, monthly_binding_table):
+      - hist_df: one row per universe branch with 8 features + has_hist_da
+      - monthly_binding_table: full monthly table (needed by nb_detection)
+    """
+    cutoff_month = get_bf_cutoff_month(eval_py)
+    binding_table = build_monthly_binding_table(
+        eval_py=eval_py,
+        aq_quarter=aq_quarter,
+        cutoff_month=cutoff_month,
+        floor_month=BF_FLOOR_MONTH,
+    )
+
+    # Filter binding table to universe branches only
+    binding_in_universe = binding_table.filter(
+        pl.col("branch_name").is_in(universe_branches)
+    )
+
+    # Use CALENDAR months for windows, not observed months.
+    # This ensures the window is always exactly N calendar months back from cutoff,
+    # even if some months have no binding data (they count as 0 bindings).
+    all_calendar_months = _generate_month_range(BF_FLOOR_MONTH, cutoff_month)
+    all_calendar_months_desc = list(reversed(all_calendar_months))
+
+    # Start with universe as base
+    universe_df = pl.DataFrame({"branch_name": universe_branches})
+
+    # BF features: count(bound in last N calendar months) / N
+    bf_features = universe_df.clone()
+
+    for window, col_prefix, bound_col in [
+        *[(w, "bf", "onpeak_bound") for w in BF_WINDOWS_ONPEAK],
+        *[(w, "bfo", "offpeak_bound") for w in BF_WINDOWS_OFFPEAK],
+        *[(w, "bf_combined", "combined_bound") for w in BF_WINDOWS_COMBINED],
+    ]:
+        feature_name = f"{col_prefix}_{window}"
+        window_months = all_calendar_months_desc[:window]
+
+        if len(window_months) == 0:
+            bf_features = bf_features.with_columns(pl.lit(0.0).alias(feature_name))
+            continue
+
+        window_data = binding_in_universe.filter(
+            pl.col("month").is_in(window_months)
+        )
+
+        # Count bound months per branch
+        branch_counts = window_data.group_by("branch_name").agg(
+            pl.col(bound_col).sum().alias("_bound_count")
+        )
+
+        bf_features = bf_features.join(branch_counts, on="branch_name", how="left").with_columns(
+            (pl.col("_bound_count").fill_null(0).cast(pl.Float64) / window).alias(feature_name)
+        ).drop("_bound_count")
+
+    # da_rank_value: dense rank descending of cumulative_sp
+    cumulative_sp = binding_in_universe.group_by("branch_name").agg(
+        pl.col("combined_sp").sum().alias("cumulative_sp")
+    )
+
+    bf_features = bf_features.join(cumulative_sp, on="branch_name", how="left").with_columns(
+        pl.col("cumulative_sp").fill_null(0.0)
+    )
+
+    # has_hist_da flag
+    bf_features = bf_features.with_columns(
+        (pl.col("cumulative_sp") > 0).alias("has_hist_da")
+    )
+
+    # Dense rank descending for positive-SP branches (ties get same rank)
+    positive = bf_features.filter(pl.col("cumulative_sp") > 0)
+    n_positive = len(positive)
+
+    if n_positive > 0:
+        positive = positive.with_columns(
+            pl.col("cumulative_sp").rank(method="dense", descending=True).cast(pl.Float64).alias("da_rank_value")
+        )
+        n_distinct_ranks = int(positive["da_rank_value"].max())
+        # Sentinel for zero-history branches: one past the last dense rank
+        sentinel = float(n_distinct_ranks + 1)
+        bf_features = bf_features.join(
+            positive.select(["branch_name", "da_rank_value"]),
+            on="branch_name",
+            how="left",
+        ).with_columns(
+            pl.col("da_rank_value").fill_null(sentinel)
+        )
+    else:
+        bf_features = bf_features.with_columns(
+            pl.lit(1.0).alias("da_rank_value")
+        )
+
+    # Drop intermediate column
+    hist_df = bf_features.drop("cumulative_sp")
+
+    logger.info(
+        "History features %s/%s: %d branches, %d with history, %d months scanned",
+        eval_py, aq_quarter, len(hist_df),
+        int(hist_df["has_hist_da"].sum()), len(all_calendar_months_desc),
+    )
+
+    return hist_df, binding_table

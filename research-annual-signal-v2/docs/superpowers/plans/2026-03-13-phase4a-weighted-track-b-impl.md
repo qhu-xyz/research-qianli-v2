@@ -4,7 +4,7 @@
 
 **Goal:** Replace Phase 3's unweighted binary Track B classifier with a value-weighted variant trained on history_dormant only, to improve NB12_SP capture quality.
 
-**Architecture:** Fork Phase 3's `run_two_track_experiment.py` into a new `run_phase4a_experiment.py` that adds sample weighting (tiered or continuous) to `train_track_b_model()`, restricts Track B population to history_dormant, and sweeps both schemes on dev before validating the winner on holdout. No library (`ml/`) changes needed.
+**Architecture:** Fork Phase 3's `run_two_track_experiment.py` into a new `run_phase4a_experiment.py` that adds sample weighting (tiered or continuous) to `train_track_b_model()`, restricts Track B population to history_dormant, and sweeps both schemes on dev before validating the winner on holdout. No library (`ml/`) changes needed. Note: `compute_sample_weights` lives in the script file (not `ml/`) to avoid library changes; tests import it from the script, which pulls in all script-level deps (lightgbm, polars, sklearn) — all available in the project venv.
 
 **Tech Stack:** LightGBM binary, sklearn LogisticRegression, polars, numpy
 
@@ -127,9 +127,9 @@ Usage:
     # Dev sweep (all schemes x models x R combos)
     PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py --track-a v0c
 
-    # Holdout validation with specific scheme and R values
+    # Holdout validation with specific scheme, model type, and R values
     PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py --track-a v0c \
-        --holdout --scheme tiered --r50 5 --r100 15 --version p4a_tiered_r5_r15
+        --holdout --scheme tiered --model-type logistic --r50 5 --r100 15 --version p4a_tiered_r5_r15
 """
 from __future__ import annotations
 
@@ -641,7 +641,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Run weight unit tests to verify they pass**
 
 Run: `cd /home/xyz/workspace/research-qianli-v2/research-annual-signal-v2 && PYTHONPATH=. uv run pytest tests/test_phase4a_weights.py -v`
-Expected: All 4 tests PASS.
+Expected: All 5 tests PASS.
 
 - [ ] **Step 3: Run full test suite to verify no regressions**
 

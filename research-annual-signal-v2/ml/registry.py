@@ -16,6 +16,7 @@ def save_experiment(
     metrics: dict,
     gate_results: dict | None = None,
     baseline_version: str | None = None,
+    nb_gate_results: dict | None = None,
 ) -> Path:
     """Save experiment results to registry/{version_id}/.
 
@@ -23,6 +24,7 @@ def save_experiment(
       - registry/{version_id}/config.json
       - registry/{version_id}/metrics.json
       - registry/{version_id}/gate_results.json (if gate_results provided)
+      - registry/{version_id}/nb_gate_results.json (if nb_gate_results provided)
 
     Returns path to version directory.
     """
@@ -47,6 +49,12 @@ def save_experiment(
         with open(gate_path, "w") as f:
             json.dump(gate_artifact, f, indent=2, default=str)
         logger.info("Gate results saved to %s", gate_path)
+
+    if nb_gate_results is not None:
+        nb_path = version_dir / "nb_gate_results.json"
+        with open(nb_path, "w") as f:
+            json.dump(nb_gate_results, f, indent=2, default=str)
+        logger.info("NB gate results saved to %s", nb_path)
 
     logger.info("Saved experiment %s to %s", version_id, version_dir)
     return version_dir

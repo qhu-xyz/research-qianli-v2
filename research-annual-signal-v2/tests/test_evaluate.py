@@ -147,3 +147,32 @@ def test_nb12_recall_not_in_tier1_gates():
     """NB12_Recall@50 was removed from TIER1_GATE_METRICS (Phase 3.0.1)."""
     from ml.config import TIER1_GATE_METRICS
     assert "NB12_Recall@50" not in TIER1_GATE_METRICS
+
+
+def test_two_track_gate_metrics():
+    """Phase 3.0.1: TWO_TRACK_GATE_METRICS restricts gating to top-50 only."""
+    from ml.config import TWO_TRACK_GATE_METRICS
+    assert TWO_TRACK_GATE_METRICS == ["VC@50", "Recall@50", "Abs_SP@50"]
+
+
+def test_check_gates_with_custom_gate_metrics():
+    """Phase 3.0.1: check_gates accepts gate_metrics param to override TIER1_GATE_METRICS."""
+    from ml.evaluate import check_gates
+    candidate = {
+        "2025-06/aq1": {"VC@50": 0.30, "VC@100": 0.40, "Recall@50": 0.25},
+        "2025-06/aq2": {"VC@50": 0.30, "VC@100": 0.40, "Recall@50": 0.25},
+        "2025-06/aq3": {"VC@50": 0.30, "VC@100": 0.40, "Recall@50": 0.25},
+    }
+    baseline = {
+        "2025-06/aq1": {"VC@50": 0.25, "VC@100": 0.50, "Recall@50": 0.20},
+        "2025-06/aq2": {"VC@50": 0.25, "VC@100": 0.50, "Recall@50": 0.20},
+        "2025-06/aq3": {"VC@50": 0.25, "VC@100": 0.50, "Recall@50": 0.20},
+    }
+    gates = check_gates(
+        candidate, baseline, "v0c",
+        ["2025-06/aq1", "2025-06/aq2", "2025-06/aq3"],
+        gate_metrics=["VC@50", "Recall@50"],
+    )
+    assert "VC@50" in gates
+    assert "Recall@50" in gates
+    assert "VC@100" not in gates, "VC@100 should be excluded by gate_metrics override"

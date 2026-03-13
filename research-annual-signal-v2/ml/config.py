@@ -172,6 +172,8 @@ TIER1_GATE_METRICS: list[str] = [
     "NDCG", "Abs_SP@50",
 ]
 
+TWO_TRACK_GATE_METRICS: list[str] = ["VC@50", "Recall@50", "Abs_SP@50"]
+
 # Gate rule: candidate must beat baseline on >=2 of 3 holdout groups + mean >= baseline
 GATE_MIN_WINS: int = 2
 GATE_HOLDOUT_COUNT: int = 3

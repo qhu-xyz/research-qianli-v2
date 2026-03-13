@@ -197,6 +197,7 @@ def check_gates(
     baseline: dict,
     baseline_name: str,
     holdout_groups: list[str],
+    gate_metrics: list[str] | None = None,
 ) -> dict:
     """Check Tier 1 gate metrics: candidate vs baseline.
 
@@ -210,14 +211,15 @@ def check_gates(
         baseline: {group_key: {metric: value}}
         baseline_name: name for logging
         holdout_groups: list of group keys to gate on
+        gate_metrics: override list of metrics to check (default: TIER1_GATE_METRICS)
 
     Returns:
         {metric_name: {passed, wins, candidate_mean, baseline_mean}}
     """
     gates: dict = {}
 
-    # Only check Tier 1 gate metrics — not every metric in the dict
-    for metric in TIER1_GATE_METRICS:
+    metrics_to_check = gate_metrics if gate_metrics is not None else TIER1_GATE_METRICS
+    for metric in metrics_to_check:
         cand_vals = []
         base_vals = []
         wins = 0

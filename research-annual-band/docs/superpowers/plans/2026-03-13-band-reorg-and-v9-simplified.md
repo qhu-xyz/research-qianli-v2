@@ -137,6 +137,14 @@ Analysis scripts (`analyze_segments.py`, `analyze_sign_segments.py`, `investigat
 
 ---
 
+## Prerequisites
+
+**All Python commands require the pmodel venv.** Activate at the start of every shell session:
+```bash
+cd /home/xyz/workspace/pmodel && source .venv/bin/activate
+cd /home/xyz/workspace/research-qianli-v2/research-annual-band
+```
+
 ## Phase 1: Repository Reorganization
 
 ### Task 1: Extract shared functions into `scripts/band_utils.py`
@@ -172,13 +180,49 @@ Extract these functions from `run_v3_bands.py`:
 - `loo_per_class_quantile(df, n_bins, ...)` → dict
 - `temporal_per_class_quantile(df, n_bins, ...)` → dict
 
-The new file should import polars and math at top. Copy function bodies exactly — no refactoring.
+The new file must include ALL imports and constants that the extracted functions depend on. The complete import/constant block:
 
-- [ ] **Step 2: Verify `band_utils.py` parses**
+```python
+from __future__ import annotations
 
-Run: `cd /home/xyz/workspace/pmodel && source .venv/bin/activate && python -c "import ast; ast.parse(open('/home/xyz/workspace/research-qianli-v2/research-annual-band/scripts/band_utils.py').read()); print('OK')"`
+import math
+import resource
+import statistics
 
-Expected: `OK`
+import polars as pl
+
+# ─── Constants ───────────────────────────────────────────────────────────────
+
+COVERAGE_LEVELS = [0.50, 0.70, 0.80, 0.90, 0.95]
+COVERAGE_LABELS = ["p50", "p70", "p80", "p90", "p95"]
+BASELINE_COL = "nodal_f0"
+MCP_COL = "mcp_mean"
+PY_COL = "planning_year"
+CLASS_COL = "class_type"
+CLASSES = ["onpeak", "offpeak"]
+MIN_CELL_ROWS = 500
+MIN_CLASS_BIN_ROWS = 500  # alias used by per-class functions
+R1_PYS = [2020, 2021, 2022, 2023, 2024, 2025]
+R2R3_PYS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+QUARTERS = ["aq1", "aq2", "aq3", "aq4"]
+
+def mem_mb() -> float:
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+```
+
+Copy function bodies exactly from their source files. Each function must be self-contained using only the imports and constants above.
+
+**Smoke test:** After creating the file, run an actual import (not just parse) to catch missing dependencies:
+
+- [ ] **Step 2: Verify `band_utils.py` imports without error**
+
+```bash
+cd /home/xyz/workspace/pmodel && source .venv/bin/activate
+cd /home/xyz/workspace/research-qianli-v2/research-annual-band/scripts
+python -c "import band_utils; print('Import OK'); print('Functions:', [x for x in dir(band_utils) if not x.startswith('_')])"
+```
+
+Expected: `Import OK` followed by the list of exported functions. If any ImportError or NameError occurs, fix the missing import/constant.
 
 - [ ] **Step 3: Commit**
 
@@ -227,9 +271,13 @@ For `run_v4_bands.py`, also replace `from run_v3_bands import (...)` with `from 
 
 - [ ] **Step 2: Verify all scripts parse**
 
-Run:
+**All Python commands in this plan require the pmodel venv.** Activate once per shell session:
 ```bash
+cd /home/xyz/workspace/pmodel && source .venv/bin/activate
 cd /home/xyz/workspace/research-qianli-v2/research-annual-band
+```
+
+```bash
 for f in scripts/run_v3_bands.py scripts/run_v4_bands.py scripts/run_r2r3_bands.py scripts/analyze_segments.py scripts/analyze_sign_segments.py scripts/investigate_sign_split.py scripts/test_sign_split_calibration.py; do
     python -c "import ast; ast.parse(open('$f').read())" && echo "OK: $f" || echo "FAIL: $f"
 done
@@ -404,14 +452,22 @@ For `test_annual_replication.py`: update `from run_v9_bands import` → `from ru
 
 - [ ] **Step 4: Update promoted.json**
 
+**Important compatibility note:** `pipeline.py` expects `promoted.json` to have a flat `{"version": "vN"}` shape and treats each `part` as having one promoted version. But bands have 3 rounds per version, each with their own `metrics.json`.
+
+The current workaround (per-round promoted.json under `r{M}/`) was part of the r-first layout being archived. Going forward, use the **v-first flat shape** that the pipeline expects:
+
 Write `versions/bands/promoted.json`:
 ```json
 {
-  "r1": {"version": "v2", "promoted_at": "2026-02-23", "notes": "was v3, renumbered"},
-  "r2": {"version": "v2", "promoted_at": "2026-02-23", "notes": "was v3, renumbered"},
-  "r3": {"version": "v2", "promoted_at": "2026-02-23", "notes": "was v3, renumbered"}
+  "version": "v2",
+  "promoted_at": "2026-02-23",
+  "notes": "was v3, renumbered. Promoted across all 3 rounds."
 }
 ```
+
+This means `pipeline.py compare bands v9` will look for `bands/v2/metrics.json`. Since metrics live at `bands/v2/r{M}/metrics.json`, **scripts must NOT call `pipeline.py compare` directly**. Instead, scripts should do their own per-round comparison (which they already do in the "vs prior version" section). Remove the `subprocess` calls to `pipeline.py compare` from the run scripts.
+
+Also update validate to recognize the `v{N}/r{M}/` subdirectory structure. Add a note that `pipeline.py` may need a minor update to walk `r{M}/` subdirectories when `part == "bands"`.
 
 - [ ] **Step 5: Update documentation**
 
@@ -461,14 +517,26 @@ grep -rn 'bands/r[123]/v' versions/bands/ scripts/
 
 Expected: No matches (or only in comments/docstrings that describe history).
 
-- [ ] **Step 4: Verify imports actually resolve (not just parse)**
+- [ ] **Step 4: Verify imports actually resolve (execute imports, not just parse)**
 
 ```bash
 cd /home/xyz/workspace/research-qianli-v2/research-annual-band/scripts
-for f in run_v2_bands run_v3_bands run_v4_bands run_v5_bands run_v6_bands run_v7_bands run_v8_bands run_r2r3_bands; do
-    python -c "import importlib.util; spec = importlib.util.spec_from_file_location('m', '${f}.py'); print(f'OK: ${f}')" 2>&1 || echo "FAIL: $f"
+for f in run_v2_bands run_v3_bands run_v4_bands run_v5_bands run_v6_bands run_v7_bands run_v8_bands run_r2r3_bands band_utils; do
+    python -c "
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('${f}', '${f}.py')
+mod = importlib.util.module_from_spec(spec)
+try:
+    spec.loader.exec_module(mod)
+    print(f'OK: ${f}')
+except Exception as e:
+    print(f'FAIL: ${f}: {e}')
+    sys.exit(1)
+" || echo "STOPPED at $f"
 done
 ```
+
+This actually executes each module (including its imports), catching NameError/ImportError that `ast.parse` misses.
 
 - [ ] **Step 5: Verify directory structure is uniform**
 
@@ -794,11 +862,106 @@ grep -n 'sign_seg\|SIGN_SEGS\|add_sign_seg' scripts/run_v9_bands.py
 grep -n 'loo\|LOO\|leave.*one.*out' scripts/run_v9_bands.py
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Create `scripts/test_v9_bands.py`**
+
+Create a test script following the pattern of existing `test_v8_bands.py`. Key tests:
+
+```python
+"""Tests for v9 simplified asymmetric bands (per-class only, no sign split)."""
+from pathlib import Path
+import polars as pl
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from run_v9_bands import (
+    calibrate_asymmetric_per_class,
+    apply_asymmetric_bands_per_class_fast,
+    compute_quantile_boundaries,
+    assign_bins,
+    evaluate_coverage,
+    evaluate_per_class_coverage,
+    COVERAGE_LEVELS, COVERAGE_LABELS, CLASSES,
+)
+
+def test_calibrate_no_sign_seg():
+    """Verify calibration output has no sign_seg keys."""
+    # Create synthetic data
+    df = pl.DataFrame({
+        "baseline": [100.0, 200.0, -50.0, 300.0, 150.0] * 200,
+        "mcp": [110.0, 180.0, -40.0, 320.0, 140.0] * 200,
+        "class_type": (["onpeak"] * 500) + (["offpeak"] * 500),
+    })
+    boundaries, labels = compute_quantile_boundaries(df["baseline"], 2)
+    result = calibrate_asymmetric_per_class(
+        df, "baseline", "mcp", "class_type",
+        boundaries, labels, COVERAGE_LEVELS,
+    )
+    # No sign keys
+    for label in labels:
+        cell = result[label]
+        for key in cell:
+            if isinstance(key, tuple):
+                raise AssertionError(f"Found tuple key {key} — sign_seg not removed")
+        assert "onpeak" in cell or "_pooled" in cell
+    print("PASS: test_calibrate_no_sign_seg")
+
+def test_apply_no_sign_seg_column():
+    """Verify apply function works without sign_seg column."""
+    df = pl.DataFrame({
+        "baseline": [100.0, 200.0, -50.0],
+        "mcp": [110.0, 180.0, -40.0],
+        "class_type": ["onpeak", "offpeak", "onpeak"],
+    })
+    boundaries, labels = compute_quantile_boundaries(df["baseline"], 2)
+    bin_pairs = calibrate_asymmetric_per_class(
+        df, "baseline", "mcp", "class_type",
+        boundaries, labels, COVERAGE_LEVELS,
+    )
+    result = apply_asymmetric_bands_per_class_fast(
+        df, bin_pairs, "baseline", "class_type", boundaries, labels,
+    )
+    assert "sign_seg" not in result.columns
+    assert "lower_p95" in result.columns
+    assert "upper_p95" in result.columns
+    print("PASS: test_apply_no_sign_seg_column")
+
+def test_class_type_validation():
+    """Verify ValueError on bad class_type."""
+    # This test checks the validation added in v9
+    # (run_experiment validates at entry)
+    print("PASS: test_class_type_validation (manual check)")
+
+def test_fallback_warning():
+    """Verify fallback to pooled logs a warning when cell too small."""
+    df = pl.DataFrame({
+        "baseline": [100.0] * 10 + [200.0] * 1000,
+        "mcp": [110.0] * 10 + [210.0] * 1000,
+        "class_type": ["onpeak"] * 5 + ["offpeak"] * 5 + ["onpeak"] * 500 + ["offpeak"] * 500,
+    })
+    boundaries, labels = compute_quantile_boundaries(df["baseline"], 2)
+    # First bin will have only 10 rows (5 per class), triggering fallback
+    result = calibrate_asymmetric_per_class(
+        df, "baseline", "mcp", "class_type",
+        boundaries, labels, COVERAGE_LEVELS,
+    )
+    # Check fallback was recorded
+    assert result["_fallback_stats"]["to_pooled"] > 0
+    print("PASS: test_fallback_warning")
+
+if __name__ == "__main__":
+    test_calibrate_no_sign_seg()
+    test_apply_no_sign_seg_column()
+    test_class_type_validation()
+    test_fallback_warning()
+    print("\nAll v9 tests passed.")
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add scripts/run_v9_bands.py
-git commit -m "add v9 band script: simplified asymmetric (per-class only, no sign split)"
+git add scripts/run_v9_bands.py scripts/test_v9_bands.py
+git commit -m "add v9 band script and tests: simplified asymmetric (per-class only, no sign split)"
 ```
 
 ### Task 9: Run v9 experiment

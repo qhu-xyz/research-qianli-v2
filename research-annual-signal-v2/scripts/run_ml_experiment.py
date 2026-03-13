@@ -37,10 +37,6 @@ FEATURE_GROUPS: dict[str, list[str]] = {
     "density_counter": [
         "bin_-100_cid_max", "bin_-50_cid_max", "bin_60_cid_max",
     ],
-    "density_core_std": [
-        "bin_80_cid_std", "bin_100_cid_std", "bin_110_cid_std",
-        "bin_120_cid_std", "bin_150_cid_std",
-    ],
     "limits": ["limit_min", "limit_mean", "limit_max", "limit_std"],
     "metadata": ["count_cids", "count_active_cids"],
 }

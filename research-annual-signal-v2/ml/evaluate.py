@@ -201,8 +201,9 @@ def check_gates(
     """Check Tier 1 gate metrics: candidate vs baseline.
 
     Gate rule per metric:
-      - Candidate must beat baseline on >= GATE_MIN_WINS of holdout groups
-      - AND candidate mean >= baseline mean
+      - Candidate must STRICTLY beat baseline on >= GATE_MIN_WINS of holdout groups
+      - AND candidate mean > baseline mean (strict inequality)
+      - Ties do NOT count as wins — prevents inert gates when baseline is 0.0
 
     Args:
         candidate: {group_key: {metric: value}}
@@ -226,7 +227,7 @@ def check_gates(
             if c_val is not None and b_val is not None:
                 cand_vals.append(c_val)
                 base_vals.append(b_val)
-                if c_val >= b_val:
+                if c_val > b_val:
                     wins += 1
 
         if not cand_vals:
@@ -234,7 +235,7 @@ def check_gates(
 
         cand_mean = sum(cand_vals) / len(cand_vals)
         base_mean = sum(base_vals) / len(base_vals)
-        passed = (wins >= GATE_MIN_WINS) and (cand_mean >= base_mean)
+        passed = (wins >= GATE_MIN_WINS) and (cand_mean > base_mean)
 
         gates[metric] = {
             "passed": passed,

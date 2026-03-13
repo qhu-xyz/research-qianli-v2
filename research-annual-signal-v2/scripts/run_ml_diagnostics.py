@@ -81,15 +81,15 @@ def collect_all_needed_groups() -> list[str]:
 
 
 def compute_v0c_scores(df: pl.DataFrame) -> pl.Series:
-    """Reproduce v0c formula: 0.40*da_rank_norm + 0.30*right_tail_norm + 0.30*bf_combined_12_norm.
+    """Reproduce exact v0c formula: 0.40*da_rank_norm + 0.30*right_tail_norm + 0.30*bf_combined_12_norm.
 
-    v0c scores use per-group normalization (min-max within each PY/quarter).
-    Higher score = more likely to bind.
-    da_rank_value: lower = more binding, so invert.
-    bf_combined_12: higher = more binding.
-    right_tail (density): we don't have it cleanly here, so approximate with bf_combined_6.
+    Matches scripts/run_v0c_full_blend.py exactly:
+    - da_rank_norm: inverted min-max of da_rank_value (lower da_rank = more binding = 1.0)
+    - right_tail_norm: min-max of max(bin_80_cid_max, bin_90_cid_max, bin_100_cid_max, bin_110_cid_max)
+    - bf_combined_12_norm: min-max of bf_combined_12
+    - All normalization is per-group (planning_year, aq_quarter)
+    - Edge case: if range=0, norm=0.5
     """
-    # Per-group normalization
     result_scores = np.zeros(len(df))
 
     groups = df.group_by(["planning_year", "aq_quarter"], maintain_order=True).agg(
@@ -102,21 +102,22 @@ def compute_v0c_scores(df: pl.DataFrame) -> pl.Series:
 
         # da_rank_value: lower = more binding -> invert for normalization
         da_vals = chunk["da_rank_value"].to_numpy().astype(np.float64)
-        da_inv = da_vals.max() - da_vals  # invert: high = binding
+        da_inv = da_vals.max() - da_vals
         da_range = da_inv.max() - da_inv.min()
-        da_norm = (da_inv - da_inv.min()) / da_range if da_range > 0 else np.zeros_like(da_inv)
+        da_norm = (da_inv - da_inv.min()) / da_range if da_range > 0 else np.full_like(da_inv, 0.5)
+
+        # right_tail: max(bin_80, bin_90, bin_100, bin_110) cid_max
+        rt_cols = ["bin_80_cid_max", "bin_90_cid_max", "bin_100_cid_max", "bin_110_cid_max"]
+        rt_vals = np.column_stack([chunk[c].to_numpy().astype(np.float64) for c in rt_cols]).max(axis=1)
+        rt_range = rt_vals.max() - rt_vals.min()
+        rt_norm = (rt_vals - rt_vals.min()) / rt_range if rt_range > 0 else np.full_like(rt_vals, 0.5)
 
         # bf_combined_12: higher = more binding
         bf12_vals = chunk["bf_combined_12"].to_numpy().astype(np.float64)
         bf12_range = bf12_vals.max() - bf12_vals.min()
-        bf12_norm = (bf12_vals - bf12_vals.min()) / bf12_range if bf12_range > 0 else np.zeros_like(bf12_vals)
+        bf12_norm = (bf12_vals - bf12_vals.min()) / bf12_range if bf12_range > 0 else np.full_like(bf12_vals, 0.5)
 
-        # bf_combined_6 as proxy for right_tail
-        bf6_vals = chunk["bf_combined_6"].to_numpy().astype(np.float64)
-        bf6_range = bf6_vals.max() - bf6_vals.min()
-        bf6_norm = (bf6_vals - bf6_vals.min()) / bf6_range if bf6_range > 0 else np.zeros_like(bf6_vals)
-
-        score = 0.40 * da_norm + 0.30 * bf6_norm + 0.30 * bf12_norm
+        score = 0.40 * da_norm + 0.30 * rt_norm + 0.30 * bf12_norm
         result_scores[offset:offset + n] = score
         offset += n
 

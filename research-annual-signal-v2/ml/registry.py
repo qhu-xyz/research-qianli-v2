@@ -10,12 +10,19 @@ from ml.config import REGISTRY_DIR
 logger = logging.getLogger(__name__)
 
 
-def save_experiment(version_id: str, config: dict, metrics: dict) -> Path:
+def save_experiment(
+    version_id: str,
+    config: dict,
+    metrics: dict,
+    gate_results: dict | None = None,
+    baseline_version: str | None = None,
+) -> Path:
     """Save experiment results to registry/{version_id}/.
 
     Creates:
       - registry/{version_id}/config.json
       - registry/{version_id}/metrics.json
+      - registry/{version_id}/gate_results.json (if gate_results provided)
 
     Returns path to version directory.
     """
@@ -30,6 +37,16 @@ def save_experiment(version_id: str, config: dict, metrics: dict) -> Path:
 
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2, default=str)
+
+    if gate_results is not None:
+        gate_path = version_dir / "gate_results.json"
+        gate_artifact = {
+            "baseline_version": baseline_version,
+            "gates": gate_results,
+        }
+        with open(gate_path, "w") as f:
+            json.dump(gate_artifact, f, indent=2, default=str)
+        logger.info("Gate results saved to %s", gate_path)
 
     logger.info("Saved experiment %s to %s", version_id, version_dir)
     return version_dir

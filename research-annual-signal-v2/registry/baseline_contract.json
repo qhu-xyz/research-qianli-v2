@@ -1,6 +1,30 @@
 {
   "authoritative_baseline": "v0c",
   "rationale": "v0c has strongest holdout performance: VC@50=0.3547, NDCG=0.8599. Uses all three signal families (da_rank, density, BF). v0a is stronger on dev VC@50 but weaker on NDCG; v0b is weakest on holdout.",
+  "formula": {
+    "expression": "0.40 * da_rank_norm + 0.30 * right_tail_norm + 0.30 * bf_combined_12_norm",
+    "normalization": "per-group min-max within each (planning_year, aq_quarter)",
+    "components": {
+      "da_rank_norm": {
+        "source_col": "da_rank_value",
+        "invert": true,
+        "description": "1.0 - minmax(da_rank_value). Lower da_rank_value = more binding = higher norm."
+      },
+      "right_tail_norm": {
+        "source_cols": ["bin_80_cid_max", "bin_90_cid_max", "bin_100_cid_max", "bin_110_cid_max"],
+        "pre_agg": "max_horizontal",
+        "invert": false,
+        "description": "minmax(max(bin_80..bin_110 cid_max)). Higher density = higher norm."
+      },
+      "bf_combined_12_norm": {
+        "source_col": "bf_combined_12",
+        "invert": false,
+        "description": "minmax(bf_combined_12). Higher binding frequency = higher norm."
+      }
+    },
+    "edge_case": "If all values identical in a group (range=0), norm is 0.5 for all rows."
+  },
+  "implementation": "scripts/run_v0c_full_blend.py",
   "baselines_evaluated": {
     "v0a": {"formula": "-da_rank_value", "holdout_VC@50": 0.3453, "holdout_NDCG": 0.7899},
     "v0b": {"formula": "0.60*da_rank_norm + 0.40*right_tail_norm", "holdout_VC@50": 0.2748, "holdout_NDCG": 0.7847},

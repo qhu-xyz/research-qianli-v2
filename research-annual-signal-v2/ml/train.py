@@ -3,7 +3,8 @@
 Key rules:
   - Sort by (planning_year, aq_quarter, branch_name) before building groups
   - Eval-only scoring (never predict on training rows)
-  - Tiered labels: 0=non-binding, 1/2/3=tertiles of positive SP
+  - Training uses label_tier from ground_truth (0=non-binding, 1/2/3=tertiles)
+    to ensure train and eval use identical label assignments
 """
 from __future__ import annotations
 
@@ -22,13 +23,12 @@ logger = logging.getLogger(__name__)
 def tiered_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
     """Convert continuous SP to tiered labels per query group.
 
+    NOT used by train_and_predict (which uses label_tier from ground_truth).
+    Kept as a utility for diagnostic scripts that need ad-hoc label derivation.
+
     Within each group:
       - y == 0 -> label 0
       - y > 0  -> tertile labels 1/2/3 (1=lowest third, 3=highest third)
-
-    Args:
-        y: realized_shadow_price array (aligned with groups)
-        groups: query group sizes array (sum == len(y))
     """
     labels = np.zeros(len(y), dtype=np.int32)
     offset = 0
@@ -37,12 +37,9 @@ def tiered_labels(y: np.ndarray, groups: np.ndarray) -> np.ndarray:
         pos_mask = g_y > 0
         n_pos = pos_mask.sum()
         if n_pos > 0:
-            # Rank positives within group, assign tertiles
             pos_vals = g_y[pos_mask]
-            # argsort of argsort gives rank (0-based)
             ranks = np.empty(n_pos, dtype=np.int32)
             ranks[pos_vals.argsort().argsort()] = np.arange(n_pos)
-            # Tertile boundaries
             t1 = n_pos // 3
             t2 = 2 * n_pos // 3
             tier = np.where(ranks < t1, 1, np.where(ranks < t2, 2, 3))
@@ -98,18 +95,15 @@ def train_and_predict(
     assert len(train_df) > 0, f"No training data for {train_pys}"
     assert len(eval_df) > 0, f"No eval data for {eval_pys}"
 
-    # Features and target
+    # Features and target — use label_tier from ground_truth directly
+    # This ensures train and eval use identical label assignments (Fix #6)
     X_train = train_df.select(feature_cols).to_numpy()
-    y_train = train_df["realized_shadow_price"].to_numpy().astype(np.float64)
+    train_labels = train_df["label_tier"].to_numpy().astype(np.int32)
     train_groups = build_query_groups(train_df)
 
     X_eval = eval_df.select(feature_cols).to_numpy()
-    y_eval = eval_df["realized_shadow_price"].to_numpy().astype(np.float64)
+    eval_labels = eval_df["label_tier"].to_numpy().astype(np.int32)
     eval_groups = build_query_groups(eval_df)
-
-    # Tiered labels
-    train_labels = tiered_labels(y_train, train_groups)
-    eval_labels = tiered_labels(y_eval, eval_groups)
 
     # LightGBM datasets
     train_dataset = lgb.Dataset(

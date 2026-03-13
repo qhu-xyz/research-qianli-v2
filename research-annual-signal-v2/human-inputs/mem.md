@@ -727,3 +727,23 @@ List your metrics and their definition at branch-level
 
   1. treat ptype, ctypes seriously. do not confound or just assume.
   2. ALL pieces used should be reproducible. You said you used "the DA cache is in stage5-tier" is this reproducible?
+
+  ## phase 3 possible directions
+  Issues:
+  1. currently our model performs poorly in the NB-related metrics
+  2. we have not explored all options for model selections
+  3. we have not exhausted the target definition
+
+  1. NB-related metrics
+  - need to find out which **predictive features** are most relevant for NB constraints. We should focus more on the predictive features here: for example, if a constraints has not bound for prev 24 months, but the ground truth label shows it will bind in aq2, which features are helpful?
+  - there can be many NB definitions. For example, constraints has not bound for prev 6/12/24 months perhaps will have different indicators, choose diff window size and analyze
+
+  2. model selection
+  - we tried blending. have you treid linear regression/logistic regression?
+  - build a model just using predictive features and see how it can **augment** current champion. it has been shown that v0c misses NB entirely. We need a model that can:
+  a. at least match v0c in general statistics/metrics
+  b. do MUCH MUCH better in NB-related stats
+  
+  3. target definition
+  - for ML/lamdrank models, are you dividing the shadow prices into bins? which method have you used? 
+  - are you dividing targets into bins based on qcut or cut by sp? what difference does it make? inspect.

@@ -38,7 +38,7 @@ v0c (authoritative baseline from `registry/baseline_contract.json`):
 
 ### Task 3: Train v2a (history features only)
 
-**Features:** HISTORY_FEATURES from `ml/config.py` (8 features: da_rank_value, bf_1, bf_3, bf_6, bf_12, bf_15, shadow_price_da, da_rank_norm)
+**Features:** HISTORY_FEATURES from `ml/config.py` (8 features: da_rank_value, bf_6, bf_12, bf_15, bfo_6, bfo_12, bf_combined_6, bf_combined_12)
 
 - [ ] **Step 1: Run v2a experiment**
 

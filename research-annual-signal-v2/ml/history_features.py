@@ -250,8 +250,8 @@ def compute_history_features(
             pl.lit(1.0).alias("da_rank_value")
         )
 
-    # Drop intermediate column
-    hist_df = bf_features.drop("cumulative_sp")
+    # Rename cumulative_sp -> shadow_price_da (raw historical SP, legitimate feature)
+    hist_df = bf_features.rename({"cumulative_sp": "shadow_price_da"})
 
     logger.info(
         "History features %s/%s: %d branches, %d with history, %d months scanned",

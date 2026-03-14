@@ -219,22 +219,27 @@ else:
 After this, the existing `apply_corrected_bid_prices()` and `scale_bid_prices_by_duration()`
 still run — so the output contract is preserved.
 
-### Scale Contract
+### Scale Contract — RESOLVED
 
-**Critical:** The existing pipeline works in **monthly scale** internally:
+**The existing pipeline works in monthly scale internally:**
 - `mtm_1st_mean` is monthly
 - `generate_f2p_bands()` produces monthly-scale band edges
-- `scale_bid_prices_by_duration()` multiplies by 3 for aq* at the end
+- `scale_bid_prices_by_duration()` multiplies by 3 for aq* at the end (line 1335-1343)
 
-**V10 research computes in quarterly scale.** For production integration, the annual
-band generator must output **monthly-scale** band edges (i.e., divide by 3), and let
-`scale_bid_prices_by_duration()` do the ×3 conversion. Otherwise bid prices will be 3x too large.
+**Decision: Match existing contract.** The annual band generator outputs **monthly-scale**
+band edges. `scale_bid_prices_by_duration()` stays untouched and handles ×3.
 
-Alternatively: the annual generator outputs quarterly natively, and we skip the scaling
-for annual rows. This is cleaner but requires modifying `scale_bid_prices_by_duration()`.
+Concretely, inside `generate_annual_bands_for_group()`:
+- R1: `baseline = nodal_f0` (monthly, from lookup table). NOT `nodal_f0 * 3`.
+- R2/R3: `baseline = mtm_1st_mean` (monthly, already in trades). NOT `mtm_1st_mean * 3`.
+- Calibration artifact stores quantile pairs calibrated on monthly residuals.
+- Band edges: `lower/upper = baseline + lo/hi` (monthly).
+- `scale_bid_prices_by_duration()` converts to quarterly downstream.
 
-**Decision needed:** match existing contract (monthly internal, scale at end) vs. clean
-quarterly (skip scaling for annual). The existing contract is safer for initial port.
+**Why monthly internally:** The optimizer and trade finalizer expect bid_price columns to be
+pre-scaled by `scale_bid_prices_by_duration()`. If we output quarterly and skip scaling,
+we'd need to modify the scaling function and risk breaking f0p. Matching the existing
+contract is the zero-risk path.
 
 ### New File: `pmodel/src/pmodel/base/ftr24/v1/annual_band_generator.py`
 
@@ -282,22 +287,57 @@ Key: `(source_id, sink_id, period_type, planning_year, class_type)`
 | class_type | str | onpeak or offpeak |
 | nodal_f0 | float | Monthly avg of 3 delivery months (monthly scale) |
 
-At inference: `baseline_q = nodal_f0 * 3` for quarterly. But per the scale contract above,
-the band generator works in monthly scale, so `baseline = nodal_f0` (no ×3) and the
-downstream scaler handles quarterly conversion.
+At inference: `baseline = nodal_f0` (monthly, no ×3). The downstream
+`scale_bid_prices_by_duration()` handles the ×3 quarterly conversion.
 
-### Clearing Probability: Per-Row Assignment
+### Clearing Probability: Per-Row Assignment — DETAILED
 
-The annual generator must match f0p's CP contract: per-row `bid_price_1..10, clearing_prob_1..10`.
+The annual generator does NOT use the existing `apply_corrected_bid_prices()`.
+Instead, it handles CP assignment and bid_price sorting internally, because:
+- Annual uses asymmetric bands (lower/upper are different quantiles)
+- Annual CPs come from the calibration artifact, not from a val_df_with_bands
+- The band column naming differs (lower_p10..upper_p99 vs lower_10..upper_99)
 
-At inference time:
-1. Assign each path to a bin using `|baseline|` and calibration boundaries
-2. Determine flow_type: `prevail` if baseline > 0, `counter` if < 0
-3. Determine bin group: `q5` if in top quintile, else `q1-q4`
-4. Look up empirical CP from artifact: `empirical_clearing_rates[buy/sell_flow_q5][band_edge]`
-5. `trade_type` (buy/sell) comes from the trades DataFrame (required column)
+**Per-row CP assignment algorithm:**
 
-This matches the existing `apply_corrected_bid_prices()` pattern (line 1284 in band_generator.py).
+```python
+def assign_clearing_probs(trades_with_bands, artifact, round_num):
+    """Assign per-row clearing probs and produce bid_price_1..10, clearing_prob_1..10.
+
+    Inputs available in trades_with_bands:
+      - trade_type: str ('buy' or 'sell') — REQUIRED, already in trades from autotuning
+      - baseline: float — computed from nodal_f0 (R1) or mtm_1st_mean (R2/R3)
+      - lower_p10..upper_p99: float — band edges (16 columns, 8 levels × lower/upper)
+
+    Steps per row:
+      1. flow_type = 'prevail' if baseline > 0, 'counter' if baseline <= 0
+      2. bin_group = 'q5' if |baseline| >= artifact['boundaries'][Q80_index] else 'q1-q4'
+      3. cp_key = f"{trade_type}_{flow_type}" or f"{trade_type}_{flow_type}_q5"
+      4. For each band edge, look up CP from artifact['empirical_clearing_rates'][cp_key][band_name]
+      5. Select 10 band edges as bid prices (configurable — e.g., all 16, or top 10 by spread)
+      6. Sort: descending for buy (highest price = highest CP first), ascending for sell
+      7. Output: bid_price_1..10, clearing_prob_1..10
+    """
+```
+
+**Why 10 bid prices from 16 band edges?**
+We have 8 levels × 2 sides = 16 band edges. The optimizer expects exactly 10 bid points.
+Selection options:
+- **Option A:** Use all 8 upper + 2 lower (upper covers the buy-relevant range)
+- **Option B:** Select the 10 most spread-out points (maximize price diversity)
+- **Decision:** Match f0p's BAND_ORDER pattern — use the 10 columns that f0p uses, mapped to our coverage levels.
+
+**What `trade_type` is and where it comes from:**
+`trade_type` = 'buy' or 'sell'. It's set by `autotuning.py`'s trade generation logic
+BEFORE `generate_bands()` is called. It's already in the `total_trades` DataFrame at
+line 566 of `base.py`. The annual generator receives it via the `trades` parameter
+of `generate_bands_for_group()` — no changes needed to pass it.
+
+**Q80 boundary for q5 assignment at inference:**
+The calibration artifact stores `boundaries` (5 quantile bin edges from training data).
+The 80th percentile boundary = `boundaries[4]` (0-indexed, 5 bins means 6 edges: [0, Q20, Q40, Q60, Q80, inf]).
+At inference, `|baseline| >= boundaries[4]` → q5. Otherwise q1-q4.
+This is the same logic used in calibration — no additional parameter needed.
 
 ### Artifacts to Deploy
 
@@ -306,13 +346,21 @@ This matches the existing `apply_corrected_bid_prices()` pattern (line 1284 in b
 | `calibration_artifact.json` per round | `/opt/temp/qianli/annual_research/artifacts/v10/r{N}/` | Annually (after new PY data) |
 | `nodal_f0_lookup_PY{YYYY}.parquet` | Same directory | Before each R1 auction |
 
-### What Does NOT Change
+### What Changes vs What Does NOT Change
 
-- `band_generator.py` core logic — untouched (only dispatch added at line ~1422)
-- `scale_bid_prices_by_duration()` — untouched (×3 for aq* already handled)
-- `apply_corrected_bid_prices()` — untouched (annual uses its own CP assignment)
+**Changes:**
+- `generate_bands_for_group()` in `band_generator.py` — add `elif period_type in annual_ptypes` branch
+- New file: `annual_band_generator.py` — contains `generate_annual_bands_for_group()` + CP assignment
+- New artifacts: `calibration_artifact.json` + `nodal_f0_lookup.parquet`
+
+**Does NOT change:**
 - `autotuning.py` — untouched (it still calls `generate_bands()` which dispatches internally)
-- The optimizer, bid point generation, trade finalization — all downstream unchanged
+- `generate_bands()` entry point — untouched (dispatches to `generate_bands_for_group()`)
+- `scale_bid_prices_by_duration()` — untouched (×3 for aq* already handled)
+- `apply_corrected_bid_prices()` — NOT called for annual (annual handles its own CP+sorting)
+- `BaseFtrModel.run()` — untouched (calls `generate_bands()` as before)
+- The optimizer, clustering, trade finalization — all downstream unchanged
+- All monthly f0p logic — completely untouched
 
 ---
 

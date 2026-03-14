@@ -92,6 +92,33 @@ This means: if your training or features use realized DA data, shift everything 
 
 See `research-stage5-tier/CLAUDE.md` and `research-stage5-tier/registry/f0/onpeak/v10e-lag1/NOTES.md` for the full analysis.
 
+## MISO Annual Price Units (CRITICAL)
+
+**For MISO annual auctions (aq1-aq4), all prices are QUARTERLY (3-month total), not monthly.**
+
+- **`mcp`** = quarterly clearing price (the actual auction result). This is the **prediction target**.
+- **`mcp_mean`** = inconsistent across rounds in `all_residuals_v2.parquet`:
+  - R1: `mcp_mean = mcp` (quarterly)
+  - R2/R3: `mcp_mean = mcp / 3` (monthly average)
+  - **Do NOT use `mcp_mean` for R1.** Use `mcp` directly.
+- **`nodal_f0`** = average of 3 monthly f0 prices = **monthly**. Must be multiplied by 3 to match quarterly `mcp`.
+- **`mtm_1st_mean`** for R2/R3 = prior round's MCP / 3 = monthly. Must be multiplied by 3 to match quarterly `mcp`.
+
+**Rule:** When building baselines or computing residuals for MISO annual:
+```python
+# R1: baseline is nodal_f0 scaled to quarterly
+baseline_r1 = nodal_f0 * 3
+residual_r1 = mcp - baseline_r1
+
+# R2/R3: baseline is prior round's MCP (already quarterly in mcp column)
+# If using mtm_1st_mean (monthly), scale up:
+baseline_r2 = mtm_1st_mean * 3
+residual_r2 = mcp - baseline_r2
+# Or equivalently, use mcp directly from prior round's cleared trades
+```
+
+**Why:** MISO annual FTRs settle quarterly. The auction clears a single price per path per quarter. Monthly `split_month_mcp` values are accounting allocations, not separate auction outcomes. The quarterly `mcp` is the economically meaningful price.
+
 ## Versioned Experiments (MANDATORY)
 
 When implementing a new version (e.g., bands v2, baseline v4):

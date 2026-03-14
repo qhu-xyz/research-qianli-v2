@@ -287,6 +287,25 @@ v0c solo already includes 21 dormant branches. Forcing R=30 replaces some of tho
 (which v0c ranked by formula quality) with NB model picks (ranked by AUC 0.65 model).
 The blend preserves v0c's natural ranking while applying a small NB-informed boost.
 
+### Updated Results with Sqrt + Adaptive-R (Phase 5 final)
+
+38 configs tested including sqrt weight blend and adaptive-R. Registry:
+`phase5_final_150_300/`, `phase5_final_200_400/`.
+
+**Holdout champions (from saved artifacts):**
+
+| K Pair | Champion | Score | Runner-up | Score |
+|---|---|:---:|---|:---:|
+| (150, 300) | **S1_sqrt_a0.05** (v0c + sqrt NB α=0.05) | **0.5023** | C1_a0.05 (tiered) | 0.5013 |
+| (200, 400) | **C1_a0.05** (v0c + tiered NB α=0.05) | **0.5716** | S1_sqrt_a0.05 (sqrt) | 0.5698 |
+
+Sqrt edges tiered at (150, 300); tiered wins at (200, 400). Both are within
+0.002 of each other — effectively equivalent.
+
+Adaptive-R was identical to hard-R at all tau thresholds tested (p70/p80/p90)
+because all NB scores exceed even the 90th percentile threshold. Not useful
+with the current NB model's narrow score distribution.
+
 ### Threshold Sensitivity: $30k vs $50k
 
-Same champion at both thresholds. Blend C1_a0.05 passes all gates regardless.
+Same champion at both thresholds. Blend passes all gates regardless.

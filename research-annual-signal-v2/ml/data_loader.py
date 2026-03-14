@@ -22,6 +22,29 @@ from ml.bridge import map_cids_to_branches
 logger = logging.getLogger(__name__)
 
 
+def _cid_mapping_cache_path(planning_year: str, aq_quarter: str) -> Path:
+    """Cache path for branch↔CID mapping."""
+    threshold_tag = f"{UNIVERSE_THRESHOLD:.6e}".replace(".", "p").replace("+", "")
+    return COLLAPSED_CACHE_DIR / f"{planning_year}_{aq_quarter}_cid_map_t{threshold_tag}.parquet"
+
+
+def load_cid_mapping(planning_year: str, aq_quarter: str) -> pl.DataFrame:
+    """Load branch↔CID mapping for one (PY, quarter).
+
+    Returns DataFrame with columns: constraint_id, branch_name, is_active.
+    Cached alongside the branch-level cache in COLLAPSED_CACHE_DIR.
+    """
+    cache_path = _cid_mapping_cache_path(planning_year, aq_quarter)
+    if cache_path.exists():
+        return pl.read_parquet(cache_path)
+
+    # Force load_collapsed to run (which caches the CID mapping)
+    load_collapsed(planning_year, aq_quarter)
+
+    assert cache_path.exists(), f"CID mapping not cached after load_collapsed: {cache_path}"
+    return pl.read_parquet(cache_path)
+
+
 def load_raw_density(planning_year: str, aq_quarter: str) -> pl.DataFrame:
     """Load raw density distribution for one (PY, quarter).
 
@@ -176,6 +199,13 @@ def load_collapsed(planning_year: str, aq_quarter: str) -> pl.DataFrame:
             "Dropped %d ambiguous cids from density mapping for %s/%s",
             bridge_diag["ambiguous_cids"], planning_year, aq_quarter,
         )
+
+    # Cache CID mapping for downstream use (Phase 4b constraint propagation)
+    cid_map_path = _cid_mapping_cache_path(planning_year, aq_quarter)
+    if not cid_map_path.exists():
+        cid_with_branch.select(
+            ["constraint_id", "branch_name", "is_active"]
+        ).write_parquet(str(cid_map_path))
 
     # Step 4: Compute count_cids (total) and count_active_cids per branch
     branch_counts = cid_with_branch.group_by("branch_name").agg(

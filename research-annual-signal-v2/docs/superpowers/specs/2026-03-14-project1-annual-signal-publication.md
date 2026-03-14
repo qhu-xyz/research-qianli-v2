@@ -54,7 +54,11 @@ sets. Must be unique and stable. `scenario` = `"spice"` for our signal.
 | `tier` | int | derived from `rank` | 0-4, integer. Cumulative semantics. |
 | `mean_branch_max` | float | SPICE annual density | max outage density per branch |
 | `mean_branch_max_fillna` | float | SPICE annual density | same, NaN-filled |
-| `__index_level_0__` | str | constraint index string | same as DataFrame index |
+| `density_mix_rank` | float | V6.1 annual signal | rank of mix_mean (numeric rank, not rank_value) |
+| `__index_level_0__` | str | constraint index string | pandas artifact: same as DataFrame index. V6.1 stores this as a column when serialized from pandas with index. |
+
+**Verified**: V6.1 parquet has exactly 21 columns (20 data + `__index_level_0__`).
+Our publication must match this exactly.
 
 **CRITICAL: Metadata source is V6.1 annual, NOT V6.2B monthly.** Verified: V6.1 and
 V6.2B have different values for overlapping constraints (`shadow_price_da` max diff =

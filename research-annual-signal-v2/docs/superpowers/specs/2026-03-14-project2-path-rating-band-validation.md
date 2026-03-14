@@ -20,11 +20,15 @@ hold across rating segments.
 
 ```python
 from pbase.data.dataset.replacement import MisoNodalReplacement
+from pbase.utils.tools import Tools
 
 nr = MisoNodalReplacement()
-node_map = nr.load_data(auction_month)
-# Filter effective_start_date <= auction_month, drop terminated/expired
-# Resolve chains via simplify_node_replacement
+node_replacement = nr.load_data()  # no args — loads full replacement table
+# Filter: effective_start_date <= auction_month, drop terminated/expired
+# Then resolve chains:
+node_map = Tools.simplify_node_replacement(node_replacement, auction_month)
+# node_map: dict[str, str] mapping old_node -> final_replacement_node
+
 source_replaced = node_map.get(source_pnode, source_pnode)
 sink_replaced = node_map.get(sink_pnode, sink_pnode)
 ```
@@ -86,14 +90,14 @@ Confirmed from `research-annual-band/pipeline/pipeline.py:247`:
 "match_keys": ["source_id", "sink_id", "class_type", "planning_year"]
 ```
 
-### 3.2 Partition Keys
+### 3.2 Full Join Keys (single contract)
 
-`period_type` (aq1-aq4) and `round` (R1/R2/R3) are used to filter/partition the data
-BEFORE the matched comparison (`run_v5_bands.py:1548, 1583`). Include them explicitly
-in the analysis table:
+Always join on all six keys. Do NOT split into "join keys" + "partition keys" —
+that risks forgetting the pre-partition and over-merging rows across rounds or quarters.
 
 ```python
-analysis_keys = ["planning_year", "round", "period_type", "class_type", "source_id", "sink_id"]
+JOIN_KEYS = ["planning_year", "round", "period_type", "class_type", "source_id", "sink_id"]
+# Use this for ALL joins between path ratings and annual-band data.
 ```
 
 ### 3.3 trade_type
@@ -158,8 +162,8 @@ Step 4: Compute path ratings
 Step 5: Segment paths
 
 Step 6: Join to annual-band row-level data
-  └─ Keys: [source_id, sink_id, class_type, planning_year]
-  └─ Partition by: period_type, round
+  └─ Keys: [planning_year, round, period_type, class_type, source_id, sink_id]
+  └─ Single join contract — no separate partition step
 
 Step 7: Compute per-segment metrics
 

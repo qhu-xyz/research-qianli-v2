@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "version": "v11",
+  "description": "R1 ML quantile regression (LightGBM, 2-year rolling, 4 features)",
+  "created": "2026-03-14",
+  "part": "bands",
+  "round": "r1",
+  "baseline_version": "v3",
+  "method": {
+    "band_type": "asymmetric",
+    "model": "LightGBM quantile regression",
+    "cv_method": "rolling_2year",
+    "train_window": 2,
+    "features": [
+      "nodal_f0",
+      "abs_baseline",
+      "is_onpeak",
+      "mtm_1st_mean"
+    ],
+    "lgb_params": {
+      "num_threads": 4,
+      "n_estimators": 200,
+      "num_leaves": 31,
+      "learning_rate": 0.05,
+      "min_child_samples": 100
+    }
+  },
+  "environment": {
+    "git_hash": "ccda321",
+    "python_version": "3.13",
+    "polars_version": "1.31.0"
+  }
+}

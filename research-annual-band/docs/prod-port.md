@@ -264,10 +264,14 @@ def generate_annual_bands_for_group(
 
 ### Nodal f0 Lookup Schema (corrected)
 
-Key: `(source_id, sink_id, period_type, planning_year)`
+Key: `(source_id, sink_id, period_type, planning_year, class_type)`
 
-`nodal_f0` is class-agnostic (derived from nodal MCPs, not class-specific) but varies by PY
-(different f0 forward prices each year).
+`nodal_f0` varies by ALL five dimensions:
+- **period_type:** different delivery months (aq1=Jun-Aug, aq2=Sep-Nov, etc.)
+- **planning_year:** different f0 forward prices each year
+- **class_type:** onpeak vs offpeak have very different congestion patterns.
+  99.5% of paths have different nodal_f0 for onpeak vs offpeak (mean diff 212 $/MWh monthly = 636 quarterly).
+  Previous claim "class-agnostic" was WRONG — the f0 MCPs from `get_mcp_df()` are per-class.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -275,6 +279,7 @@ Key: `(source_id, sink_id, period_type, planning_year)`
 | sink_id | str | Path sink node |
 | period_type | str | aq1-aq4 |
 | planning_year | int | PY of the auction |
+| class_type | str | onpeak or offpeak |
 | nodal_f0 | float | Monthly avg of 3 delivery months (monthly scale) |
 
 At inference: `baseline_q = nodal_f0 * 3` for quarterly. But per the scale contract above,

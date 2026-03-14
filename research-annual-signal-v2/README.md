@@ -25,7 +25,7 @@ prediction for dormant branches only. No forced slot reservation.
 |--------|---------|
 | `config.py` | Constants, eval splits, feature lists, gate metrics |
 | `features.py` | Model table assembly (universe + GT + history + NB flags) |
-| `features_trackb.py` | Phase 4b Track B features (recency, shape) |
+| `features_trackb.py` | Track B features (recency, shape) for dormant branches |
 | `data_loader.py` | Density loading, CID mapping, branch-level collapse |
 | `ground_truth.py` | Realized DA ground truth with tiered labels |
 | `history_features.py` | Binding frequency + da_rank_value |
@@ -36,7 +36,6 @@ prediction for dormant branches only. No forced slot reservation.
 | `evaluate.py` | Metrics at K=20/50/100/150/200/300/400 + dangerous branch |
 | `merge.py` | Two-track merge with tau support |
 | `registry.py` | Experiment save/load |
-| `signal_publisher.py` | (Project 1 — not yet implemented) |
 
 ### Scripts (`scripts/`)
 | Script | Status | Purpose |
@@ -44,42 +43,31 @@ prediction for dormant branches only. No forced slot reservation.
 | `run_phase5_reeval.py` | **Active** | Phase 5 full candidate matrix evaluation |
 | `run_v0c_full_blend.py` | Active | v0c formula baseline |
 | `run_ml_experiment.py` | Active | v3a and other ML experiments |
-| `publish_annual_signal.py` | Planned | Project 1 signal publication |
-| `run_phase4a_experiment.py` | Superseded | Phase 4a (old @50/@100 metrics) |
-| `run_phase4b_regression.py` | Negative | Phase 4b regression (negative result) |
-| `run_two_track_experiment.py` | Superseded | Phase 3 two-track (old metrics) |
-| `run_nb_analysis.py` | Historical | Phase 3.1 NB analysis |
-| `run_nb_supplement.py` | Historical | Phase 3 NB supplement metrics |
-| `run_track_b_experiment.py` | Historical | Phase 3.2 Track B model dev |
+| `run_phase4a_experiment.py` | Historical | Phase 4a (old @50/@100 metrics) |
+| `run_phase4b_regression.py` | Historical | Phase 4b regression (negative result) |
+| `run_two_track_experiment.py` | Historical | Phase 3 two-track (old metrics) |
 | `calibrate_threshold.py` | Utility | Universe threshold calibration |
 | `fetch_realized_da.py` | Utility | DA data fetching |
-| `run_ml_diagnostics.py` | Utility | ML model diagnostics |
 
 ### Registry (`registry/`)
 | Version | Status | Description |
 |---------|--------|-------------|
 | `phase5_final_150_300/` | **Champion** | Blend holdout results for (150,300) |
 | `phase5_final_200_400/` | **Champion** | Blend holdout results for (200,400) |
-| `v0c/` | Baseline | v0c formula champion (no NB) |
+| `v0c/` | Baseline | v0c formula (no NB) |
 | `v3a/` | Baseline | v3a LambdaRank (13 features) |
 | `p4a_tiered_lgbm_r5_r15/` | Historical | Phase 4a best Track B model |
-| `phase5_verified_*/` | Superseded | Earlier Phase 5 run (same results as final) |
-| `phase5_champ_*/` | Superseded | First Phase 5 run |
-| `tt_v0c_r*/` | Superseded | Phase 3 two-track experiments |
 | `p4b_reg_r5_r15/` | Negative | Phase 4b regression (negative result) |
-| Others (v0a/v0b/v2a*/v3b/v3e_nb/v3f_nbonly/v3g/d1/d2/d4) | Historical | Earlier experiments |
+| Others | Historical | Earlier experiments (v0a/v0b/v2a*/v3b/etc., tt_v0c_r*, phase5_champ/verified) |
 
 ### Docs (`docs/`)
 | Document | Status |
 |----------|--------|
-| `specs/2026-03-14-project1-annual-signal-publication.md` | **Active — next implementation** |
-| `specs/2026-03-14-project2-path-rating-band-validation.md` | **Active — next implementation** |
-| `specs/2026-03-14-phase5-reeval-design.md` | Executed |
-| `findings/2026-03-14-nb-two-track-consolidated.md` | **Current findings** |
-| `specs/2026-03-13-phase4a-weighted-track-b-design.md` | Completed |
-| `specs/2026-03-14-phase4b-value-aware-track-b-design.md` | Negative result |
-| `plans/2026-03-13-phase3-nb-two-track-design.md` | Historical (misnamed — is a spec) |
-| Others | Historical |
+| `specs/project1-annual-signal-publication.md` | **Active — next implementation** |
+| `specs/project2-path-rating-band-validation.md` | **Active — next implementation** |
+| `specs/phase5-reeval-design.md` | Executed |
+| `findings/nb-two-track-consolidated.md` | **Current findings** |
+| `archive/phase3/`, `archive/phase4/` | Completed/negative phases (moved from specs/plans) |
 
 ## Key Findings
 
@@ -92,5 +80,5 @@ prediction for dormant branches only. No forced slot reservation.
 
 ## Next Steps
 
-- **Project 1**: Publish constraint-level annual signal (V7.0)
-- **Project 2**: Path rating + annual-band validation
+- **Project 1**: Publish constraint-level annual signal (V7.0) — see `docs/superpowers/specs/`
+- **Project 2**: Path rating + annual-band validation — see `docs/superpowers/specs/`

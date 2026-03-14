@@ -99,13 +99,25 @@ cd /home/xyz/workspace/research-qianli-v2/research-annual-band
 
 ---
 
-## Task 1: Write `scripts/run_v9_bands.py`
+## Task 1: Rename existing v9 files and write new `scripts/run_v9_bands.py`
 
 **Files:**
-- Create: `scripts/run_v9_bands.py`
-- Reference: `scripts/run_v9_bands.py` (current v9 = class+sign version, copy and simplify)
+- Rename: `scripts/run_v9_bands.py` → `scripts/run_v9_bands_sign.py` (old sign-based version)
+- Rename: `scripts/test_v9_bands.py` → `scripts/test_v9_bands_sign.py` (old sign-based tests)
+- Rename: `scripts/test_annual_replication.py` → `scripts/test_annual_replication_sign.py` (imports old sign-based API)
+- Create: `scripts/run_v9_bands.py` (new per-class-only version)
 
 The new script is self-contained — no imports from other band scripts.
+
+- [ ] **Step 0: Rename existing files to preserve the old sign-based API**
+
+```bash
+cd /home/xyz/workspace/pmodel && source .venv/bin/activate
+cd /home/xyz/workspace/research-qianli-v2/research-annual-band/scripts
+mv run_v9_bands.py run_v9_bands_sign.py
+mv test_v9_bands.py test_v9_bands_sign.py
+mv test_annual_replication.py test_annual_replication_sign.py
+```
 
 - [ ] **Step 1: Write the script**
 
@@ -189,6 +201,8 @@ Main:
 - All coverage levels including P99
 
 - [ ] **Step 2: Verify script parses and is clean**
+
+All commands below assume the pmodel venv is activated (see Prerequisites).
 
 ```bash
 python -c "import ast; ast.parse(open('scripts/run_v9_bands.py').read()); print('Parse OK')"
@@ -279,8 +293,10 @@ Round | Quarter | P10 | P30 | P50 | P70 | P80 | P90 | P95 | P99
 
 **Table B: Per-PY P95 coverage (stability check)**
 ```
-Round | Quarter | PY2022 | PY2023 | PY2024 | Range | Worst
+R1:    Round | Quarter | PY2022 | PY2023 | PY2024 | Range | Worst
+R2/R3: Round | Quarter | PY2021 | PY2022 | PY2023 | PY2024 | Range | Worst
 ```
+Note: R2/R3 have 4 usable folds (PY2021-2024), R1 has 3 (PY2022-2024).
 
 **Table C: Per-bin P95 coverage (bin calibration check)**
 ```
@@ -340,14 +356,15 @@ Options:
 
 - [ ] **Step 1: Run on full PYs including holdout**
 
-Change constants to:
+Create a copy or add CLI args. The key changes vs dev run:
 ```python
+VERSION_ID = "v9_holdout"  # CRITICAL: different output dir to preserve dev artifacts
 R1_PYS = [2020, 2021, 2022, 2023, 2024, 2025]
 R2R3_PYS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
 MIN_TRAIN_PYS = 3  # back to 3 for production-relevant eval
 ```
 
-Save to `v9_holdout/` to keep dev results intact.
+This saves to `versions/bands/v9_holdout/r{1,2,3}/` — dev results in `versions/bands/v9/` stay intact.
 
 - [ ] **Step 2: Report holdout results**
 

@@ -1,206 +1,200 @@
 # Project 2: Path Rating + Annual Band Validation
 
 **Date**: 2026-03-14
-**Status**: Draft
-**Depends on**: Project 1 (constraint-level signal contract, not necessarily full publication)
+**Status**: Draft (rev 2 — review fixes applied)
+**Depends on**: Project 1 (constraint-level signal contract)
 
 ---
 
 ## 1. Goal
 
-For any given path (source_pnode, sink_pnode), use the annual constraint signal to
-compute a "rating" that measures how exposed the path is to highly-ranked constraints.
-Then verify: for paths with high ratings (e.g., paths touching tier-0 constraints with
-SF > 0.1), do the conclusions from `research-annual-band` (baseline accuracy, band
-coverage, band width) still hold?
+For any given path, compute a canonical rating from the annual constraint signal, then
+validate whether `research-annual-band` conclusions (baseline, band coverage, width)
+hold across rating segments.
 
-## 2. Path Rating
+## 2. Canonical Path Rating
 
-### 2.1 Definition
+### 2.1 Definition (frozen)
 
-A path's rating measures its exposure to dangerous/high-value annual constraints:
+**Step 1: Nodal replacement**
 
 ```python
-# For path (source, sink):
-path_sf = sf[sink_pnode] - sf[source_pnode]  # per-constraint shift factor
-path_exposure = path_sf * shadow_sign         # signed exposure
+from pbase.data.dataset.replacement import MisoNodalReplacement
 
-# Rating: max exposure against tier-0 constraints
-path_rating = max(path_exposure[tier_0_constraints])
+nr = MisoNodalReplacement()
+node_map = nr.load_data(auction_month)
+# Filter effective_start_date <= auction_month, drop terminated/expired
+# Resolve chains via simplify_node_replacement
+source_replaced = node_map.get(source_pnode, source_pnode)
+sink_replaced = node_map.get(sink_pnode, sink_pnode)
+```
 
-# Or: weighted sum across tiers
-path_rating = sum(
-    tier_weight[tier] * path_exposure[constraint]
-    for constraint in constraints
-    if abs(path_exposure[constraint]) > 0.05  # SF threshold
+**Step 2: Per-constraint sign-aligned exposure**
+
+```python
+# sf: pnode × constraint matrix from published signal
+path_sf = sf.loc[sink_replaced] - sf.loc[source_replaced]  # per-constraint
+aligned_exposure = shadow_sign * path_sf  # sign-adjusted
+```
+
+**Step 3: Continuous path rating score**
+
+```python
+TIER_WEIGHTS = {0: 1.0, 1: 0.5, 2: 0.0, 3: 0.0, 4: 0.0}
+
+path_rating_score = sum(
+    max(0, aligned_exposure[c]) * TIER_WEIGHTS[tier[c]] * normalized_constraint_score[c]
+    for c in constraints
 )
 ```
 
-The exact rating formula is a design choice. Options:
-- **Max SF against tier-0**: simple, interpretable. A path with any tier-0 constraint SF > 0.1 is "highly rated."
-- **Weighted exposure sum**: tier0 × 5 + tier1 × 3 + tier2 × 1 (matches pmodel's `scale_exposure`)
-- **Count of tier-0 exposures above threshold**: how many tier-0 constraints does this path touch?
+Where `normalized_constraint_score` is the published `rank` column min-max normalized
+to [0, 1] within the signal.
 
-### 2.2 Nodal Replacement
-
-**Required for production-matching results.** Before computing path SFs:
+**Step 4: Binary segment**
 
 ```python
-from pbase.data.dataset.miso import MisoNodalReplacement
-
-# Load replacement mapping
-node_map = MisoNodalReplacement.load_data(auction_month)
-# Filter: effective_start_date <= auction_month, not terminated/expired
-# Resolve chains: A→B→C becomes A→C
-node_map = simplify_node_replacement(node_map)
-
-# Apply to path nodes
-source_replaced = node_map.get(source_pnode, source_pnode)
-sink_replaced = node_map.get(sink_pnode, sink_pnode)
-
-# Then compute SF using replaced nodes
-path_sf = sf[sink_replaced] - sf[source_replaced]
+high_rated = any(
+    aligned_exposure[c] > 0.1
+    for c in constraints
+    if tier[c] == 0
+)
 ```
 
-If we skip this, paths referencing retired/renamed nodes will have missing SF values
-and the rating will be wrong. This is the same replacement pmodel applies at
-`base.py:2311` during trade generation.
+A path is "highly rated" if it has **sign-aligned** exposure > 0.1 against ANY tier-0
+constraint. This is direction-aware and uses the published tier, not raw |SF|.
 
-### 2.3 SF Loading
+### 2.2 Why This Definition
+
+- **Sign-aligned**: respects path direction (source→sink vs sink→source are different)
+- **Tier-weighted**: uses the published annual ranking, not generic SF magnitude
+- **Threshold 0.1**: matches pmodel's `abs_sf_thres` for path generation
+- **No mixing**: one canonical metric (sign-adjusted exposure), not raw SF or |SF|
+
+## 3. Join Keys Into Annual-Band Data
+
+### 3.1 Row-Level Join
+
+Annual-band data is path-level. The exact join keys:
 
 ```python
-from pbase.data.dataset.signal.general import ConstraintsSignal, ShiftFactorSignal
-
-cstrs = ConstraintsSignal(
-    rto="miso", signal_name="TEST.Signal.MISO.SPICE_ANNUAL_V7.0.R1",
-    period_type="aq1", class_type="onpeak",
-).load_data(auction_month=pd.Timestamp("2025-06"))
-
-sf = ShiftFactorSignal(
-    rto="miso", signal_name="TEST.Signal.MISO.SPICE_ANNUAL_V7.0.R1",
-    period_type="aq1", class_type="onpeak",
-).load_data(auction_month=pd.Timestamp("2025-06"))
-
-# sf.index = pnode_ids
-# sf.columns = constraint index (same as cstrs.index)
-# cstrs["tier"] = integer 0-4
+join_keys = ["source_id", "sink_id", "class_type", "planning_year"]
 ```
 
-## 3. Band Validation
+Confirmed from `research-annual-band/pipeline/pipeline.py:247`:
+```python
+"match_keys": ["source_id", "sink_id", "class_type", "planning_year"]
+```
 
-### 3.1 What We're Checking
+### 3.2 Partition Keys
 
-`research-annual-band` established baseline and banding parameters (coverage, width)
-for annual FTR paths. The question: **do these parameters hold for paths that our
-annual signal rates as high-exposure?**
+`period_type` (aq1-aq4) and `round` (R1/R2/R3) are used to filter/partition the data
+BEFORE the matched comparison (`run_v5_bands.py:1548, 1583`). Include them explicitly
+in the analysis table:
 
-Specifically:
-- For paths with tier-0 constraint SF > 0.1: is baseline accuracy still valid?
-- For paths with high weighted exposure: are band widths appropriate?
-- Do high-rated paths have different P&L distributions than low-rated paths?
+```python
+analysis_keys = ["planning_year", "round", "period_type", "class_type", "source_id", "sink_id"]
+```
 
-### 3.2 Segmentation
+### 3.3 trade_type
 
-Rate all paths in the annual path pool, then segment:
+- **NOT needed** for baseline / residual / coverage / width validation
+- **Needed** only for clearing-prob / bid-edge analysis (segmented by trade side,
+  `v10-annual-band-port-plan.md:35`)
+- Exclude for now; add later if clearing-prob analysis is requested
+
+### 3.4 Data Source
+
+Project 2 needs **row-level** baseline/residual/band datasets from annual-band, NOT
+the summary `metrics.json` aggregates. These are the per-path DataFrames produced by
+the band pipeline.
+
+Location: `/home/xyz/workspace/research-qianli-v2/research-annual-band/versions/bands/`
+
+## 4. Segmentation
+
+Rate all paths, then segment:
 
 | Segment | Definition |
 |---------|-----------|
-| **High-rated** | max tier-0 SF > 0.1 |
-| **Medium-rated** | max tier-0 SF ∈ (0.05, 0.1] OR max tier-1 SF > 0.1 |
-| **Low-rated** | max tier-0 SF ≤ 0.05 AND max tier-1 SF ≤ 0.1 |
-| **Unrated** | no constraint exposure (path nodes not in SF) |
+| **High** | `high_rated == True` (any tier-0 aligned_exposure > 0.1) |
+| **Medium** | Not high, but any tier-0 aligned_exposure > 0.05 OR any tier-1 aligned_exposure > 0.1 |
+| **Low** | All aligned_exposures ≤ 0.05 for tier-0 and ≤ 0.1 for tier-1 |
+| **Unrated** | Path nodes not in SF (after nodal replacement) |
 
-### 3.3 Metrics Per Segment
+## 5. Metrics Per Segment
 
-For each segment, compute from `research-annual-band` data:
-- **Baseline accuracy**: mean |residual| / mcp
-- **Band coverage**: what % of realized outcomes fall within the band?
-- **Band width**: mean (upper - lower) / mcp
-- **P&L distribution**: mean, median, P10, P90 of profit per MW
+For each segment, compute from annual-band row-level data:
 
-### 3.4 Research-Annual-Band Data
+| Metric | Definition |
+|--------|-----------|
+| Baseline MAE | mean |mcp - baseline| per segment |
+| Baseline directional accuracy | % of paths where sign(residual) = sign(baseline_residual) |
+| Band coverage | % of realized mcp within [lower, upper] band |
+| Band width | mean (upper - lower) / |mcp| |
+| P&L mean, median, P10, P90 | distribution of profit_per_MW |
 
-Location: `/home/xyz/workspace/research-qianli-v2/research-annual-band/`
+Compare across segments: do high-rated paths have different (better? worse?)
+banding performance than low-rated paths?
 
-This contains:
-- Band parameters per path/version
-- Baseline predictions
-- Historical coverage analysis
-
-We need to join our path ratings to this data by (source_id, sink_id) after nodal
-replacement.
-
-## 4. Pipeline
+## 6. Pipeline
 
 ```
 Step 1: Load annual signal (constraints + SF)
-  └─ From Project 1 output or inline computation
+  └─ From Project 1 published signal, or inline for research
 
 Step 2: Load path pool
-  └─ From MisoPathPoolV6Loader or research-annual-band paths
+  └─ From annual-band row-level data or MisoPathPoolV6Loader
 
 Step 3: Apply nodal replacement to path nodes
-  └─ MisoNodalReplacement → simplify chains → replace source/sink
+  └─ from pbase.data.dataset.replacement import MisoNodalReplacement
+  └─ Resolve chains, replace source_id / sink_id
 
 Step 4: Compute path ratings
-  └─ For each path: sf[replaced_sink] - sf[replaced_source] per constraint
-  └─ Aggregate by tier weighting
+  └─ Per path: aligned_exposure = shadow_sign × (sf[sink] - sf[source])
+  └─ Continuous score: tier-weighted sum
+  └─ Binary: high_rated = any tier-0 aligned_exposure > 0.1
 
-Step 5: Segment paths by rating
-  └─ High / Medium / Low / Unrated
+Step 5: Segment paths
 
-Step 6: Join to research-annual-band data
-  └─ By (source_id, sink_id) after replacement
-  └─ Pull baseline, band, P&L data per path
+Step 6: Join to annual-band row-level data
+  └─ Keys: [source_id, sink_id, class_type, planning_year]
+  └─ Partition by: period_type, round
 
-Step 7: Compute per-segment statistics
-  └─ Baseline accuracy, band coverage, band width, P&L distribution
+Step 7: Compute per-segment metrics
 
 Step 8: Compare segments
-  └─ Do high-rated paths have better/worse/different banding performance?
 ```
 
-## 5. Verification
+## 7. Verification
 
-### 5.1 Path Rating Verification
 - For a sample of paths, manually compute SF exposure and verify rating matches
-- Cross-check: paths with known high DA congestion should rate high
-- Check nodal replacement: compare path count before/after replacement
+- Cross-check: known high-DA-congestion paths should rate high
+- Segment sizes should be reasonable (not degenerate — all high or all low)
+- The union of segments should equal the full path set
+- Reproduce a known result from annual-band on the full set, then verify it
+  decomposes correctly into segment contributions
 
-### 5.2 Band Validation Verification
-- Reproduce a known result from research-annual-band on the full path set
-- Then split by rating segment and check if the aggregate numbers decompose correctly
-- Spot-check: the union of segments should equal the full set
-
-### Reference data:
-- research-annual-band versions at `/home/xyz/workspace/research-qianli-v2/research-annual-band/versions/`
-- Path pool at pmodel/pbase path pool loaders
-- Nodal replacement via `MisoNodalReplacement`
-
-## 6. Implementation
+## 8. Implementation
 
 | File | Description |
 |------|-------------|
-| `scripts/rate_paths.py` | NEW — compute path ratings from annual signal |
-| `scripts/validate_bands_by_rating.py` | NEW — segment paths, compare band parameters |
-| `ml/path_rating.py` | NEW — path rating computation + nodal replacement |
+| `scripts/rate_paths.py` | NEW — compute path ratings |
+| `scripts/validate_bands_by_rating.py` | NEW — segment + compare band metrics |
+| `ml/path_rating.py` | NEW — rating computation + nodal replacement |
 
 ### Dependencies
 - `pbase.data.dataset.signal.general.ConstraintsSignal` (load)
 - `pbase.data.dataset.signal.general.ShiftFactorSignal` (load)
-- `pbase.data.dataset.miso.MisoNodalReplacement` (nodal replacement)
+- `pbase.data.dataset.replacement.MisoNodalReplacement` (nodal replacement)
 - `pbase.utils.tools.Tools.simplify_node_replacement` (chain resolution)
-- `research-annual-band` data (band parameters, baseline, P&L)
+- `research-annual-band` row-level data (NOT metrics.json)
 
-## 7. Dependency on Project 1
+## 9. Dependency on Project 1
 
-**For research**: Project 2 can compute scores inline from the existing research
-pipeline (branch scores → constraint expansion → inline SF) without needing the full
-published signal. This allows rapid iteration.
+| Mode | Dependency | Use case |
+|------|-----------|----------|
+| Research (inline) | None — compute scores inline | Rapid iteration, no publication needed |
+| Production-matching | Project 1 published signal | Ensures same constraint universe + tiers |
 
-**For production-matching results**: Project 2 should consume Project 1's published
-signal artifact to ensure constraint selection, tier assignment, and SF are identical
-to what pmodel would use.
-
-**Recommended approach**: Start with inline computation for research validation, then
-switch to reading the published signal once Project 1 is done.
+**Recommended**: Start inline for research, switch to published signal for final validation.

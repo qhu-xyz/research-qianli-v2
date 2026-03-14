@@ -89,6 +89,8 @@ Only R1 results changed (R2/R3 already had correct units in v9).
 
 ### R1 P95 Half-Width: 70-76% Reduction
 
+Monthly scale (internal computation):
+
 | Quarter | v9 (wrong units) | v10 (corrected) | Reduction | P95 Coverage |
 |---------|-----------------:|----------------:|---------:|--------:|
 | aq1 | 2,701 | **859** | **-68.2%** | 93.2% |
@@ -96,6 +98,16 @@ Only R1 results changed (R2/R3 already had correct units in v9).
 | aq3 | 2,339 | **674** | **-71.2%** | 93.6% |
 | aq4 | 1,369 | **455** | **-66.8%** | 89.9% |
 | **Avg** | **2,295** | **693** | **-69.8%** | **92.0%** |
+
+**Quarterly bid scale (×3) — the economically meaningful number:**
+
+| Quarter | v10 P95 HW (quarterly) | P95 Coverage |
+|---------|------------------------:|--------:|
+| aq1 | **2,577** | 93.2% |
+| aq2 | **2,353** | 91.3% |
+| aq3 | **2,023** | 93.6% |
+| aq4 | **1,364** | 89.9% |
+| **Avg** | **2,079** | **92.0%** |
 
 ### R1 Coverage at All Levels
 
@@ -141,30 +153,32 @@ Parity gap slightly higher than v9 (max 2.24pp vs 1.07pp) but still within toler
 
 ### R2/R3 Results (Unchanged from v9)
 
-| Round | Quarter | P95 Cov | P95 HW |
-|-------|---------|--------:|-------:|
-| R2 | aq1 | 89.6% | 180 |
-| R2 | aq2 | 89.8% | 186 |
-| R2 | aq3 | 91.0% | 170 |
-| R2 | aq4 | 90.3% | 173 |
-| R3 | aq1 | 91.5% | 164 |
-| R3 | aq2 | 91.6% | 155 |
-| R3 | aq3 | 92.0% | 146 |
-| R3 | aq4 | 92.6% | 144 |
+| Round | Quarter | P95 Cov | P95 HW (monthly) | P95 HW (quarterly) |
+|-------|---------|--------:|-----------------:|-------------------:|
+| R2 | aq1 | 89.6% | 180 | 541 |
+| R2 | aq2 | 89.8% | 186 | 557 |
+| R2 | aq3 | 91.0% | 170 | 511 |
+| R2 | aq4 | 90.3% | 173 | 519 |
+| R3 | aq1 | 91.5% | 164 | 492 |
+| R3 | aq2 | 91.6% | 155 | 464 |
+| R3 | aq3 | 92.0% | 146 | 437 |
+| R3 | aq4 | 92.6% | 144 | 432 |
 
 ---
 
-## 4. Cross-Round Comparison (All on Monthly Scale)
+## 4. Cross-Round Comparison
 
-With corrected units, R1 widths are now comparable to R2/R3:
+**Quarterly bid scale (×3) — the economically meaningful number:**
 
-| Round | Avg P95 HW | Avg P95 Cov | Baseline |
+| Round | Avg P95 HW (quarterly) | Avg P95 Cov | Baseline |
 |-------|----------:|-----------:|----------|
-| R1 | **693** | 92.0% | nodal_f0 (monthly) |
-| R2 | **177** | 90.2% | mtm_1st_mean (monthly) |
-| R3 | **152** | 91.9% | mtm_1st_mean (monthly) |
+| R1 | **2,079** | 92.0% | nodal_f0 × 3 |
+| R2 | **532** | 90.2% | mtm_1st_mean × 3 |
+| R3 | **457** | 91.9% | mtm_1st_mean × 3 |
 
-R1 is still 4x wider than R2/R3 — expected because R1 has no prior round and `nodal_f0` is a weaker baseline than `mtm_1st_mean` (prior round MCP). But the gap is now 4x, not the artificial 13x from wrong units.
+Monthly scale (internal computation): R1=693, R2=177, R3=152.
+
+R1 is ~4x wider than R2/R3 — expected because R1 has no prior round and `nodal_f0` is a weaker baseline than `mtm_1st_mean` (prior round MCP).
 
 ---
 

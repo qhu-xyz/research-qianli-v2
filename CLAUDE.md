@@ -119,6 +119,21 @@ residual_r2 = mcp - baseline_r2
 
 **Why:** MISO annual FTRs settle quarterly. The auction clears a single price per path per quarter. Monthly `split_month_mcp` values are accounting allocations, not separate auction outcomes. The quarterly `mcp` is the economically meaningful price.
 
+### Current Implementation Status (2026-03-14)
+
+**Data fix applied:** R1 `mcp_mean` in `aq*_all_baselines.parquet` and `all_residuals_v2.parquet` has been divided by 3 (backups in `.bak`). All rounds now have `mcp_mean = mcp / 3` (monthly).
+
+**Band scripts (run_v9_bands.py, v10, v11):** Compute residuals as `mcp_mean - baseline` where both sides are monthly. This is mathematically equivalent to quarterly — coverage percentages are identical. Band widths are in monthly scale internally.
+
+**Reporting rule (MANDATORY):** All reports and NOTES.md MUST show band widths in **quarterly scale** (monthly × 3). This is the economically meaningful number — it represents the actual bid range in $/MWh per quarter. If monthly scale is also shown, label it explicitly.
+
+| What | Monthly | Quarterly (×3) | Which to report |
+|------|--------:|---------------:|:---:|
+| R1 P95 hw | 693 | 2,079 | **Quarterly** |
+| R2 P95 hw | 177 | 532 | **Quarterly** |
+| R3 P95 hw | 152 | 457 | **Quarterly** |
+| MAE | 264 | 792 | **Quarterly** |
+
 ## Versioned Experiments (MANDATORY)
 
 When implementing a new version (e.g., bands v2, baseline v4):

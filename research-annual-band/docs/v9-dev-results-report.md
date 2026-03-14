@@ -327,11 +327,21 @@ Coverage = % of test paths where `mcp_mean` falls within `[baseline + lo, baseli
 
 ### P95 Width: Cross-Round Summary
 
+Monthly scale (internal computation):
+
 | Round | aq1 | aq2 | aq3 | aq4 | **Avg** |
 |-------|----:|----:|----:|----:|--------:|
 | R1 | 859 | 784 | 674 | 455 | **693** |
 | R2 | 180 | 186 | 170 | 173 | **177** |
 | R3 | 164 | 155 | 146 | 144 | **152** |
+
+**Quarterly bid scale (×3) — the economically meaningful number:**
+
+| Round | aq1 | aq2 | aq3 | aq4 | **Avg** |
+|-------|----:|----:|----:|----:|--------:|
+| R1 | 2,577 | 2,353 | 2,023 | 1,364 | **2,079** |
+| R2 | 541 | 557 | 511 | 519 | **532** |
+| R3 | 492 | 464 | 437 | 432 | **457** |
 
 R1 is ~4x wider than R2/R3 — expected because nodal_f0 is a weaker baseline than prior-round MCP.
 

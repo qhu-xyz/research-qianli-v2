@@ -179,10 +179,12 @@ Added in Phase 4a (3): `shadow_price_da`, `da_rank_value`, `historical_max_sp`
 ## 7. Recommendations
 
 ### For Production
-1. **Use v0c + NB(R=30) as Track A+B system** at K=300 or K=400
+1. **Use v0c + NB blend (α=0.05)** — NOT hard two-track slot reservation
 2. Track B model: Phase 4a tiered LightGBM, 14 features, dormant-only
-3. history_zero excluded from reserved slots but kept in evaluation universe
-4. Gate metrics: VC, Recall, Abs_SP, NB12_Count, NB12_SP, Dang_Recall at both K levels
+3. Blend adds α × normalized NB score to v0c score for dormant branches only
+4. No forced R parameter — dormant branches compete on blended score
+5. Gate metrics at paired K levels: VC, Recall, Abs_SP, NB12_SP, Dang_Recall
+6. Reproducible via `scripts/run_phase5_reeval.py`, artifacts in registry
 
 ### For Future Research
 1. **New data sources needed** for dormant ranking improvement — current features explain
@@ -236,8 +238,55 @@ The NB model's value is highest at K=300 where true solo includes 21 dormant bra
 including 5 NB12 binders. At K=400, the formula's broader inclusion outperforms the
 NB model's narrow targeting.
 
-### Finding 1 (HIGH): Evaluator hardcoded to @50/@100 — ACKNOWLEDGED
+### Finding 1 (HIGH): Evaluator hardcoded to @50/@100 — FIXED
 
-The official evaluator (`ml/evaluate.py`) needs to be updated to support K=150/200/300/400
-and dangerous branch metrics. Current champion results are from ad-hoc scripts.
-This is a reproducibility gap, not a correctness issue.
+`ml/evaluate.py` now computes K=150/200/300/400 and dangerous branch metrics
+(Dang_Recall, Dang_SP_Ratio, Dang_Count). `ml/config.py` has PHASE5_K_LEVELS,
+DANGEROUS_THRESHOLD, PHASE5_GATE_METRICS. Old constants preserved.
+
+---
+
+## 9. Phase 5: Final Re-evaluation (audited, with registry artifacts)
+
+Phase 5 re-evaluated all candidates under the new metric framework using true solo
+baselines (not biased R=0 two-track), paired scorecard, and saved to registry.
+
+**Script**: `scripts/run_phase5_reeval.py`
+**Registry**: `registry/phase5_champ_150_300/`, `registry/phase5_champ_200_400/`
+
+### Champion: C1_a0.05 (v0c + 0.05 × NB blend)
+
+Wins both K pairs on holdout. Robust at both $50k and $30k dangerous thresholds.
+
+**How it works**: Score all branches with v0c formula. For dormant branches only, add
+`α × normalized_NB_score` where α=0.05 and NB scores are normalized to v0c's score
+range. No forced slot reservation — dormant branches compete on blended score.
+
+### Holdout Results (DANGEROUS_THRESHOLD = $50,000)
+
+**Pair (150, 300):**
+
+| Config | VC@150 | VC@300 | DgR@300 | NB12_SP@300 | Score |
+|---|:---:|:---:|:---:|:---:|:---:|
+| v0c solo | 0.5374 | 0.7195 | 0.8121 | 0.0425 | 0.4792 |
+| **C1_a0.05** | **0.5374** | **0.7233** | **0.8758** | **0.2054** | **0.5013** |
+| v3a solo | 0.5475 | 0.7289 | 0.7899 | 0.0171 | 0.4819 |
+
+**Pair (200, 400):**
+
+| Config | VC@200 | VC@400 | DgR@400 | NB12_SP@400 | Score |
+|---|:---:|:---:|:---:|:---:|:---:|
+| v0c solo | 0.6236 | 0.7861 | 0.9091 | 0.2166 | 0.5630 |
+| **C1_a0.05** | **0.6187** | **0.7880** | **0.9394** | **0.2923** | **0.5716** |
+| v3a solo | 0.5952 | 0.7717 | 0.7899 | 0.0562 | 0.5189 |
+
+### Why Blend Wins Over Hard Two-Track
+
+Hard two-track (forced R slots) displaces v0c's natural dormant inclusion. At K=300,
+v0c solo already includes 21 dormant branches. Forcing R=30 replaces some of those
+(which v0c ranked by formula quality) with NB model picks (ranked by AUC 0.65 model).
+The blend preserves v0c's natural ranking while applying a small NB-informed boost.
+
+### Threshold Sensitivity: $30k vs $50k
+
+Same champion at both thresholds. Blend C1_a0.05 passes all gates regardless.

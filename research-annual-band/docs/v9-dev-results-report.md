@@ -1,5 +1,9 @@
 # V9 Simplified Asymmetric Bands — Dev Results Report
 
+> **SUPERSEDED by v10.** R1 results in this report are INVALID — computed with wrong `mcp_mean` units
+> (quarterly instead of monthly). See `docs/v10-consolidation-report.md` for corrected results.
+> R2/R3 results are still valid (they had correct units).
+
 **Date:** 2026-03-14
 **Method:** Asymmetric signed quantile pairs, 5 bins x 2 classes = 10 cells, no sign split, no correction
 **CV:** Temporal expanding, min_train_pys=2

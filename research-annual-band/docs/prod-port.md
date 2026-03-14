@@ -11,8 +11,8 @@
 
 These decisions are final. Everything below is consistent with them.
 
-1. **Scale:** MONTHLY internally. All baselines, band edges, and artifact values are monthly.
-   `scale_bid_prices_by_duration()` (untouched) converts bid_price columns to quarterly (×3) at the end.
+1. **Scale:** QUARTERLY everywhere. All baselines, band edges, artifact values, and bid_prices are quarterly.
+   The annual `elif` branch returns early BEFORE `scale_bid_prices_by_duration()` runs — no ×3 applied.
 
 2. **Integration seam:** `elif` branch inside `generate_bands_for_group()` in `band_generator.py`.
    The annual branch returns `result` (a DataFrame with `bid_price_1..10, clearing_prob_1..10` already assigned).

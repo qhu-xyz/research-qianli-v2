@@ -43,14 +43,14 @@
     {
       "path": "all_residuals_v2.parquet",
       "columns": [
-        "mcp_mean",
+        "mcp_q",
         "baseline",
         "class_type"
       ]
     }
   ],
   "environment": {
-    "git_hash": "5018060",
+    "git_hash": "0cd9cf2",
     "python_version": "3.13.5",
     "polars_version": "1.31.0"
   }

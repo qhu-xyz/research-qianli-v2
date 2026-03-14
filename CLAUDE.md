@@ -118,16 +118,38 @@ residual = mcp - baseline_q
 
 **Data fix applied:** R1 `mcp_mean` in `aq*_all_baselines.parquet` and `all_residuals_v2.parquet` has been divided by 3 (backups in `.bak`). All rounds now have `mcp_mean = mcp / 3` (monthly).
 
-**Band scripts (run_v9_bands.py, v10, v11):** Compute residuals as `mcp_mean - baseline` where both sides are monthly. This is mathematically equivalent to quarterly — coverage percentages are identical. Band widths are in monthly scale internally.
+**Band scripts use QUARTERLY scale throughout:**
+- Target: `mcp_q = mcp_mean * 3` (quarterly clearing price)
+- R1 baseline: `nodal_f0 * 3` (quarterly)
+- R2/R3 baseline: `mtm_1st_mean * 3` (quarterly)
+- All residuals, band widths, and artifact values are quarterly
+- No monthly values anywhere in the band pipeline or reports
+- In production, annual branch returns quarterly bid_prices directly (skips `scale_bid_prices_by_duration()`)
 
-**Reporting rule (MANDATORY):** All reports and NOTES.md MUST show band widths in **quarterly scale** (monthly × 3). This is the economically meaningful number — it represents the actual bid range in $/MWh per quarter. If monthly scale is also shown, label it explicitly.
+**Reference quarterly values:**
 
-| What | Monthly | Quarterly (×3) | Which to report |
-|------|--------:|---------------:|:---:|
-| R1 P95 hw | 693 | 2,079 | **Quarterly** |
-| R2 P95 hw | 177 | 532 | **Quarterly** |
-| R3 P95 hw | 152 | 457 | **Quarterly** |
-| MAE | 264 | 792 | **Quarterly** |
+| What | Quarterly |
+|------|--------:|
+| R1 P95 hw | ~2,079 |
+| R2 P95 hw | ~532 |
+| R3 P95 hw | ~457 |
+| R1 baseline MAE | ~792 |
+
+## Testing (MANDATORY)
+
+Every experiment script and production-facing module MUST have tests covering at least 90% of use cases:
+- **Core calibration:** correct quantile pair computation, bin assignment, fallback triggers
+- **Band application:** correct lower/upper band edges, no nulls, band containment (P99 ⊃ P95 ⊃ ... ⊃ P10)
+- **Coverage monotonicity:** P10 < P30 < P50 < ... < P99
+- **Scale correctness:** all values quarterly (baseline × 3, target × 3, widths quarterly)
+- **Edge cases:** zero baseline, single class_type, very small bins, missing nodes
+- **CP assignment:** buy CP increases with higher upper bands, sell CP increases with lower lower bands
+- **Class parity:** onpeak and offpeak both get bands, no silent class drops
+- **Temporal CV:** train strictly before test, min_train_pys respected, excluded folds not in aggregate
+- **Artifact round-trip:** save artifact → load → apply bands → same results as direct computation
+- **Integration:** output schema matches production contract (bid_price_1..10, clearing_prob_1..10)
+
+Run tests BEFORE committing results. If tests fail, fix before proceeding.
 
 ## Versioned Experiments (MANDATORY)
 

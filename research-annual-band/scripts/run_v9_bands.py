@@ -6,9 +6,10 @@ No sign stratification, no correction.
 Temporal expanding CV only (no LOO), min_train_pys=2 for dev.
 8 coverage levels: P10, P30, P50, P70, P80, P90, P95, P99.
 
-MONTHLY SCALE: Target = mcp_mean (monthly average clearing price).
-Baselines remain monthly: nodal_f0 for R1, mtm_1st_mean for R2/R3.
-Quarterly bid scaling is handled downstream in production by scale_bid_prices_by_duration().
+QUARTERLY SCALE: Target = mcp_q = mcp_mean * 3 (quarterly clearing price).
+Baselines scaled to quarterly: nodal_f0 * 3 for R1, mtm_1st_mean * 3 for R2/R3.
+All band widths, residuals, and artifact values are natively quarterly.
+In production, the annual branch returns quarterly bid_prices directly (skips scale_bid_prices_by_duration).
 
 Dev PYs only by default (PY 2025 reserved as holdout).
 Override with env vars for holdout runs:
@@ -54,7 +55,7 @@ def _parse_py_env(name: str, default: list[int]) -> list[int]:
 DEV_R1_PYS = _parse_py_env("BANDS_DEV_R1_PYS", [2020, 2021, 2022, 2023, 2024])
 DEV_R2R3_PYS = _parse_py_env("BANDS_DEV_R2R3_PYS", [2019, 2020, 2021, 2022, 2023, 2024])
 
-MCP_COL = "mcp_mean"
+MCP_COL = "mcp_q"  # quarterly target = mcp_mean * 3
 PY_COL = "planning_year"
 CLASS_COL = "class_type"
 CLASSES = ["onpeak", "offpeak"]
@@ -888,7 +889,11 @@ def main():
             )
             .collect()
         )
-        df = df.with_columns(pl.col("nodal_f0").alias("baseline"))
+        # Scale to quarterly: baseline and target both × 3
+        df = df.with_columns([
+            (pl.col("nodal_f0") * 3).alias("baseline"),
+            (pl.col("mcp_mean") * 3).alias("mcp_q"),
+        ])
         return df
 
     r1_metrics = run_round(
@@ -913,7 +918,11 @@ def main():
             .select(["mtm_1st_mean", "mcp_mean", PY_COL, "period_type", CLASS_COL, "source_id", "sink_id"])
             .collect()
         )
-        df = df.with_columns(pl.col("mtm_1st_mean").alias("baseline"))
+        # Scale to quarterly: baseline and target both × 3
+        df = df.with_columns([
+            (pl.col("mtm_1st_mean") * 3).alias("baseline"),
+            (pl.col("mcp_mean") * 3).alias("mcp_q"),
+        ])
         return df
 
     r2_metrics = run_round(
@@ -938,7 +947,11 @@ def main():
             .select(["mtm_1st_mean", "mcp_mean", PY_COL, "period_type", CLASS_COL, "source_id", "sink_id"])
             .collect()
         )
-        df = df.with_columns(pl.col("mtm_1st_mean").alias("baseline"))
+        # Scale to quarterly: baseline and target both × 3
+        df = df.with_columns([
+            (pl.col("mtm_1st_mean") * 3).alias("baseline"),
+            (pl.col("mcp_mean") * 3).alias("mcp_q"),
+        ])
         return df
 
     r3_metrics = run_round(

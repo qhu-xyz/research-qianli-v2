@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "version": "v2",
+  "description": "Pure DA congestion (no 0.85 shrinkage)",
+  "created": "2026-02-22",
+  "part": "baseline",
+  "method": {
+    "formula": "1.0 * DA_congestion (= mtm_1st_mean / 0.85)",
+    "coverage": "100%"
+  },
+  "parameters": {},
+  "data_sources": [
+    {"path": "crossproduct_work/aq1_all_baselines.parquet", "column": "mtm_1st_mean / 0.85"},
+    {"path": "crossproduct_work/aq2_all_baselines.parquet", "column": "mtm_1st_mean / 0.85"},
+    {"path": "crossproduct_work/aq3_all_baselines.parquet", "column": "mtm_1st_mean / 0.85"},
+    {"path": "crossproduct_work/aq4_all_baselines.parquet", "column": "mtm_1st_mean / 0.85"}
+  ],
+  "environment": {
+    "git_hash": "c4e33be",
+    "python_version": "3.11.9",
+    "polars_version": "1.31.0"
+  }
+}

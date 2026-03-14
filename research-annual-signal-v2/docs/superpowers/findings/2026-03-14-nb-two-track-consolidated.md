@@ -195,36 +195,49 @@ Added in Phase 4a (3): `shadow_price_da`, `da_rank_value`, `historical_max_sp`
 
 ## 8. Audit Verification (2026-03-14-code-audit-review.md)
 
-### Finding 3 (HIGH): R=0 rows not true solo baselines — VERIFIED, NO IMPACT
+### Finding 3 (HIGH): R=0 rows not true solo baselines — CONFIRMED, MATERIAL IMPACT
 
-Re-ran true solo baselines (all branches scored globally, no track splitting).
-v0c TRUE solo numbers are **identical** to the R=0 two-track numbers at all K levels.
-Reason: v0c formula gives dormant branches very low scores (bf_combined_12=0 → norm=0),
-so they naturally fall below rank 150-300 anyway.
+The two-track R=0 path categorically bars dormant branches from top-K (they go to
+Track B with r=0 slots). True v0c solo scores ALL branches globally and includes
+dormant branches that score well on da_rank + density.
 
-v3a has small differences (the two-track R=0 was slightly biased), but the v3a comparison
-was not used for the champion decision — v0c+NB was compared against v0c TRUE solo.
+**This DID affect the baseline comparison.** The earlier claim that R=0 matched true solo
+was incorrect. Corrected comparison (holdout):
 
-**Pareto claim at K=300 is confirmed valid.**
+| K | v0c TRUE VC | v0c+NB(R=30) VC | delta |
+|---|:---:|:---:|:---:|
+| 150 | 0.5374 | 0.5175 | **-0.0199** (NB costs) |
+| 200 | 0.6236 | 0.5920 | **-0.0316** (NB costs) |
+| **300** | **0.7195** | **0.7325** | **+0.0130** (NB wins) |
+| 400 | 0.7861 | 0.7835 | **-0.0026** (near-tied) |
+
+**K=300 Pareto claim narrowed but still holds.** v0c+NB(R=30) wins on VC (+1.3%),
+Recall (+0.5%), and DangR (+6.7%). The win is concentrated in aq3 (+5.7% VC from
+$54k dormant SP capture). Other groups are slightly negative.
+
+**K=400: corrected to toss-up.** True solo naturally includes 63 dormant branches
+($63k SP) vs NB's 30 targeted slots ($23k SP). The formula's untargeted inclusion
+actually captures more dormant SP than the NB model's targeted selection at this K.
+
+### Dormant Branch Natural Inclusion
+
+v0c naturally includes dormant branches at higher K because da_rank and density give
+them nonzero scores (top dormant v0c scores ~0.46-0.53):
+
+| K (holdout) | v0c Dorm_in_topK | Dorm_SP |
+|---|:---:|---:|
+| 150 | 1.0 | $0 |
+| 200 | 3.3 | $0 |
+| 300 | 21.0 | $9,745 |
+| 400 | 63.3 | $62,822 |
+
+The NB model's value is highest at K=300 where true solo includes 21 dormant branches
+(mostly non-binders, $10k SP) but the NB model's 30 targeted slots capture $23k SP
+including 5 NB12 binders. At K=400, the formula's broader inclusion outperforms the
+NB model's narrow targeting.
 
 ### Finding 1 (HIGH): Evaluator hardcoded to @50/@100 — ACKNOWLEDGED
 
 The official evaluator (`ml/evaluate.py`) needs to be updated to support K=150/200/300/400
 and dangerous branch metrics. Current champion results are from ad-hoc scripts.
 This is a reproducibility gap, not a correctness issue.
-
-### Dormant Branch Natural Inclusion (new finding)
-
-v0c naturally includes dormant branches at higher K because da_rank and density give
-them nonzero scores:
-
-| K (holdout) | v0c Dorm_in_topK | v3a Dorm_in_topK |
-|---|:---:|:---:|
-| 150 | 1.0 | 0.0 |
-| 200 | 3.3 | 0.0 |
-| 300 | 21.0 | 5.7 |
-| 400 | 63.3 | 25.3 |
-
-At K=400, v0c already includes 63 dormant branches naturally. The NB model's 30 reserved
-slots are partially redundant at this K level but still add targeted NB12 binder selection
-vs v0c's untargeted dormant inclusion.

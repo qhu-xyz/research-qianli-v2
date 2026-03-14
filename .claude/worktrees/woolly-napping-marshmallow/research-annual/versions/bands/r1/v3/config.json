@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "version": "v3",
+  "description": "R1 per-class stratified bands (4 quantile bins)",
+  "created": "2026-02-23",
+  "part": "bands/r1",
+  "baseline_version": "v3",
+  "method": {
+    "band_type": "symmetric",
+    "calibration": "empirical quantile of |mcp - baseline| per (|baseline| bin, class_type)",
+    "cv_method": "LOO_by_PY",
+    "gate_metric": "LOO",
+    "bin_scheme": "quantile_4bin",
+    "stratification": "per_class (onpeak, offpeak)",
+    "round": 1
+  },
+  "parameters": {
+    "coverage_levels": [
+      0.5,
+      0.7,
+      0.8,
+      0.9,
+      0.95
+    ],
+    "n_bins": 4,
+    "bin_boundaries": "data-driven (quantile)",
+    "stratify_by": "class_type",
+    "min_class_bin_rows": 500,
+    "band_type": "symmetric",
+    "cv_method": "temporal_expanding",
+    "min_train_pys": 3
+  },
+  "experiments_tested": [
+    "pooled",
+    "per_class"
+  ],
+  "data_sources": [
+    {
+      "path": "crossproduct_work/aq*_all_baselines.parquet",
+      "columns": [
+        "mcp_mean",
+        "nodal_f0",
+        "class_type"
+      ]
+    }
+  ],
+  "environment": {
+    "git_hash": "c4e33be",
+    "python_version": "3.13.5",
+    "polars_version": "1.31.0"
+  }
+}

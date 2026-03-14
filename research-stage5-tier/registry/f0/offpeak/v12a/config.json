@@ -1,0 +1,27 @@
+{
+  "method": "lightgbm_lambdarank_tiered",
+  "features": [
+    "binding_freq_1",
+    "binding_freq_3",
+    "binding_freq_6",
+    "binding_freq_12",
+    "binding_freq_15",
+    "v7_formula_score",
+    "prob_exceed_110",
+    "constraint_limit",
+    "da_rank_value"
+  ],
+  "lag": 1,
+  "period_type": "f0",
+  "class_type": "offpeak",
+  "label_mode": "tiered",
+  "train_months": 8,
+  "backend": "lightgbm",
+  "partial_n_days": 12,
+  "bf_mode": "extended",
+  "blend_weights": {
+    "da": 0.85,
+    "dmix": 0.0,
+    "dori": 0.15
+  }
+}

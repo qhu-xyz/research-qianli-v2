@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "version": "v8",
+  "description": "R2 asymmetric bands (5 quantile bins, class+sign stratified, correction=bidirectional)",
+  "created": "2026-02-26",
+  "part": "bands",
+  "round": "r2",
+  "baseline_version": "M (prior round MCP)",
+  "method": {
+    "band_type": "asymmetric",
+    "calibration": "signed quantile pair of (mcp - baseline) per (bin, class, sign)",
+    "cv_method": "temporal_all",
+    "gate_metric": "temporal",
+    "bin_scheme": "quantile_5bin",
+    "stratification": "per_class_sign (onpeak/offpeak x prevail/counter)",
+    "correction_type": "bidirectional",
+    "round": 2,
+    "winner": "asym_5b_bidir",
+    "experiments_tested": [
+      "asym_5b",
+      "asym_5b_bidir"
+    ]
+  },
+  "parameters": {
+    "coverage_levels": [
+      0.5,
+      0.7,
+      0.8,
+      0.9,
+      0.95
+    ],
+    "n_bins": 5,
+    "bin_boundaries": "data-driven (quantile)",
+    "stratify_by": [
+      "class_type",
+      "sign_seg"
+    ],
+    "min_cell_rows": 500,
+    "fallback_chain": "(bin, class, sign) -> (bin, class) -> (bin, pooled)",
+    "band_type": "asymmetric",
+    "quantile_method": "signed residual quantiles at alpha_lo=(1-level)/2, alpha_hi=(1+level)/2",
+    "winner_selection": "lowest mean P95 half-width, BG1 pass required",
+    "cv_method": "temporal_all",
+    "min_train_pys": 1,
+    "correction_type": "bidirectional",
+    "correction_tolerance_pp": 2.0,
+    "correction_step": 0.05,
+    "correction_max_iter": 50
+  },
+  "data_sources": [
+    {
+      "path": "all_residuals_v2.parquet",
+      "columns": [
+        "mcp_mean",
+        "mtm_1st_mean",
+        "class_type"
+      ]
+    }
+  ],
+  "environment": {
+    "git_hash": "f8d169f",
+    "python_version": "3.13.5",
+    "polars_version": "1.31.0"
+  }
+}

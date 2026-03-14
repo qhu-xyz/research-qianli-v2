@@ -747,3 +747,38 @@ List your metrics and their definition at branch-level
   3. target definition
   - for ML/lamdrank models, are you dividing the shadow prices into bins? which method have you used? 
   - are you dividing targets into bins based on qcut or cut by sp? what difference does it make? inspect.
+
+
+what does those columns/features mean? explain avec exemples
+- NB12_C, NB12_SP, Dorm_C, Dorm_SP
+- when you say fewer NB captures, (0.3, vs 1.0) what does 0.3, 1, mean? capture percentage? does it mean that 
+- in general I dont get why you are measuring for NB. or how good the new models are. For instance: 
+  - are you training the NB-model only on nNB data? meaning that if a branch has bound before, it will not be in train?
+  - what does the results mean? for 0.0021 NB12_SP, does it mean we only capture 0.21's total shadow?
+
+
+-   NB12_SP (NB12_SP@K): The ratio of NB12 shadow price captured in top-K vs total NB12 shadow price
+  available. If all NB12 binders in the universe generated $1M total SP, and the ones that landed in
+  top-K generated $5k, then NB12_SP = 0.005 (0.5%). ==> we are producing sth ratio like this, and it just means that the new model is NOT affective at all. 
+
+- Holdout Results — K=100, R=15 in this table, why the dorm_c count is either 0 or 15?
+-  Dorm_SP: The raw dollar amount of realized shadow price from dormant branches in top-K. -> here top-K means the top-K we predicted right?
+
+- Example: In aq3 holdout, Phase 3 has Dorm_C=5, Dorm_SP=$5,352, NB12_C=2, NB12_SP=0.0147. That means:
+   5 dormant branches made it into top-50. Of those 5, only 2 actually bound. Those 2 binders
+  generated $5,352. The total SP from ALL NB12 binders in the universe was $5,352 / 0.0147 ≈ $364k. So
+   we captured 1.47% of available NB12 value.
+   ==> exmamples like this are true right? then wouldn't it suggest that the 5 branches we are picking into the universe are jsut horrible?
+
+- What we're training: The Track B model is trained only on branches that have NO binding history
+  (dormant cohort). ==> what you mean by No binding hist? within 12 month or none at all?
+
+## improving the prediction model
+- I think we ned to aim for at leas 10pct 
+
+## metric rebuilding
+- now my teammate has told me that:
+a. we will include 150 tier0 constraints and 150 tier1. which means we need to look at @150 and @300. ==> from now on, use only those levels, do not use @50 100
+b. in this setting, does our NB model help more? for 150, we can include let's say maybe 20, 30, 40 NB predictions. for 300, even more. lot's of areas to try.
+- also we should consider this metric: 
+  - the most dangerous branch are the ones with super high realize DA, let's say >50000. which model is the best at finding those? 

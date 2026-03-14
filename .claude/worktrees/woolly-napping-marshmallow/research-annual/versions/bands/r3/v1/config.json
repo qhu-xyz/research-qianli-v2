@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "version": "v1",
+  "description": "R3 band calibration via quantile_6bin bin scheme",
+  "created": "2026-02-23",
+  "part": "bands/r3",
+  "baseline_version": "M (prior round MCP)",
+  "method": {
+    "band_type": "symmetric",
+    "calibration": "empirical quantile of |mcp - mtm_1st_mean| per |mtm_1st_mean| bin (quantile_6bin)",
+    "cv_method": "LOO_by_PY (train on 6 PYs, test on 1)",
+    "winning_config": "quantile_6bin",
+    "round": 3
+  },
+  "parameters": {
+    "coverage_levels": [
+      0.5,
+      0.7,
+      0.8,
+      0.9,
+      0.95
+    ],
+    "bin_boundaries": "data-driven",
+    "bin_labels": [
+      "q1",
+      "q2",
+      "q3",
+      "q4",
+      "q5",
+      "q6"
+    ],
+    "band_type": "symmetric",
+    "cv_method": "LOO_by_PY"
+  },
+  "experiments_tested": [
+    "fixed_4bin",
+    "quantile_4bin",
+    "quantile_6bin"
+  ],
+  "data_sources": [
+    {
+      "path": "all_residuals_v2.parquet",
+      "columns": [
+        "mcp_mean",
+        "mtm_1st_mean"
+      ],
+      "filter": "round == 3"
+    }
+  ],
+  "environment": {
+    "git_hash": "c4e33be",
+    "python_version": "3.13.5",
+    "polars_version": "1.31.0"
+  }
+}

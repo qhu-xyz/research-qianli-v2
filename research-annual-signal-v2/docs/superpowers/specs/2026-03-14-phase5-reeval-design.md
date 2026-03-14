@@ -1,7 +1,7 @@
 # Phase 5 Design: Re-evaluation Under New Metric Framework
 
 **Date**: 2026-03-14
-**Status**: Draft
+**Status**: Draft (rev 2 — review findings addressed)
 **Depends on**: Phase 3 (two-track infra), Phase 4a (Track B model), code audit review
 
 ---
@@ -34,11 +34,11 @@ Phase 5 is a clean re-evaluation, not new model development:
 2. **Compute true solo baselines** for v0c and v3a at all K levels
 3. **Test three NB integration approaches** against true baselines:
    - Hard two-track (forced R slots) — what we have
-   - Blend (v0c + α × NB for dormant) — soft integration
+   - Blend (base_score + α × NB for dormant) — soft integration
    - Adaptive R (forced slots but only for high-confidence NB picks)
-4. **R sweep at the right granularity** for K=300: R ∈ {0, 5, 10, 15, 20, 30}
+4. **Joint paired-K parameterization** — configs are (R_lo, R_hi) or (α_lo, α_hi) pairs
 5. **Dangerous branch analysis** as a first-class metric
-6. **Pick champions** for (150, 300) and (200, 400) pairs
+6. **Pick champions** for (150, 300) and (200, 400) pairs via paired scorecard
 
 Phase 5 does NOT:
 - Train new Track B models (use Phase 4a tiered/lgbm 14f)
@@ -67,6 +67,22 @@ topk = argsort(scores)[::-1][:K]
 v3a LambdaRank scores all branches. At K=300, v3a naturally includes ~6 dormant branches
 (fewer than v0c because LambdaRank learns to rank dormant lower).
 
+### Track A Score Caching (MANDATORY)
+
+Track A base scores are computed **once per split** and cached:
+
+```python
+# v0c: deterministic formula, compute once per group
+v0c_cache[py, aq] = compute_v0c_scores(group_df)
+
+# v3a: train once per split, score all eval groups
+v3a_scored, _ = train_and_predict(model_table, train_pys, eval_pys, V3A_FEATURES)
+v3a_cache[py, aq, branch] = v3a_scored["score"]
+```
+
+All blend / hard-two-track / adaptive variants reuse these cached base scores.
+No retraining inside the candidate loop.
+
 ### Known holdout numbers (already computed)
 
 | K | v0c TRUE VC | v0c Dorm_inK | v3a TRUE VC | v3a Dorm_inK |
@@ -87,35 +103,38 @@ History_zero appended with score=0 for correct evaluation denominators.
 some of those natural dormant picks and replaces them with NB model picks — which may be
 worse (the NB model is only AUC 0.65).
 
-**R sweep for K=300**: {0, 5, 10, 15, 20, 30}. Prior experiments only tested R=30.
+Tested for both v0c and v3a as Track A.
 
 ### 4.2 Blend (new)
 
-Score all branches with v0c. For dormant branches, add a scaled NB boost:
+Score all branches with the Track A model. For dormant branches only, add a scaled NB boost.
+
+**Normalization contract** (applies to BOTH v0c and v3a):
 
 ```python
-v0c_scores = compute_v0c_scores(group_df)  # all branches
-nb_raw = nb_model.predict(dormant_features)  # dormant only
+base_scores = track_a_cache[group]  # v0c or v3a scores for ALL branches
+nb_raw = nb_model.predict(dormant_features)
 
-# Normalize NB to v0c scale
-v0c_range = v0c_scores.max() - v0c_scores.min()
-nb_norm = (nb_raw - nb_raw.min()) / (nb_raw.max() - nb_raw.min()) * v0c_range
+# Normalize NB to base score scale WITHIN this group
+base_range = base_scores.max() - base_scores.min()
+nb_norm = (nb_raw - nb_raw.min()) / (nb_raw.max() - nb_raw.min() + 1e-10) * base_range
 
 # Blend: dormant branches get boosted, others unchanged
-final_scores = v0c_scores.copy()
+final_scores = base_scores.copy()
 final_scores[is_dormant] += alpha * nb_norm
 ```
 
+The normalization maps NB scores to [0, base_range] regardless of the Track A model's
+score distribution. This works for both v0c (scores in ~[0, 1]) and v3a (LambdaRank
+scores in arbitrary range) because both sides are scaled to the same group-level range.
+
 **Alpha sweep**: {0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5}
 
-**Advantage**: No forced slots. Dormant branches that v0c already ranks well stay in
-position. The NB model only promotes dormant branches it's confident about. At K=400
-where v0c naturally includes 63 dormant branches, this approach preserves v0c's good
-dormant picks while potentially reordering them.
+**Advantage**: No forced slots. Dormant branches that the Track A model already ranks
+well stay in position. The NB model only promotes dormant branches it's confident about.
 
 **Disadvantage**: If NB model signal is weak (AUC 0.65), the boost may promote wrong
-dormant branches and displace marginal established branches that would have contributed
-more SP.
+dormant branches and displace marginal established branches.
 
 ### 4.3 Adaptive R (new)
 
@@ -126,12 +145,12 @@ R_actual = min(R_max, count(nb_score >= tau))
 # Unused slots return to Track A
 ```
 
-Already implemented in `merge_tracks(tau=...)`. The tau sweep from Phase 4b was
-ineffective because all NB scores exceeded the tested thresholds. Need to calibrate
-tau on actual NB score percentiles per split.
+Already implemented in `merge_tracks(tau=...)`.
 
 **Tau calibration**: percentiles {50, 70, 80, 90, 95} of NB scores among dormant
 branches in the training split.
+
+Tested for both v0c and v3a as Track A.
 
 ## 5. Metrics
 
@@ -164,31 +183,74 @@ branches in the training split.
 - K ∈ {150, 200, 300, 400}
 - Champions chosen per pair: (150, 300) and (200, 400)
 
-## 6. Candidate Matrix
+## 6. Candidate Matrix — Paired Configurations
 
-| ID | Track A | NB Integration | Parameters |
-|---|---|---|---|
-| A1 | v0c TRUE solo | None | — |
-| A2 | v3a TRUE solo | None | — |
-| B1 | v0c + hard two-track | R ∈ {5, 10, 15, 20, 30} at each K | Phase 4a NB model |
-| B2 | v3a + hard two-track | R ∈ {5, 10, 15, 20, 30} at each K | Phase 4a NB model |
-| C1 | v0c + blend | α ∈ {0.05, 0.1, 0.15, 0.2, 0.3, 0.5} | Phase 4a NB model |
-| C2 | v3a + blend | α ∈ {0.05, 0.1, 0.15, 0.2, 0.3, 0.5} | Phase 4a NB model |
-| D1 | v0c + adaptive R | R_max=20, tau sweep | Phase 4a NB model |
+Each candidate specifies parameters for BOTH K levels in the pair simultaneously.
+No independent per-K optimization — the pair is the atomic unit.
 
-Total: 2 solo + 10 hard R + 12 blend α + 1 adaptive = ~25 configs per K level.
+### Pair (150, 300)
 
-## 7. Success Criteria
+| ID | Track A | Integration | (R_150 or α_150) | (R_300 or α_300) |
+|---|---|---|---|---|
+| A1 | v0c | solo | — | — |
+| A2 | v3a | solo | — | — |
+| B1a | v0c | hard R | (5, 10) | |
+| B1b | v0c | hard R | (10, 15) | |
+| B1c | v0c | hard R | (10, 20) | |
+| B1d | v0c | hard R | (15, 30) | |
+| B1e | v0c | hard R | (20, 30) | |
+| B2a | v3a | hard R | (5, 10) | |
+| B2b | v3a | hard R | (10, 15) | |
+| B2c | v3a | hard R | (10, 20) | |
+| B2d | v3a | hard R | (15, 30) | |
+| C1a | v0c | blend | (0.05, 0.05) | |
+| C1b | v0c | blend | (0.1, 0.1) | |
+| C1c | v0c | blend | (0.1, 0.2) | |
+| C1d | v0c | blend | (0.2, 0.2) | |
+| C1e | v0c | blend | (0.3, 0.3) | |
+| C2a | v3a | blend | (0.1, 0.1) | |
+| C2b | v3a | blend | (0.2, 0.2) | |
+| C2c | v3a | blend | (0.3, 0.3) | |
+| D1a | v0c | adaptive R | R_max=(10,20), tau sweep | |
+| D2a | v3a | adaptive R | R_max=(10,20), tau sweep | |
 
-A Phase 5 candidate is champion for a K pair if on holdout:
+### Pair (200, 400)
 
-1. **VC@K_hi ≥ best TRUE solo VC@K_hi** (no regression on the higher K level)
-2. **Dang_Recall@K_hi ≥ best TRUE solo Dang_Recall@K_hi**
-3. Among candidates meeting (1) and (2), **maximize NB12_SP@K_hi**
-4. At K_lo: tolerate ≤ 2% VC regression vs TRUE solo if K_hi is a clear win
+Same structure with scaled R values:
+- Hard R pairs: (10, 15), (15, 20), (15, 30), (20, 40), (25, 50)
+- Blend α pairs: same as (150, 300)
+- Adaptive R: R_max=(15, 30), tau sweep
 
-If no NB integration candidate meets (1) and (2), the champion is the best TRUE solo
-model for that K pair.
+Total: ~22 configs per pair × 2 pairs = ~44 configs.
+
+## 7. Paired Scorecard and Champion Selection
+
+### Paired Composite Score
+
+Each candidate is scored on a **paired composite** that weights both K levels:
+
+```
+paired_score = 0.5 * score_lo + 0.5 * score_hi
+```
+
+where `score_K` for a given K is:
+
+```
+score_K = w_vc * VC@K + w_rec * Recall@K + w_dang * Dang_Recall@K + w_nb * NB12_SP@K
+```
+
+Default weights: `w_vc=0.4, w_rec=0.2, w_dang=0.2, w_nb=0.2`
+
+### Hard gates (must pass BOTH K levels)
+
+1. **VC@K ≥ best TRUE solo VC@K - 0.02** at each K (max 2% regression)
+2. **Dang_Recall@K ≥ best TRUE solo Dang_Recall@K - 0.05** at each K
+
+### Champion selection
+
+Among candidates passing hard gates at both K levels, pick highest paired_score.
+
+If no NB integration candidate passes, the champion is the best TRUE solo.
 
 ## 8. Implementation
 
@@ -196,22 +258,31 @@ model for that K pair.
 
 Add K=150/200/300/400 to `all_ks` in `evaluate_group()`.
 Add dangerous branch metrics (SP > 50000 threshold).
-Keep backward compatibility with existing @50/@100 tests.
+
+**Backward compatibility**: Add new constants `PHASE5_K_LEVELS = [150, 200, 300, 400]`
+and `PHASE5_GATE_METRICS` in `ml/config.py`. Keep existing `TIER1_GATE_METRICS` and
+`TWO_TRACK_GATE_METRICS` unchanged. Phase 5 evaluation uses the new constants; existing
+tests and scripts continue to use the old ones.
 
 ### 8.2 Single experiment script
 
 One script: `scripts/run_phase5_reeval.py`
 
-Runs the full candidate matrix on dev, selects top configs, validates on holdout.
-Saves results to registry with the new metric schema.
+1. Build data + enrich (once)
+2. Compute and cache Track A base scores per split (v0c + v3a)
+3. Train NB model per split (once)
+4. Sweep all paired configs on dev
+5. Rank by paired_score, select top 5
+6. Validate on holdout
+7. Save to registry
 
 ### 8.3 Files changed
 
 | File | Change |
 |------|--------|
-| `ml/evaluate.py` | Add K=150/200/300/400, dangerous branch metrics |
-| `ml/config.py` | Add EVAL_K_LEVELS, DANGEROUS_THRESHOLD, updated gate metrics |
-| `scripts/run_phase5_reeval.py` | NEW — full candidate matrix evaluation |
+| `ml/evaluate.py` | Add K=150/200/300/400 to all_ks, add dangerous branch metrics |
+| `ml/config.py` | Add PHASE5_K_LEVELS, PHASE5_GATE_METRICS, DANGEROUS_THRESHOLD. Keep old constants unchanged |
+| `scripts/run_phase5_reeval.py` | NEW — full paired candidate matrix evaluation |
 | `registry/phase5_*/` | NEW — results |
 
 ### 8.4 No changes
@@ -224,8 +295,10 @@ Saves results to registry with the new metric schema.
 
 ## 9. Expected Runtime
 
-- Data build: ~90s (shared across all configs)
-- Per config per group: ~0.5s (v0c scoring) or ~2s (v3a train+predict)
-- 25 configs × 4 K levels × 12 dev groups: ~30 min
-- Holdout (top 5 configs × 4 K × 3 groups): ~2 min
-- Total: ~35 min
+- Data build + enrichment: ~90s (shared)
+- Track A caching: v0c ~1s total, v3a ~15s per split × 4 splits = ~60s
+- NB model training: ~1s per split × 4 = ~4s
+- Per paired config evaluation: ~0.5s per group (reuses cached scores)
+- 44 configs × 12 dev groups × 2 K levels: ~528 evals × 0.5s ≈ ~5 min
+- Holdout (top 5 × 3 groups × 2 K levels): ~15s
+- Total: ~8 min

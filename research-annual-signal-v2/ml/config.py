@@ -177,3 +177,15 @@ TWO_TRACK_GATE_METRICS: list[str] = ["VC@50", "Recall@50", "Abs_SP@50"]
 # Gate rule: candidate must beat baseline on >=2 of 3 holdout groups + mean >= baseline
 GATE_MIN_WINS: int = 2
 GATE_HOLDOUT_COUNT: int = 3
+
+# ─── Phase 5: new metric universe ──────────────────────────────────────
+PHASE5_K_LEVELS: list[int] = [150, 200, 300, 400]
+DANGEROUS_THRESHOLD: float = 50000.0
+PHASE5_GATE_METRICS_150_300: list[str] = [
+    "VC@150", "VC@300", "Recall@150", "Recall@300",
+    "Abs_SP@150", "Abs_SP@300", "Dang_Recall@300",
+]
+PHASE5_GATE_METRICS_200_400: list[str] = [
+    "VC@200", "VC@400", "Recall@200", "Recall@400",
+    "Abs_SP@200", "Abs_SP@400", "Dang_Recall@400",
+]

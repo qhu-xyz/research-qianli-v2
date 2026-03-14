@@ -159,8 +159,24 @@ def evaluate_group(
         n_nb24_binders = nb24_binders.sum()
         metrics[f"NB24_Recall@{k}"] = float((nb24_binders & top_k_mask).sum() / n_nb24_binders) if n_nb24_binders > 0 else 0.0
 
+    # --- Dangerous branch metrics at policy K ---
+    if k <= n or top_k_override is not None:
+        from ml.config import DANGEROUS_THRESHOLD
+        dangerous = actual > DANGEROUS_THRESHOLD
+        n_dangerous = dangerous.sum()
+        if n_dangerous > 0:
+            metrics[f"Dang_Recall@{k}"] = float((dangerous & top_k_mask).sum() / n_dangerous)
+            dang_sp_total = actual[dangerous].sum()
+            metrics[f"Dang_SP_Ratio@{k}"] = float(actual[top_k_mask & dangerous].sum() / dang_sp_total) if dang_sp_total > 0 else 0.0
+            metrics[f"Dang_Count@{k}"] = int((dangerous & top_k_mask).sum())
+        else:
+            metrics[f"Dang_Recall@{k}"] = 0.0
+            metrics[f"Dang_SP_Ratio@{k}"] = 0.0
+            metrics[f"Dang_Count@{k}"] = 0
+        metrics["Dang_Total"] = int(n_dangerous)
+
     # --- Additional K levels (score-based, monitoring only) ---
-    all_ks = [20, 50, 100]
+    all_ks = [20, 50, 100, 150, 200, 300, 400]
     for extra_k in all_ks:
         if extra_k == k:
             continue  # already computed above

@@ -1,7 +1,7 @@
 # Phase 4b Design: Value-Aware Track B with Dynamic Allocation
 
 **Date**: 2026-03-14
-**Status**: Draft
+**Status**: Draft (rev 2 — all review issues addressed)
 **Depends on**: Phase 3 (two-track infra), Phase 4a (established that binary+weights is insufficient)
 
 ---
@@ -41,8 +41,17 @@ Phase 4b addresses all four problems simultaneously:
 
 Phase 4b does NOT:
 - Change Track A scoring (still v0c formula)
-- Attempt to solve history_zero (separate feature-engineering problem)
 - Modify `ml/evaluate.py` or `ml/merge.py` beyond what's needed for dynamic R
+
+**history_zero handling**: history_zero branches are excluded from Track B training and
+reserved slot allocation, but remain in the evaluation universe (score=0). Justification:
+across all Phase 3 and 4a holdout runs, history_zero contributed $0 SP in every group
+except one dev group (2022-06/aq4: $176,937 from zero-history — this was the only nonzero
+zero-history SP across 15 holdout+dev groups). The constraint propagation features (§4.1)
+may eventually help with history_zero if their CIDs overlap with known binders, but this
+requires the branch↔CID mapping infrastructure first. If constraint propagation features
+prove effective for dormant branches, extending them to history_zero is a natural follow-up
+but is not gated as a Phase 4b success criterion.
 
 ## 3. Dormant Subcohorts
 
@@ -86,9 +95,30 @@ frequency and mean SP on other branches in the last 12 months. Aggregate back to
 | `n_active_cids_other` | Count of this branch's CIDs that bound on at least 1 other branch |
 | `active_cid_ratio_other` | `n_active_cids_other / count_cids` |
 
-Data source: the same realized DA / binding frequency tables already used for `bf_combined_12`.
-The join is: for each (branch, cid) pair in the dormant branch, find all OTHER branches
-containing that cid, look up their realized SP for the same period.
+**Data source and infrastructure requirements:**
+
+The current branch-level pipeline (`ml/features.py`, `ml/data_loader.py`) does not
+preserve branch↔CID membership — features are already aggregated to branch level by the
+time they reach the model table. Computing constraint propagation features requires:
+
+1. **Branch↔CID mapping artifact**: A reusable table mapping each branch to its
+   constituent constraint IDs. Source: the pre-aggregation density data in
+   `ml/data_loader.py:load_and_collapse()` which has per-CID rows before the
+   `group_by("branch_name")` step. This mapping must be extracted and cached as a
+   separate artifact (parquet keyed by `(planning_year, aq_quarter, branch_name, cid)`).
+
+2. **Cross-branch CID binding table**: For each CID, compute binding frequency and SP
+   across ALL branches containing that CID in the realized DA history. This is a join of
+   the branch↔CID mapping against the ground truth tables already loaded by
+   `ml/ground_truth.py`.
+
+3. **Aggregation back to branch**: For each dormant branch, look up its CIDs, join to the
+   cross-branch binding table, aggregate (max, mean, sum, count) back to branch level.
+
+This is NOT a simple sidecar feature module — it requires upstream data-loader changes to
+preserve CID-level information that is currently discarded during branch-level aggregation.
+The implementation plan must include a data pipeline task for the branch↔CID mapping
+artifact before the feature computation task.
 
 ### 4.2 Recency Features
 
@@ -102,16 +132,18 @@ containing that cid, look up their realized SP for the same period.
 
 ### 4.3 Density Shape Features
 
-Computed from the existing density distribution (the bin columns already loaded).
+Computed from the existing density bin columns. Note: density bins are **not calibrated
+probabilities** — they are raw simulation counts or scores from SPICE. These features
+capture the shape of the distribution, not probabilistic tail mass.
 
 | Feature | Definition |
 |---------|-----------|
-| `tail_mass_ge_100` | Sum of density bins ≥ 100 (right-tail probability mass) |
-| `tail_mass_ge_110` | Sum of density bins ≥ 110 |
-| `density_entropy` | Shannon entropy of the density distribution |
-| `density_skewness` | Skewness of the density distribution |
-| `density_kurtosis` | Kurtosis of the density distribution |
-| `density_cv` | Coefficient of variation of the density distribution |
+| `tail_sum_ge_100` | Sum of density bin values for bins ≥ 100 (right-tail concentration) |
+| `tail_sum_ge_110` | Sum of density bin values for bins ≥ 110 |
+| `density_entropy` | Shannon entropy of the density bin distribution (treats bins as proportions after normalization) |
+| `density_skewness` | Skewness of the density bin values |
+| `density_kurtosis` | Kurtosis of the density bin values |
+| `density_cv` | Coefficient of variation of the density bin values |
 
 ### 4.4 Persistence & Aggregation Features
 
@@ -169,37 +201,63 @@ params = {
 
 ### 5.2 Experiment 2: `tb_two_stage_ev` — Expected Value
 
-- **Stage 1**: P(bind) binary classifier (LightGBM, same as Phase 4a but with all 33 features)
-- **Stage 2**: `log1p(SP)` regression on **predicted-positive subset** (P(bind) > 0.5)
-- **Final score**: `P(bind) × expm1(predicted_log1p_sp)`
-- **Slot allocation**: dynamic R on expected value
+- **Stage 1**: P(bind) binary classifier (LightGBM binary, all 33 features, same params
+  as Phase 4a but with class ratio folded into weights, no `scale_pos_weight`)
+- **Stage 2**: `log1p(SP)` regression, trained on **true positives only** (branches where
+  `realized_shadow_price > 0` in training data). NOT trained on Stage-1 predicted positives
+  — that would introduce selection bias from Stage 1's errors.
+- **P(bind) threshold for Stage 2 application**: At inference, Stage 2 is applied to ALL
+  dormant branches (not just those above a P(bind) cutoff). The threshold is on the final
+  expected value score, not on P(bind) alone.
+- **Final score**: `P(bind) × expm1(predicted_log1p_sp)` — expected shadow price in
+  dollar terms
+- **Slot allocation**: dynamic R with τ on expected value (see §6.2)
+- **Training procedure**: Both stages use the same expanding-window splits. Stage 1 trains
+  on all dormant branches (binary target). Stage 2 trains on the subset where
+  `realized_shadow_price > 0` (regression target `log1p(SP)`). At inference, both stages
+  score the full dormant population and the scores are multiplied.
 
-The two-stage avoids the zero-inflation problem: Stage 1 filters non-binders, Stage 2
-predicts magnitude among likely binders. More complex, only worth running if Experiment 1
+The two-stage avoids the zero-inflation problem: Stage 1 learns bind/no-bind, Stage 2
+learns magnitude among actual binders. More complex, only worth running if Experiment 1
 shows regression target helps but struggles with the zero-dominated distribution.
 
 ### 5.3 Experiment 3: `tb_uplift_on_v0c` — Uplift Model (safest)
 
 - **Population**: dormant branches only
-- **Target**: `log1p(realized_shadow_price) - v0c_rank_percentile` (residual over v0c)
-- **Final score for dormant**: `v0c_score + α × uplift_score`
-- **No hard track separation** — dormant branches compete directly with established
-- **α** tuned on dev NB12_SP@50
+- **Target**: `log1p(realized_shadow_price)` — same regression target as Experiment 1,
+  but the model is used differently at inference
+- **Model**: LightGBM regression trained on dormant branches only (same as Experiment 1)
+- **Score construction**: At inference, compute a **normalized uplift score** for each
+  dormant branch:
+  1. Predict `log1p(SP)` for each dormant branch via the regression model
+  2. Normalize predicted values to [0, 1] range via min-max within the group
+  3. Normalize v0c scores to [0, 1] range within the group (these are already computed
+     for all branches including dormant — dormant branches get low v0c scores because
+     bf_combined_12 = 0)
+  4. Final dormant score = `(1 - α) × v0c_norm + α × predicted_value_norm`
+  5. Established branches keep their raw v0c scores (also normalized to [0, 1])
+  6. All branches compete on the same normalized scale — no hard track separation
+- **α** tuned on dev NB12_SP@50, sweep α ∈ {0.3, 0.5, 0.7, 0.9}
+- **No forced slot allocation** — dormant branches enter top-K only if their blended
+  score beats the marginal established branch
 
-This is the safest approach: no forced slot allocation, dormant branches only enter top-K
-if their uplift-adjusted score beats the marginal Track A candidate. Preserves VC by
-construction since you're augmenting v0c, not replacing it.
+This is the safest approach: no reserved slots, VC is preserved by construction since
+high-α only promotes dormant branches that the regression model scores highly. If the
+regression has no signal, dormant branches stay at the bottom (dominated by v0c component).
 
 ### 5.4 Experiment Order
 
-1. **Build features first** — constraint propagation + recency are independent of modeling
-   choice and benefit all 3 experiments.
-2. **Run Experiment 3 (uplift) first** — safest, no forced slots, directly tests whether
-   better features + value scoring can surface high-SP dormant branches without degrading VC.
-3. **Run Experiment 1 (regression) second** — simpler modeling, tests whether direct
-   log1p(SP) regression outperforms uplift.
-4. **Run Experiment 2 (two-stage) only if Experiment 1 shows regression helps but
-   zero-inflation is a problem** — the extra complexity is only justified if needed.
+1. **Build data pipeline + features first** — branch↔CID mapping, then constraint
+   propagation + recency + shape features. These are independent of modeling choice and
+   benefit all 3 experiments.
+2. **Run Experiment 1 (regression) first** — simplest end-to-end test of whether
+   value-aware target + new features improve NB12_SP. If regression with dynamic R
+   already hits 10%, Experiments 2-3 may not be needed.
+3. **Run Experiment 3 (uplift) second** — uses the same regression model as Experiment 1
+   but blends with v0c instead of using reserved slots. Tests whether soft integration
+   preserves VC better than hard two-track.
+4. **Run Experiment 2 (two-stage) only if Experiment 1 shows the regression struggles
+   with zero-inflation** — the extra complexity is only justified if needed.
 
 ## 6. Dynamic Slot Allocation
 
@@ -216,19 +274,31 @@ For Experiments 1 and 2, `track_b_score` is the predicted value (log1p(SP) or ex
 value). For Experiment 3, dynamic allocation is implicit — dormant branches compete on
 uplift-adjusted score.
 
-### 6.2 Threshold Calibration
+### 6.2 Threshold Calibration (per-experiment)
 
-`τ` is calibrated on dev to maximize NB12_SP per slot:
+`τ` is calibrated on dev to maximize NB12_SP per slot. The threshold domain differs
+by experiment because the scores have different semantics:
 
+**Experiment 1 (`tb_reg_value`)**: `τ` is on predicted `log1p(SP)`. Candidate values:
+percentiles {50, 60, 70, 80, 90} of predicted `log1p(SP)` among dormant branches in
+dev training splits. A branch with predicted `log1p(SP) < τ` is not allocated a slot.
+
+**Experiment 2 (`tb_two_stage_ev`)**: `τ` is on expected value
+`P(bind) × expm1(predicted_log1p_sp)`. Candidate values: percentiles {50, 60, 70, 80, 90}
+of expected value among dormant branches in dev training splits.
+
+**Experiment 3 (`tb_uplift_on_v0c`)**: No threshold — dynamic allocation is implicit.
+Dormant branches compete on the blended score `(1-α) × v0c_norm + α × pred_norm`
+directly against established branches. No reserved slots, no τ.
+
+Selection criterion for all experiments:
 ```python
-tau = argmax over candidate thresholds:
+best_config = argmax over candidate tau (or alpha for Exp 3):
     mean_over_dev_groups(
-        captured_NB12_SP(slots where score >= tau) / count(slots where score >= tau)
+        NB12_SP@K  # maximize total NB value capture
     )
+    subject to: mean_VC@K >= v0c_mean_VC@K - 0.01  # VC guard
 ```
-
-Candidate thresholds: percentiles {50, 60, 70, 80, 90} of Track B positive-class scores
-on dev training data.
 
 ### 6.3 R_max Values
 
@@ -322,14 +392,28 @@ modeling (predicting at constraint level rather than branch level).
 
 ## 10. Implementation Structure
 
-### 10.1 Feature Engineering (shared across experiments)
+### 10.1 Data Pipeline (must come first)
 
 | File | Change |
 |------|--------|
-| `ml/features_trackb.py` | NEW — constraint propagation, recency, shape, persistence features |
+| `ml/data_loader.py` | Extract branch↔CID mapping artifact from `load_and_collapse()` before branch-level aggregation. Cache as parquet keyed by `(planning_year, aq_quarter, branch_name, cid)` |
+| `ml/cid_mapping.py` | NEW — load/cache the branch↔CID mapping, compute cross-branch CID binding stats |
+
+### 10.2 Feature Engineering (shared across experiments)
+
+| File | Change |
+|------|--------|
+| `ml/features_trackb.py` | NEW — constraint propagation (uses cid_mapping), recency, shape, persistence features. Returns a DataFrame joinable to the model table by branch_name |
 | `ml/features.py` | Add `months_since_last_bind` to model table for subcohort split |
 
-### 10.2 Experiment Scripts
+### 10.3 Library Changes
+
+| File | Change |
+|------|--------|
+| `ml/merge.py` | Add `tau` parameter for score-thresholded R |
+| `ml/config.py` | Add `TRACK_B_FEATURES_V2` (33 features), `DORMANT_SUBCOHORT_CUTOFF = 24`, `PHASE4B_R_MAX_50 = 5`, `PHASE4B_R_MAX_100 = 15` |
+
+### 10.4 Experiment Scripts
 
 | File | Experiment |
 |------|-----------|
@@ -337,18 +421,11 @@ modeling (predicting at constraint level rather than branch level).
 | `scripts/run_phase4b_twostage.py` | Experiment 2: `tb_two_stage_ev` |
 | `scripts/run_phase4b_uplift.py` | Experiment 3: `tb_uplift_on_v0c` |
 
-### 10.3 Infrastructure Changes
-
-| File | Change |
-|------|--------|
-| `ml/merge.py` | Add `tau` parameter for score-thresholded R |
-
-### 10.4 No Changes
+### 10.5 Unchanged
 
 | File | Reason |
 |------|--------|
 | `ml/evaluate.py` | Phase 3 already has K-aware `check_nb_threshold`, `top_k_override` |
-| `ml/config.py` | No new constants needed |
 | `ml/train.py` | Track A training unchanged |
 
 ## 11. Phase 4b Contingency

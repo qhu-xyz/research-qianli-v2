@@ -90,3 +90,30 @@ def test_merge_tracks_provenance():
     tracks = merged["track"].to_list()
     assert tracks.count("A") == 8
     assert tracks.count("B") == 4
+
+
+def test_merge_tracks_tau_filters():
+    """tau parameter filters Track B to only include branches with score >= tau."""
+    from ml.merge import merge_tracks
+    track_a, track_b = _make_track_dfs()
+
+    # Without tau: r=2 -> top 2 from Track B (scores 0.9, 0.7)
+    _, idx_no_tau = merge_tracks(track_a, track_b, k=5, r=2, tau=None)
+    assert len(idx_no_tau) == 5  # 3 from A + 2 from B
+
+    # With tau=0.5: only nb_0(0.9) and nb_1(0.7) qualify -> r_actual=2 (same)
+    _, idx_mid_tau = merge_tracks(track_a, track_b, k=5, r=2, tau=0.5)
+    assert len(idx_mid_tau) == 5
+
+    # With tau=0.8: only nb_0(0.9) qualifies -> r_actual=1
+    merged, idx_high_tau = merge_tracks(track_a, track_b, k=5, r=2, tau=0.8)
+    assert len(idx_high_tau) == 5  # 4 from A + 1 from B
+    merged_names = merged["branch_name"].to_list()
+    track_b_in_top = sum(1 for idx in idx_high_tau if merged_names[idx].startswith("nb_"))
+    assert track_b_in_top == 1
+
+    # With tau=1.0: no Track B qualifies -> r_actual=0
+    _, idx_none_tau = merge_tracks(track_a, track_b, k=5, r=2, tau=1.0)
+    merged_names2 = merged["branch_name"].to_list()
+    track_b_count = sum(1 for idx in idx_none_tau if merged_names2[idx].startswith("nb_"))
+    assert track_b_count == 0

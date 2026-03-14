@@ -160,64 +160,153 @@ Define and test the fallback chain.
 
 ## Production Port (after pre-port validation passes)
 
+### Architecture: Where Annual Bands Actually Get Generated
+
+The existing production flow for ALL period types (monthly + annual):
+
+```
+BaseFtrModel.run() (base.py:566)
+  └── generate_bands(df=total_trades, ...) (band_generator.py:1563)
+        └── generate_bands_for_group(trades, auction_month, period_type, ...)
+              ├── if period_type in {"f0", "f1"}: generate_f0_f1_bands() [LightGBM + conformal]
+              └── else (f2+, q*, aq*, a, yr*): generate_f2p_bands() [rule-based binning]
+                    └── apply_corrected_bid_prices() → bid_price_1..10, clearing_prob_1..10
+                          └── scale_bid_prices_by_duration() → ×3 for aq*, ×12 for a
+```
+
+**Annual (aq1-aq4) currently flows through `generate_f2p_bands()`** — symmetric rule-based
+binned bands with `mtm_1st_mean` as baseline. This is what V10 replaces.
+
+### Correct Integration Seam: Inside `generate_bands_for_group()`
+
+**NOT** at `autotuning.py` (that's feature prep, not bid generation).
+**NOT** as a separate entry point (that bypasses scaling + CP assignment).
+
+The change is inside `generate_bands_for_group()` (band_generator.py:1422-1481):
+
+```python
+# BEFORE (line 1422-1455):
+lgbm_ptypes = {"f0", "f1"}
+if period_type in lgbm_ptypes:
+    # ... LightGBM path
+else:
+    # Rule-based for everything including aq1-aq4
+    train_df = load_training_data_for_f2p(...)
+    result, val_df_with_bands = generate_f2p_bands(train_df, trades.copy())
+
+# AFTER:
+lgbm_ptypes = {"f0", "f1"}
+annual_ptypes = {"aq1", "aq2", "aq3", "aq4"}
+
+if period_type in lgbm_ptypes:
+    # ... LightGBM path (unchanged)
+elif period_type in annual_ptypes:
+    # V10: asymmetric quantile bands from pre-calibrated artifact
+    from .annual_band_generator import generate_annual_bands_for_group
+    result, val_df_with_bands = generate_annual_bands_for_group(
+        trades=trades.copy(),
+        period_type=period_type,
+        class_type=class_type,
+        auction_month=auction_month,
+        round_num=_get_round_from_trades(trades),  # extract from trades DataFrame
+    )
+else:
+    # Rule-based for f2+, q* (unchanged)
+    train_df = load_training_data_for_f2p(...)
+    result, val_df_with_bands = generate_f2p_bands(train_df, trades.copy())
+```
+
+After this, the existing `apply_corrected_bid_prices()` and `scale_bid_prices_by_duration()`
+still run — so the output contract is preserved.
+
+### Scale Contract
+
+**Critical:** The existing pipeline works in **monthly scale** internally:
+- `mtm_1st_mean` is monthly
+- `generate_f2p_bands()` produces monthly-scale band edges
+- `scale_bid_prices_by_duration()` multiplies by 3 for aq* at the end
+
+**V10 research computes in quarterly scale.** For production integration, the annual
+band generator must output **monthly-scale** band edges (i.e., divide by 3), and let
+`scale_bid_prices_by_duration()` do the ×3 conversion. Otherwise bid prices will be 3x too large.
+
+Alternatively: the annual generator outputs quarterly natively, and we skip the scaling
+for annual rows. This is cleaner but requires modifying `scale_bid_prices_by_duration()`.
+
+**Decision needed:** match existing contract (monthly internal, scale at end) vs. clean
+quarterly (skip scaling for annual). The existing contract is safer for initial port.
+
 ### New File: `pmodel/src/pmodel/base/ftr24/v1/annual_band_generator.py`
 
 ```python
-def generate_annual_bands(
+def generate_annual_bands_for_group(
     trades: pd.DataFrame,
-    round_num: int,
-    quarter: str,
-    class_type: str,
-    artifact_path: Path | str,
-    nodal_f0_lookup: pd.DataFrame | None = None,  # required for R1
-) -> pd.DataFrame:
-    """Generate bid prices and clearing probabilities for annual FTR trades.
+    period_type: str,         # aq1-aq4
+    class_type: str,          # onpeak/offpeak
+    auction_month: str,       # e.g. "2026-06"
+    round_num: int,           # 1, 2, or 3
+    artifact_path: Path | str | None = None,  # override artifact location
+    nodal_f0_lookup: pd.DataFrame | None = None,  # R1 only
+) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    """Generate V10 asymmetric bands for one annual (auction_month, period_type) group.
 
-    Parameters
-    ----------
-    trades : DataFrame with source_id, sink_id, class_type, mtm_1st_mean
-    round_num : 1, 2, or 3
-    quarter : aq1, aq2, aq3, aq4
-    class_type : onpeak or offpeak
-    artifact_path : path to calibration_artifact.json
-    nodal_f0_lookup : R1 only — pre-computed nodal f0 lookup table
+    Matches the return signature of generate_f0_f1_bands() and generate_f2p_bands():
+    Returns (result_df_with_bands, val_df_with_bands_or_None).
 
-    Returns
-    -------
-    DataFrame with added columns:
-        baseline_q, lower_p10..upper_p99, bid_price_1..10, clearing_prob_1..10
+    Band edges are in MONTHLY scale to match the production contract.
+    scale_bid_prices_by_duration() handles the ×3 quarterly conversion downstream.
+
+    Required columns in trades:
+      source_id, sink_id, class_type, trade_type, mtm_1st_mean (R2/R3)
+    R1 also needs nodal_f0_lookup for baseline computation.
     """
 ```
 
-### Integration Point: `autotuning.py`
+### Nodal f0 Lookup Schema (corrected)
 
-In the annual R1 processing block (around line 26-33 of `autotuning.py`):
+Key: `(source_id, sink_id, quarter, planning_year)`
 
-```python
-# BEFORE (legacy):
-miso_annual_r1_trades = aptools.tools.fill_mtm_1st_period_with_hist_revenue(...)
+`nodal_f0` is class-agnostic (derived from nodal MCPs, not class-specific) but varies by PY
+(different f0 forward prices each year).
 
-# AFTER (v10):
-from pmodel.base.ftr24.v1.annual_band_generator import generate_annual_bands
-trades_with_bands = generate_annual_bands(
-    trades=miso_annual_r1_trades,
-    round_num=1, quarter=quarter, class_type=class_type,
-    artifact_path=ANNUAL_ARTIFACT_DIR / f"r1/{quarter}/calibration_artifact.json",
-    nodal_f0_lookup=nodal_f0_lookup,
-)
-```
+| Column | Type | Notes |
+|--------|------|-------|
+| source_id | str | Path source node |
+| sink_id | str | Path sink node |
+| quarter | str | aq1-aq4 |
+| planning_year | int | PY of the auction |
+| nodal_f0 | float | Monthly avg of 3 delivery months (monthly scale) |
+
+At inference: `baseline_q = nodal_f0 * 3` for quarterly. But per the scale contract above,
+the band generator works in monthly scale, so `baseline = nodal_f0` (no ×3) and the
+downstream scaler handles quarterly conversion.
+
+### Clearing Probability: Per-Row Assignment
+
+The annual generator must match f0p's CP contract: per-row `bid_price_1..10, clearing_prob_1..10`.
+
+At inference time:
+1. Assign each path to a bin using `|baseline|` and calibration boundaries
+2. Determine flow_type: `prevail` if baseline > 0, `counter` if < 0
+3. Determine bin group: `q5` if in top quintile, else `q1-q4`
+4. Look up empirical CP from artifact: `empirical_clearing_rates[buy/sell_flow_q5][band_edge]`
+5. `trade_type` (buy/sell) comes from the trades DataFrame (required column)
+
+This matches the existing `apply_corrected_bid_prices()` pattern (line 1284 in band_generator.py).
 
 ### Artifacts to Deploy
 
 | Artifact | Location | Refresh Frequency |
 |----------|----------|:-:|
-| `calibration_artifact.json` per (round, quarter) | `/opt/temp/qianli/annual_research/artifacts/v10/r{N}/` | Annually (after new PY data) |
-| `nodal_f0_lookup_PY{YYYY}.parquet` | Same directory | Annually (before R1 auction) |
+| `calibration_artifact.json` per round | `/opt/temp/qianli/annual_research/artifacts/v10/r{N}/` | Annually (after new PY data) |
+| `nodal_f0_lookup_PY{YYYY}.parquet` | Same directory | Before each R1 auction |
 
 ### What Does NOT Change
 
-- `band_generator.py` (monthly f0p) — untouched
-- R2/R3 flow through `autotuning.py` — only baseline changes (`mtm_1st_mean * 3`)
+- `band_generator.py` core logic — untouched (only dispatch added at line ~1422)
+- `scale_bid_prices_by_duration()` — untouched (×3 for aq* already handled)
+- `apply_corrected_bid_prices()` — untouched (annual uses its own CP assignment)
+- `autotuning.py` — untouched (it still calls `generate_bands()` which dispatches internally)
 - The optimizer, bid point generation, trade finalization — all downstream unchanged
 
 ---

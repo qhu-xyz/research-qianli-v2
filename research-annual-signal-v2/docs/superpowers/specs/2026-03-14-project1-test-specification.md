@@ -1,169 +1,198 @@
-# Project 1: Test Specification — Annual Signal Publication
+# Comprehensive Test Specification: 90-Case Layered Suite
 
 **Date**: 2026-03-14
-**Coverage target**: 90 test cases across 6 categories
+**Scope**: Full pipeline — existing ML library through Project 1 publication and Project 2 path rating
 
 ---
 
-## Verification Sources
+## Test Architecture
 
-| Source | What it proves | How we access it |
-|--------|---------------|-----------------|
-| V6.1 annual signal | Schema correctness, metadata values | `/opt/data/xyz-dataset/signal_data/miso/constraints/Signal.MISO.SPICE_ANNUAL_V6.1/` |
-| pmodel loader | Consumer compatibility | `pmodel.base.ftr24.v1.constraint_loader.load_constraints_and_tier_set()` |
-| Phase 5 results | Ranking correctness | `registry/phase5_final_*/metrics.json` |
-
----
-
-## Category 1: Schema Compliance (15 cases)
-
-Tests that the published constraints parquet matches V6.1's exact schema.
-
-| # | Test | Assert |
-|---|------|--------|
-| 1 | Column count | `len(df.columns) == 21` |
-| 2 | Column names match V6.1 | `set(df.columns) == set(v61.columns)` |
-| 3 | Column dtypes match V6.1 | Each column has same dtype as V6.1 |
-| 4 | Index format | Every index value matches regex `r"^\d+\|[+-]?1\|spice$"` |
-| 5 | Index uniqueness | `df.index.is_unique` |
-| 6 | constraint_id is string, non-empty | `df["constraint_id"].str.len().min() > 0` |
-| 7 | branch_name is string, non-empty | `df["branch_name"].str.len().min() > 0` |
-| 8 | flow_direction values | `set(df["flow_direction"].unique()) ⊆ {-1, 1}` |
-| 9 | shadow_sign values | `set(df["shadow_sign"].unique()) ⊆ {-1, 1}` |
-| 10 | tier values | `set(df["tier"].unique()) ⊆ {0, 1, 2, 3, 4}` |
-| 11 | tier dtype is integer | `df["tier"].dtype` in integer types |
-| 12 | shadow_price no NaN | `df["shadow_price"].isna().sum() == 0` |
-| 13 | shadow_sign no NaN | `df["shadow_sign"].isna().sum() == 0` |
-| 14 | shadow_price_da no NaN | `df["shadow_price_da"].isna().sum() == 0` |
-| 15 | __index_level_0__ matches index | `(df["__index_level_0__"] == df.index).all()` |
-
-## Category 2: SF Matrix Compliance (12 cases)
-
-Tests that the published SF parquet is valid and aligned with constraints.
-
-| # | Test | Assert |
-|---|------|--------|
-| 16 | SF columns match constraints index | `set(sf.columns) == set(cstrs.index)` |
-| 17 | SF index (pnode_ids) are strings | `sf.index.dtype == object` (string) |
-| 18 | SF index non-empty | `sf.index.str.len().min() > 0` |
-| 19 | SF no NaN | `sf.isna().sum().sum() == 0` |
-| 20 | SF dtype is float | `sf.dtypes.unique()` all float |
-| 21 | SF has reasonable row count | `500 ≤ len(sf) ≤ 5000` (pnodes) |
-| 22 | SF has reasonable column count | `100 ≤ len(sf.columns) ≤ 5000` (constraints) |
-| 23 | SF is not all zeros | `(sf != 0).any().any()` |
-| 24 | SF sparsity reasonable | `(sf == 0).mean().mean()` between 0.5 and 0.99 |
-| 25 | SF values reasonable range | `sf.abs().max().max() < 10.0` (SFs are fractions) |
-| 26 | No duplicate pnode_ids in SF index | `sf.index.is_unique` |
-| 27 | No duplicate constraint keys in SF columns | `sf.columns.is_unique` |
-
-## Category 3: Metadata Content Correctness (18 cases)
-
-Tests that inherited metadata matches V6.1 source and derived columns are correct.
-
-| # | Test | Assert |
-|---|------|--------|
-| 28 | shadow_price_da matches V6.1 | For overlapping constraints: `max_abs_diff < 1e-6` |
-| 29 | da_rank_value matches V6.1 | For overlapping constraints: `max_abs_diff < 1e-6` |
-| 30 | ori_mean matches V6.1 | For overlapping constraints: `max_abs_diff < 1e-6` |
-| 31 | mix_mean matches V6.1 | For overlapping constraints: `max_abs_diff < 1e-6` |
-| 32 | density_mix_rank_value matches V6.1 | For overlapping constraints: `max_abs_diff < 1e-6` |
-| 33 | density_ori_rank_value matches V6.1 | For overlapping constraints: `max_abs_diff < 1e-6` |
-| 34 | rank_ori matches V6.1 | For overlapping constraints: `max_abs_diff < 1e-6` |
-| 35 | shadow_sign matches V6.1 | For overlapping constraints: exact match |
-| 36 | flow_direction matches V6.1 | For overlapping constraints: exact match |
-| 37 | branch_name matches V6.1 | For overlapping constraints: exact match |
-| 38 | bus_key matches V6.1 | For overlapping constraints: exact match |
-| 39 | bus_key_group matches V6.1 | For overlapping constraints: exact match |
-| 40 | equipment matches V6.1 | For overlapping constraints: exact match |
-| 41 | Overlap with V6.1 ≥ 80% | `len(overlap) / len(v61) ≥ 0.80` |
-| 42 | shadow_price not all zero | `(df["shadow_price"] != 0).sum() > 0` |
-| 43 | shadow_price not all identical | `df["shadow_price"].nunique() > 1` |
-| 44 | rank column is finite | `df["rank"].isna().sum() == 0` and no inf |
-| 45 | rank is monotonic with tier | within each tier, `rank` values don't overlap with adjacent tiers |
-
-## Category 4: Tier and Dedup Correctness (15 cases)
-
-Tests that tier assignment and constraint dedup follow the contract.
-
-| # | Test | Assert |
-|---|------|--------|
-| 46 | All 5 tiers present | `set(df["tier"].unique()) == {0, 1, 2, 3, 4}` |
-| 47 | Tier 0 is smallest | `(df["tier"] == 0).sum() ≤ (df["tier"] == 4).sum()` |
-| 48 | Tier distribution not degenerate | Each tier has ≥ 5% of constraints |
-| 49 | Lower tier = higher rank score | `df[df["tier"]==0]["rank"].min() > df[df["tier"]==4]["rank"].max()` |
-| 50 | Max 3 constraints per branch per bus_key_group | Group by (bus_key_group, branch_name): max count ≤ 3 |
-| 51 | SF Chebyshev ≥ 0.05 within bus_key_group | For selected constraints in same group: pairwise Chebyshev ≥ 0.05 |
-| 52 | No duplicate (constraint_id, shadow_sign) | `df.groupby(["constraint_id", "shadow_sign"]).size().max() == 1` |
-| 53 | Constraint count reasonable | `200 ≤ len(df) ≤ 4000` per (aq, class_type) |
-| 54 | Tier 0 count reasonable | `20 ≤ (df["tier"]==0).sum() ≤ 500` |
-| 55 | Every branch_name appears in CID mapping | All published branch_names exist in `load_cid_mapping()` |
-| 56 | Dedup reduces constraint count | `len(post_dedup) < len(pre_dedup)` |
-| 57 | Dedup preserves top-ranked constraints | Tier-0 constraints are all in post-dedup set |
-| 58 | Same-branch correlation ≥ 0.1 | For selected same-branch constraints: SF correlation ≥ 0.1 |
-| 59 | Cross-constraint correlation ≥ -0.21 | For selected constraints in same group: SF correlation ≥ -0.21 |
-| 60 | Constraint count similar to V6.1 | `0.5 ≤ len(ours) / len(v61) ≤ 2.0` per (aq, class_type) |
-
-## Category 5: Round-Trip and Consumer Compatibility (15 cases)
-
-Tests that the published signal is consumable by pmodel.
-
-| # | Test | Assert |
-|---|------|--------|
-| 61 | Save + load constraints — no crash | `ConstraintsSignal.load_data()` succeeds |
-| 62 | Save + load SF — no crash | `ShiftFactorSignal.load_data()` succeeds |
-| 63 | Loaded constraints shape matches saved | Same row count and column count |
-| 64 | Loaded SF shape matches saved | Same row and column count |
-| 65 | Loaded constraints index matches loaded SF columns | `set(cstrs.index) == set(sf.columns)` |
-| 66 | Loaded constraints values match saved | Max abs diff < 1e-10 for floats |
-| 67 | pmodel load_constraints_and_tier_set — no crash | Loads without error |
-| 68 | pmodel tier sets build correctly | tier_set[0] ⊆ tier_set[1] ⊆ ... (cumulative) |
-| 69 | pmodel SF intersection ≥ 80% | `len(common_constraints) / len(cstrs) ≥ 0.80` |
-| 70 | pmodel shadow_price clipping works | After clip: `abs(shadow_price).max() ≤ clip_value` |
-| 71 | pmodel rename limit→rating — no crash | If limit column present, rename succeeds |
-| 72 | pmodel fillna shadow_price — no change | Already no NaN, so fillna is no-op |
-| 73 | Signal loads for all 4 aq | aq1, aq2, aq3, aq4 all load successfully |
-| 74 | Signal loads for both class_types | onpeak, offpeak both load successfully |
-| 75 | Signal loads for multiple PYs | At least 2025-06 and 2024-06 load |
-
-## Category 6: Ranking Consistency and Cross-Validation (15 cases)
-
-Tests that the published ranking reproduces Phase 5 evaluation results.
-
-| # | Test | Assert |
-|---|------|--------|
-| 76 | Blend scores match Phase 5 | v0c + 0.05×NB produces same ranking as Phase 5 |
-| 77 | Dormant constraints have rank reflecting NB boost | Dormant with high NB score → low tier |
-| 78 | Established constraints ranked by v0c | Established constraint rank ∝ v0c score |
-| 79 | top-K from published rank reproduces Phase 5 VC | At K=300: VC within 0.001 of Phase 5 result |
-| 80 | top-K from published rank reproduces Phase 5 NB12_SP | At K=300: NB12_SP within 0.01 |
-| 81 | Constraint universe stable across aq for same PY | ≥ 50% overlap between aq1 and aq2 |
-| 82 | shadow_price_da identical across aq for same constraint | Historical value doesn't change by quarter |
-| 83 | Tier breaks computed per (aq, class_type) | Tier boundaries differ between aq1 and aq2 |
-| 84 | SF matrices share pnode universe within PY | ≥ 90% pnode overlap across aq |
-| 85 | Published signal for 2025-06 holdout | Can load and evaluate; results match Phase 5 holdout |
-| 86 | Published signal for 2024-06 dev | Can load and evaluate; results match Phase 5 dev |
-| 87 | Dormant branches with 0 blend score → high tier | bf_combined_12=0 + low NB score → tier 3-4 |
-| 88 | History_zero branches excluded from constraints | No constraint whose branch_name has has_hist_da=False |
-| 89 | V6.1 rank_ori and our rank column differ | Our ranking ≠ V6.1 ranking (we have NB blend) |
-| 90 | Top-tier constraint set is production-ready | Pass all schema + content + round-trip tests simultaneously |
+```
+Layer 1: Config / Schema Contract (10)     — can the system even load?
+Layer 2: Data Loading / Bridge / GT (15)   — is the data pipeline correct?
+Layer 3: Scoring / Merge / Evaluation (15) — do models produce correct outputs?
+Layer 4: Registry / Reproducibility (10)   — can we reproduce saved results?
+Layer 5: Phase 5 Champion Regression (10)  — do champion results still hold?
+Layer 6: Project 1 Publication (15)        — is the published signal correct?
+Layer 7: Project 2 Path Rating (10)        — does path rating work correctly?
+Layer 8: Annual-Band Join / Segmentation (5) — does the validation pipeline work?
+```
 
 ---
 
-## Test Organization
+## Layer 1: Config / Schema Contract (10 cases)
+
+Unit tests for `ml/config.py` and `ml/evaluate.py` contracts.
+
+| # | Test | Assert |
+|---|------|--------|
+| 1 | PHASE5_K_LEVELS exists | `[150, 200, 300, 400]` |
+| 2 | DANGEROUS_THRESHOLD exists | `50000.0` |
+| 3 | EVAL_SPLITS has dev + holdout | Both split types present, train/eval PYs correct |
+| 4 | DEV_GROUPS count | 12 groups (3 PYs × 4 quarters) |
+| 5 | HOLDOUT_GROUPS count | 3 groups (2025-06 × aq1/aq2/aq3) |
+| 6 | evaluate_group computes @150/@300 | Extra K metrics include 150, 200, 300, 400 |
+| 7 | evaluate_group computes dangerous metrics | `Dang_Recall@K`, `Dang_SP_Ratio@K`, `Dang_Count@K` present |
+| 8 | check_nb_threshold accepts k param | `check_nb_threshold(per_group, groups, k=300)` works |
+| 9 | merge_tracks accepts tau param | `merge_tracks(a, b, k=300, r=30, tau=0.5)` works |
+| 10 | TIER1_GATE_METRICS unchanged | Old @50/@100 gates still work (backward compat) |
+
+## Layer 2: Data Loading / Bridge / History / GT (15 cases)
+
+Unit + integration tests for data pipeline modules.
+
+| # | Test | Assert |
+|---|------|--------|
+| 11 | load_raw_density returns correct columns | Has all bin columns + constraint_id + outage_date |
+| 12 | load_collapsed returns branch-level features | Unique branch_name, has bin_*_cid_max columns |
+| 13 | load_cid_mapping returns constraint-branch pairs | Has constraint_id, branch_name, is_active |
+| 14 | CID mapping is 1-to-1 | Each constraint_id maps to exactly 1 branch_name |
+| 15 | Bridge mapping handles ambiguous CIDs | Ambiguous CIDs (>1 branch) are dropped, not duplicated |
+| 16 | Ground truth has tiered labels | label_tier ∈ {0, 1, 2, 3}, tier 0 = non-binding |
+| 17 | GT combined ctype | onpeak_sp + offpeak_sp = realized_shadow_price |
+| 18 | History features: BF temporal leakage | bf_combined_12 uses only months < cutoff |
+| 19 | History features: BF values in [0, 1] | All bf_* columns between 0 and 1 |
+| 20 | Model table unique branches | No duplicate branch_names per (PY, aq) |
+| 21 | Cohort assignment correct | established ↔ bf_combined_12 > 0, dormant ↔ bf=0 + has_hist_da |
+| 22 | NB detection aligned with cohort | All is_nb_12=True branches are dormant or zero-history |
+| 23 | compute_recency_features returns correct shape | One row per dormant branch |
+| 24 | months_since_last_bind ≥ 12 for dormant | By definition, dormant branches haven't bound in 12 months |
+| 25 | compute_density_shape returns correct columns | tail_sum_ge_100, density_entropy, etc. |
+
+## Layer 3: Scoring / Merge / Evaluation (15 cases)
+
+Tests for model scoring, merge logic, and metric computation.
+
+| # | Test | Assert |
+|---|------|--------|
+| 26 | v0c formula gives dormant branches nonzero scores | da_rank + density contribute even when bf=0 |
+| 27 | v0c scores are in [0, 1] | min ≥ 0, max ≤ 1 |
+| 28 | NB model (tiered) trains without crash | LightGBM binary on dormant population |
+| 29 | NB model (sqrt) trains without crash | LightGBM binary with sqrt(SP) weights |
+| 30 | NB model predictions are probabilities | All in [0, 1] for logistic, ≥0 for lgbm |
+| 31 | Blend score = v0c + α × normalized NB | For dormant: score > v0c_score; for established: score = v0c_score |
+| 32 | Blend with α=0 equals v0c solo | Identical scores for all branches |
+| 33 | merge_tracks with tau filters correctly | Only Track B branches with score ≥ tau get slots |
+| 34 | merge_tracks R=0 gives all Track A | No Track B branches in top-K |
+| 35 | evaluate_group VC@K is correct | Manual computation matches |
+| 36 | evaluate_group Dang_Recall@K is correct | Manual computation matches |
+| 37 | evaluate_group NB12_SP@K is correct | Ratio of captured NB12 SP / total NB12 SP |
+| 38 | _append_zero_history keeps universe intact | history_zero in evaluation but not in top-K |
+| 39 | Paired scorecard computation correct | 0.5 × score_lo + 0.5 × score_hi with correct weights |
+| 40 | Gate check: VC regression ≤ 2% | Candidates within 0.02 of solo baseline pass |
+
+## Layer 4: Registry / Reproducibility (10 cases)
+
+Tests that saved artifacts are correct and reproducible.
+
+| # | Test | Assert |
+|---|------|--------|
+| 41 | phase5_final_150_300 config exists and is valid JSON | Loads, has "champion", "paired_score" |
+| 42 | phase5_final_150_300 metrics exists and is valid JSON | Loads, has "per_group_lo", "per_group_hi" |
+| 43 | phase5_final_200_400 config exists and is valid JSON | Same structure |
+| 44 | phase5_final_200_400 metrics exists and is valid JSON | Same structure |
+| 45 | v0c registry has holdout metrics | per_group has 2025-06/aq1, aq2, aq3 |
+| 46 | v3a registry has holdout metrics | Same |
+| 47 | save_experiment creates all expected files | config.json, metrics.json, gate_results.json |
+| 48 | load_metrics round-trip | save then load produces identical dict |
+| 49 | Registry versions don't conflict | No two versions claim to be champion for same K pair |
+| 50 | All registry configs have "version" field | Structural consistency |
+
+## Layer 5: Phase 5 Champion Regression (10 cases)
+
+Re-run Phase 5 script and verify results match saved artifacts.
+
+| # | Test | Assert |
+|---|------|--------|
+| 51 | run_phase5_reeval.py executes without crash | Exit code 0 |
+| 52 | (150,300) champion is S1_sqrt_a0.05 | Matches registry/phase5_final_150_300/config.json |
+| 53 | (200,400) champion is C1_a0.05 | Matches registry/phase5_final_200_400/config.json |
+| 54 | (150,300) champion score within tolerance | `|score - 0.5023| < 0.001` |
+| 55 | (200,400) champion score within tolerance | `|score - 0.5716| < 0.001` |
+| 56 | Holdout VC@300 for blend matches saved | `|VC - 0.7237| < 0.005` |
+| 57 | Holdout NB12_SP@300 for blend matches saved | `|NB12_SP - 0.2159| < 0.01` |
+| 58 | Holdout DangR@300 for blend matches saved | `|DangR - 0.8758| < 0.005` |
+| 59 | v0c solo holdout VC@300 matches saved | `|VC - 0.7195| < 0.005` |
+| 60 | v3a fails DangR gate at (200,400) | v3a solo DangR@200 < v0c DangR@200 - 0.05 |
+
+## Layer 6: Project 1 Publication (15 cases)
+
+Tests for the signal publication pipeline.
+
+| # | Test | Assert |
+|---|------|--------|
+| 61 | Published constraints has exactly 21 columns | Same names as V6.1 |
+| 62 | Published constraints column dtypes match V6.1 | Per-column dtype comparison |
+| 63 | Constraint index format correct | Regex `r"^.+\|[+-]?1\|spice$"` for all rows |
+| 64 | Constraint index unique | No duplicates |
+| 65 | SF columns exactly match constraints index | `set(sf.columns) == set(cstrs.index)` |
+| 66 | SF no NaN | `sf.isna().sum().sum() == 0` |
+| 67 | SF values in reasonable range | `sf.abs().max().max() < 10.0` |
+| 68 | Metadata matches V6.1 for overlapping constraints | shadow_price_da, da_rank_value, ori_mean, etc. exact match |
+| 69 | Overlap with V6.1 ≥ 80% | Sufficient constraint universe coverage |
+| 70 | Tier distribution not degenerate | Each tier has ≥ 5% of constraints |
+| 71 | Rank monotonic with tier | Higher rank → lower tier number |
+| 72 | Post-dedup: max 3 per branch per bus_key_group | Dedup cap enforced |
+| 73 | Post-dedup: Chebyshev ≥ 0.05 within group | SF distinctiveness enforced |
+| 74 | ConstraintsSignal.save_data then load_data round-trip | Same DataFrame (within float tolerance) |
+| 75 | ShiftFactorSignal.save_data then load_data round-trip | Same DataFrame |
+
+## Layer 7: Project 2 Path Rating (10 cases)
+
+Tests for path rating computation and nodal replacement.
+
+| # | Test | Assert |
+|---|------|--------|
+| 76 | MisoNodalReplacement.load_data() returns DataFrame | No crash, has from_node / to_node columns |
+| 77 | Nodal replacement resolves chains | A→B→C becomes A→C |
+| 78 | Replaced nodes exist in SF index | After replacement, source/sink are valid pnode_ids |
+| 79 | Path exposure = sf[sink] - sf[source] | Manual computation matches |
+| 80 | Aligned exposure = shadow_sign × path_exposure | Sign adjustment correct |
+| 81 | Path rating score is non-negative | `max(0, aligned_exposure)` ensures this |
+| 82 | Tier weight applied correctly | tier0 × 1.0, tier1 × 0.5, others × 0 |
+| 83 | high_rated segment: any tier-0 aligned_exposure > 0.1 | Definition matches spec |
+| 84 | Segments are exhaustive | high + medium + low + unrated = all paths |
+| 85 | Segments are disjoint | No path in multiple segments |
+
+## Layer 8: Annual-Band Join / Segmentation (5 cases)
+
+Tests for the validation pipeline joining path ratings to band data.
+
+| # | Test | Assert |
+|---|------|--------|
+| 86 | Join uses all 6 keys | planning_year, round, period_type, class_type, source_id, sink_id |
+| 87 | Join produces no duplicates | One row per (path, PY, round, period_type, class_type) |
+| 88 | Per-segment metrics decompose to full-set metrics | Weighted average of segments ≈ full-set metric |
+| 89 | Row-level data used, not metrics.json | Data source is per-path DataFrame, not aggregate |
+| 90 | Segment sizes are reasonable | High segment has ≥ 5% and ≤ 50% of paths |
+
+---
+
+## Test File Organization
 
 ```
 tests/
-  test_signal_publisher.py       # Categories 1-4 (schema, SF, metadata, dedup)
-  test_signal_roundtrip.py       # Category 5 (consumer compatibility)
-  test_signal_ranking.py         # Category 6 (ranking consistency)
+  test_config.py              — Layer 1 (extend existing)
+  test_data_loader.py          — Layer 2 (extend existing)
+  test_bridge.py               — Layer 2 (extend existing)
+  test_ground_truth.py         — Layer 2 (extend existing)
+  test_features.py             — Layer 2 (extend existing)
+  test_evaluate.py             — Layer 3 (extend existing)
+  test_merge.py                — Layer 3 (extend existing)
+  test_registry.py             — Layer 4 (extend existing)
+  test_phase5_regression.py    — Layer 5 (NEW)
+  test_signal_publisher.py     — Layer 6 (NEW, requires Project 1 implementation)
+  test_path_rating.py          — Layer 7 (NEW, requires Project 2 implementation)
+  test_band_validation.py      — Layer 8 (NEW, requires Project 2 implementation)
 ```
 
-Each test file is independent. Categories 1-4 can run without pmodel.
-Category 5 requires pmodel imports. Category 6 requires Phase 5 registry artifacts.
+Layers 1-4 extend existing test files (104 tests already passing).
+Layers 5-8 are new test files created alongside implementation.
+Layer 5 can be written immediately (regression tests against saved artifacts).
+Layers 6-8 are written alongside their respective implementations.
 
-## Test Data
+## Execution Order
 
-- **V6.1 reference**: load from production path for 2024-06/aq1/onpeak
-- **Our signal**: generate for same PY/aq/class, save to temp dir
-- **Phase 5 results**: load from `registry/phase5_final_*/metrics.json`
-- **SF reference**: load V6.1 SF for same PY/aq/class
+1. **Now**: Write Layer 5 (regression tests) — verifies Phase 5 results are stable
+2. **With Project 1**: Write Layers 1-4 extensions + Layer 6
+3. **With Project 2**: Write Layers 7-8

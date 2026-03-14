@@ -1,7 +1,7 @@
 # Phase 4a Design: Value-Weighted Track B on Dormant Subset
 
 **Date**: 2026-03-13
-**Status**: Approved (spec review passed)
+**Status**: Completed (Phase 4a executed, Track B champion)
 **Depends on**: Phase 3 (two-track infrastructure, merge_tracks, evaluate_group top_k_override)
 
 ---

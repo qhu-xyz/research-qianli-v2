@@ -1,7 +1,7 @@
 # Phase 4b Design: Value-Aware Track B with Dynamic Allocation
 
 **Date**: 2026-03-14
-**Status**: Draft (rev 2 — all review issues addressed)
+**Status**: Negative result (Phase 4b regression worse than Phase 4a)
 **Depends on**: Phase 3 (two-track infra), Phase 4a (established that binary+weights is insufficient)
 
 ---

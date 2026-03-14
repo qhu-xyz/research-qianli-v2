@@ -3,6 +3,23 @@
 **Date:** 2026-03-14
 **Version:** V10 (empirical asymmetric quantile bands, quarterly scale)
 **Status:** Research complete. Pre-port validation pending.
+**Production Target:** PY 2026 annual auction (R1 ~April 2026, R2 ~May, R3 ~June)
+
+---
+
+## PY 2026 Data Availability
+
+| Data | Available Now? | When Available |
+|------|:-:|:---|
+| Training data (PY 2019-2025 historical MCPs) | **Yes** | Now — calibrate bands immediately |
+| R1 baseline (nodal_f0 for PY 2026 delivery) | **No** | ~April 2026 — needs f0 forward prices for Jun-Aug 2026 from latest monthly auction |
+| R2 baseline (R1 MCP for PY 2026) | **No** | After R1 clears (~April 2026) |
+| R3 baseline (R2 MCP for PY 2026) | **No** | After R2 clears (~May 2026) |
+| PY 2026 actual MCP (for evaluation) | **No** | Never before auction — this is what we're bidding into |
+
+**What we can do NOW:** Steps 1-2 (holdout validation + calibration artifact with empirical CPs).
+**What needs ~April:** Step 3 (nodal_f0 lookup for PY 2026 paths).
+**What needs the port:** Steps 4-6 + production module.
 
 ---
 

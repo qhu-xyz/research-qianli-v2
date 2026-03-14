@@ -264,7 +264,7 @@ def generate_annual_bands_for_group(
 
 ### Nodal f0 Lookup Schema (corrected)
 
-Key: `(source_id, sink_id, quarter, planning_year)`
+Key: `(source_id, sink_id, period_type, planning_year)`
 
 `nodal_f0` is class-agnostic (derived from nodal MCPs, not class-specific) but varies by PY
 (different f0 forward prices each year).
@@ -273,7 +273,7 @@ Key: `(source_id, sink_id, quarter, planning_year)`
 |--------|------|-------|
 | source_id | str | Path source node |
 | sink_id | str | Path sink node |
-| quarter | str | aq1-aq4 |
+| period_type | str | aq1-aq4 |
 | planning_year | int | PY of the auction |
 | nodal_f0 | float | Monthly avg of 3 delivery months (monthly scale) |
 

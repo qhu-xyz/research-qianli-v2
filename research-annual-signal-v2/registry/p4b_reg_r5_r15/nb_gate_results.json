@@ -1,0 +1,22 @@
+{
+  "k50": {
+    "passed": false,
+    "total_count": 0,
+    "min_total_count": 3,
+    "per_group_counts": {
+      "2025-06/aq1": 0,
+      "2025-06/aq2": 0,
+      "2025-06/aq3": 0
+    }
+  },
+  "k100": {
+    "passed": true,
+    "total_count": 8,
+    "min_total_count": 3,
+    "per_group_counts": {
+      "2025-06/aq1": 3,
+      "2025-06/aq2": 2,
+      "2025-06/aq3": 3
+    }
+  }
+}

@@ -872,10 +872,13 @@ def main():
             .filter(
                 (pl.col(PY_COL) >= 2019)
                 & pl.col("nodal_f0").is_not_null()
-                & pl.col("mcp").is_not_null()
+                & pl.col("mcp_mean").is_not_null()
             )
             .collect()
         )
+        # mcp_mean in R1 baselines was patched to monthly (mcp/3).
+        # Reconstruct quarterly mcp = mcp_mean * 3
+        df = df.with_columns((pl.col("mcp_mean") * 3).alias("mcp"))
         # Scale baseline to quarterly (nodal_f0 is monthly avg of 3 delivery months)
         df = df.with_columns((pl.col("nodal_f0") * 3).alias("baseline_q"))
         return df

@@ -43,14 +43,14 @@
     {
       "path": "crossproduct_work/aq*_all_baselines.parquet",
       "columns": [
-        "mcp_mean",
-        "nodal_f0",
+        "mcp",
+        "baseline_q",
         "class_type"
       ]
     }
   ],
   "environment": {
-    "git_hash": "43da986",
+    "git_hash": "2d8f9d8",
     "python_version": "3.13.5",
     "polars_version": "1.31.0"
   }

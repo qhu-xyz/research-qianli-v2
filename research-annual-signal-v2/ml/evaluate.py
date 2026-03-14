@@ -261,12 +261,13 @@ def check_nb_threshold(
     per_group: dict,
     holdout_groups: list[str],
     min_total_count: int = 3,
+    k: int = 50,
 ) -> dict:
-    """Cross-group NB gate: sum NB12_Count@50 across holdout groups >= min_total_count."""
+    """Cross-group NB gate: sum NB12_Count@K across holdout groups >= min_total_count."""
     per_group_counts: dict[str, int] = {}
     total = 0
     for g in holdout_groups:
-        count = per_group.get(g, {}).get("NB12_Count@50", 0)
+        count = per_group.get(g, {}).get(f"NB12_Count@{k}", 0)
         per_group_counts[g] = count
         total += count
     passed = total >= min_total_count

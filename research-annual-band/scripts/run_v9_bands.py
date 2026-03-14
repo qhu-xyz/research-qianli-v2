@@ -6,6 +6,10 @@ No sign stratification, no correction.
 Temporal expanding CV only (no LOO), min_train_pys=2 for dev.
 8 coverage levels: P10, P30, P50, P70, P80, P90, P95, P99.
 
+QUARTERLY SCALE: Target = mcp (quarterly clearing price).
+Baselines scaled to quarterly: nodal_f0 * 3 for R1, mtm_1st_mean * 3 for R2/R3.
+All band widths are natively in quarterly $/MWh — no monthly-to-quarterly conversion needed.
+
 Dev PYs only (PY 2025 reserved as holdout).
 
 Usage:
@@ -38,7 +42,7 @@ QUARTERS = ["aq1", "aq2", "aq3", "aq4"]
 DEV_R1_PYS = [2020, 2021, 2022, 2023, 2024]
 DEV_R2R3_PYS = [2019, 2020, 2021, 2022, 2023, 2024]
 
-MCP_COL = "mcp_mean"
+MCP_COL = "mcp"  # quarterly clearing price — the economically meaningful target
 PY_COL = "planning_year"
 CLASS_COL = "class_type"
 CLASSES = ["onpeak", "offpeak"]
@@ -863,18 +867,21 @@ def main():
 
     def r1_loader(quarter: str) -> pl.DataFrame:
         parquet_path = R1_DATA_DIR / f"{quarter}_all_baselines.parquet"
-        return (
+        df = (
             pl.scan_parquet(parquet_path)
             .filter(
                 (pl.col(PY_COL) >= 2019)
                 & pl.col("nodal_f0").is_not_null()
-                & pl.col(MCP_COL).is_not_null()
+                & pl.col("mcp").is_not_null()
             )
             .collect()
         )
+        # Scale baseline to quarterly (nodal_f0 is monthly avg of 3 delivery months)
+        df = df.with_columns((pl.col("nodal_f0") * 3).alias("baseline_q"))
+        return df
 
     r1_metrics = run_round(
-        round_num=1, baseline_col="nodal_f0",
+        round_num=1, baseline_col="baseline_q",
         data_loader=r1_loader, pys=DEV_R1_PYS,
     )
     gc.collect()
@@ -883,21 +890,24 @@ def main():
     # ─── R2 ───────────────────────────────────────────────────────────
 
     def r2_loader(quarter: str) -> pl.DataFrame:
-        return (
+        df = (
             pl.scan_parquet(R2R3_DATA_PATH)
             .filter(
                 (pl.col("round") == 2)
                 & (pl.col("period_type") == quarter)
                 & (pl.col(PY_COL) >= 2019)
                 & pl.col("mtm_1st_mean").is_not_null()
-                & pl.col(MCP_COL).is_not_null()
+                & pl.col("mcp").is_not_null()
             )
-            .select(["mtm_1st_mean", MCP_COL, PY_COL, "period_type", CLASS_COL, "source_id", "sink_id"])
+            .select(["mtm_1st_mean", "mcp", PY_COL, "period_type", CLASS_COL, "source_id", "sink_id"])
             .collect()
         )
+        # Scale baseline to quarterly (mtm_1st_mean is monthly)
+        df = df.with_columns((pl.col("mtm_1st_mean") * 3).alias("baseline_q"))
+        return df
 
     r2_metrics = run_round(
-        round_num=2, baseline_col="mtm_1st_mean",
+        round_num=2, baseline_col="baseline_q",
         data_loader=r2_loader, pys=DEV_R2R3_PYS,
     )
     gc.collect()
@@ -906,21 +916,24 @@ def main():
     # ─── R3 ───────────────────────────────────────────────────────────
 
     def r3_loader(quarter: str) -> pl.DataFrame:
-        return (
+        df = (
             pl.scan_parquet(R2R3_DATA_PATH)
             .filter(
                 (pl.col("round") == 3)
                 & (pl.col("period_type") == quarter)
                 & (pl.col(PY_COL) >= 2019)
                 & pl.col("mtm_1st_mean").is_not_null()
-                & pl.col(MCP_COL).is_not_null()
+                & pl.col("mcp").is_not_null()
             )
-            .select(["mtm_1st_mean", MCP_COL, PY_COL, "period_type", CLASS_COL, "source_id", "sink_id"])
+            .select(["mtm_1st_mean", "mcp", PY_COL, "period_type", CLASS_COL, "source_id", "sink_id"])
             .collect()
         )
+        # Scale baseline to quarterly (mtm_1st_mean is monthly)
+        df = df.with_columns((pl.col("mtm_1st_mean") * 3).alias("baseline_q"))
+        return df
 
     r3_metrics = run_round(
-        round_num=3, baseline_col="mtm_1st_mean",
+        round_num=3, baseline_col="baseline_q",
         data_loader=r3_loader, pys=DEV_R2R3_PYS,
     )
     gc.collect()

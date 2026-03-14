@@ -96,25 +96,20 @@ See `research-stage5-tier/CLAUDE.md` and `research-stage5-tier/registry/f0/onpea
 
 **For MISO annual auctions (aq1-aq4), all prices are QUARTERLY (3-month total), not monthly.**
 
-- **`mcp`** = quarterly clearing price (the actual auction result). This is the **prediction target**.
-- **`mcp_mean`** = inconsistent across rounds in `all_residuals_v2.parquet`:
-  - R1: `mcp_mean = mcp` (quarterly)
-  - R2/R3: `mcp_mean = mcp / 3` (monthly average)
-  - **Do NOT use `mcp_mean` for R1.** Use `mcp` directly.
+- **`mcp`** = quarterly clearing price (the actual auction result). This is the **prediction target**. Always use this, never `mcp_mean`.
+- **`mcp_mean`** = **DEPRECATED, DO NOT USE.** Inconsistent units across rounds (R1: quarterly, R2/R3: monthly). Legacy column from `all_residuals_v2.parquet`. If you see `mcp_mean` in code, replace with `mcp`.
 - **`nodal_f0`** = average of 3 monthly f0 prices = **monthly**. Must be multiplied by 3 to match quarterly `mcp`.
-- **`mtm_1st_mean`** for R2/R3 = prior round's MCP / 3 = monthly. Must be multiplied by 3 to match quarterly `mcp`.
+- **`mtm_1st_mean`** for R2/R3 = prior round's MCP / 3 = **monthly**. Must be multiplied by 3 to match quarterly `mcp`.
 
-**Rule:** When building baselines or computing residuals for MISO annual:
+**Rule:** Always work in QUARTERLY scale. Never use monthly-scale columns directly as target or report monthly widths.
 ```python
 # R1: baseline is nodal_f0 scaled to quarterly
-baseline_r1 = nodal_f0 * 3
-residual_r1 = mcp - baseline_r1
+baseline_q = nodal_f0 * 3
+residual = mcp - baseline_q
 
-# R2/R3: baseline is prior round's MCP (already quarterly in mcp column)
-# If using mtm_1st_mean (monthly), scale up:
-baseline_r2 = mtm_1st_mean * 3
-residual_r2 = mcp - baseline_r2
-# Or equivalently, use mcp directly from prior round's cleared trades
+# R2/R3: baseline is mtm_1st_mean scaled to quarterly
+baseline_q = mtm_1st_mean * 3
+residual = mcp - baseline_q
 ```
 
 **Why:** MISO annual FTRs settle quarterly. The auction clears a single price per path per quarter. Monthly `split_month_mcp` values are accounting allocations, not separate auction outcomes. The quarterly `mcp` is the economically meaningful price.

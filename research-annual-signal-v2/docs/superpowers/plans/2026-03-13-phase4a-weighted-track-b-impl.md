@@ -125,10 +125,10 @@ Sweeps tiered vs continuous weighting on dev, validates winner on holdout.
 
 Usage:
     # Dev sweep (all schemes x models x R combos)
-    PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py --track-a v0c
+    PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py
 
     # Holdout validation with specific scheme, model type, and R values
-    PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py --track-a v0c \
+    PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py \
         --holdout --scheme tiered --model-type logistic --r50 5 --r100 15 --version p4a_tiered_r5_r15
 """
 from __future__ import annotations
@@ -191,6 +191,8 @@ def compute_sample_weights(
             weights[pos_mask] = tier_w
     elif scheme == "continuous":
         weights[pos_mask] = 1.0 + np.minimum(np.log1p(sp[pos_mask]), 12.0)
+    else:
+        raise ValueError(f"Unknown weighting scheme: {scheme!r}. Expected 'tiered' or 'continuous'.")
 
     return weights
 
@@ -199,7 +201,15 @@ def compute_sample_weights(
 
 
 def load_track_b_features() -> list[str]:
-    """Load selected Track B features from Phase 3.1."""
+    """Load selected Track B features from Phase 3.1.
+
+    Deliberate shortcut: Phase 3 selected these 12 features on the combined
+    dormant+zero population. Phase 4a trains on dormant-only but reuses the
+    same features. This is acceptable because: (1) zero-history branches have
+    near-zero variance on density features, so they contributed little to
+    feature selection; (2) if Phase 4a is negative, re-screening features
+    on dormant-only would not change the conclusion.
+    """
     path = REGISTRY_DIR / "nb_analysis" / "selected_features.json"
     with open(path) as f:
         return json.load(f)["track_b_features"]
@@ -287,9 +297,29 @@ def train_track_b_model(
     return model
 
 
+def _append_zero_history(
+    merged: pl.DataFrame,
+    group_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Append history_zero branches (score=0) to merged DataFrame.
+
+    history_zero must stay in the evaluation universe so that VC/Recall/NB
+    denominators match the full-universe v0c baseline. They get score=0 and
+    track="Z" so they never appear in top-K (scores too low) and are excluded
+    from reserved slots, but their realized_shadow_price counts toward totals.
+    """
+    zero_df = group_df.filter(pl.col("cohort") == "history_zero")
+    if len(zero_df) == 0:
+        return merged
+    zero_scored = zero_df.with_columns([
+        pl.lit(0.0).alias("score"),
+        pl.lit("Z").alias("track"),
+    ])
+    return pl.concat([merged, zero_scored], how="diagonal")
+
+
 def run_two_track_group(
     group_df: pl.DataFrame,
-    track_a_model: str,
     track_b_model,
     track_b_features: list[str],
     track_b_model_type: str,
@@ -298,32 +328,31 @@ def run_two_track_group(
 ) -> dict:
     """Run two-track merge + evaluation at both K=50 and K=100.
 
-    Change from Phase 3: Track B population is history_dormant only.
-    history_zero is excluded from reserved slots.
+    Change from Phase 3:
+      - Track B population is history_dormant only (reserved slots)
+      - history_zero stays in the evaluation universe (score=0, no reserved slots)
+        so that VC/Recall denominators match full-universe v0c baseline
     """
-    # Split into Track A and Track B (dormant only)
+    # Split into Track A, Track B (dormant), and zero-history
     track_a_df = group_df.filter(pl.col("cohort") == "established")
     track_b_df = group_df.filter(pl.col("cohort") == "history_dormant")
 
-    # Score Track A
-    if track_a_model == "v0c":
-        a_scores = compute_v0c_scores(track_a_df)
-    elif track_a_model == "v3a":
-        raise NotImplementedError("v3a not implemented for Phase 4a")
-
+    # Score Track A (v0c formula only)
+    a_scores = compute_v0c_scores(track_a_df)
     track_a_scored = track_a_df.with_columns(pl.Series("score", a_scores))
 
     # Score Track B (dormant only)
     b_scores = predict_track_b(track_b_model, track_b_df, track_b_features, track_b_model_type)
     track_b_scored = track_b_df.with_columns(pl.Series("score", b_scores))
 
-    # Merge and evaluate at K=50
+    # Merge Track A + Track B, then append history_zero (score=0)
     merged_50, idx_50 = merge_tracks(track_a_scored, track_b_scored, k=50, r=r50)
-    m50 = evaluate_group(merged_50, k=50, top_k_override=idx_50)
+    full_50 = _append_zero_history(merged_50, group_df)
+    m50 = evaluate_group(full_50, k=50, top_k_override=idx_50)
 
-    # Merge and evaluate at K=100
     merged_100, idx_100 = merge_tracks(track_a_scored, track_b_scored, k=100, r=r100)
-    m100 = evaluate_group(merged_100, k=100, top_k_override=idx_100)
+    full_100 = _append_zero_history(merged_100, group_df)
+    m100 = evaluate_group(full_100, k=100, top_k_override=idx_100)
 
     # Combine: take @50 from m50, @100 from m100, plus global metrics from m50
     metrics: dict = {}
@@ -401,7 +430,6 @@ def _run_sweep(
     model_table: pl.DataFrame,
     eval_groups: list[str],
     is_holdout: bool,
-    track_a_model: str,
     track_b_features: list[str],
     model_type: str,
     scheme: str,
@@ -446,7 +474,7 @@ def _run_sweep(
                         (pl.col("planning_year") == py) & (pl.col("aq_quarter") == aq)
                     )
                     metrics = run_two_track_group(
-                        gdf, track_a_model, tb_model,
+                        gdf, tb_model,
                         track_b_features, model_type,
                         r50=r50, r100=r100,
                     )
@@ -459,7 +487,7 @@ def _run_sweep(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--track-a", default="v0c", choices=["v0c", "v3a"])
+    parser.add_argument("--track-a", default="v0c", choices=["v0c"])
     parser.add_argument("--holdout", action="store_true", help="Run on holdout groups")
     parser.add_argument("--scheme", default=None, choices=["tiered", "continuous"],
                         help="Fixed scheme (skip scheme sweep)")
@@ -500,13 +528,13 @@ def main():
 
             results = _run_sweep(
                 model_table, eval_groups, args.holdout,
-                args.track_a, track_b_features, model_type, scheme,
+                track_b_features, model_type, scheme,
                 r50_values, r100_values,
             )
 
             # Print results
             print(f"\n{'='*120}")
-            print(f"  Phase 4a: Track A={args.track_a}, Track B={model_type}, Scheme={scheme}")
+            print(f"  Phase 4a: Track A=v0c, Track B={model_type}, Scheme={scheme}")
             print(f"  Split: {split_label}, Population: dormant-only")
             print(f"{'='*120}")
 
@@ -536,7 +564,7 @@ def main():
         # Re-run with final config (single combo)
         final_results = _run_sweep(
             model_table, eval_groups, True,
-            args.track_a, track_b_features, final_model_type, args.scheme,
+            track_b_features, final_model_type, args.scheme,
             [args.r50], [args.r100],
         )
         per_group = final_results[(args.r50, args.r100)]
@@ -612,7 +640,7 @@ def main():
         config = {
             "version": args.version,
             "phase": "4a",
-            "track_a_model": args.track_a,
+            "track_a_model": "v0c",
             "track_b_model": final_model_type,
             "track_b_features": track_b_features,
             "scheme": args.scheme,
@@ -668,7 +696,7 @@ Evaluates at both K=50 and K=100 with independent R sweeps."
 
 - [ ] **Step 1: Run the full dev sweep (all schemes × models)**
 
-Run: `cd /home/xyz/workspace/research-qianli-v2/research-annual-signal-v2 && PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py --track-a v0c 2>&1 | tee /tmp/phase4a_dev_sweep.txt`
+Run: `cd /home/xyz/workspace/research-qianli-v2/research-annual-signal-v2 && PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py 2>&1 | tee /tmp/phase4a_dev_sweep.txt`
 Expected: 4 blocks of output (tiered/logistic, tiered/lgbm, continuous/logistic, continuous/lgbm). Each block has K=50 and K=100 tables. Runtime ~4-8 minutes (4 scheme×model combos × 3 splits, model training hoisted outside R loop).
 
 - [ ] **Step 2: Analyze Pareto frontier**
@@ -697,7 +725,7 @@ Pick (scheme, model_type, R50, R100) based on:
 
 - [ ] **Step 1: Run holdout with winning config**
 
-Run: `cd /home/xyz/workspace/research-qianli-v2/research-annual-signal-v2 && PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py --track-a v0c --holdout --scheme <WINNER_SCHEME> --model-type <WINNER_MODEL> --r50 <R50> --r100 <R100> --version p4a_<scheme>_r<R50>_r<R100>`
+Run: `cd /home/xyz/workspace/research-qianli-v2/research-annual-signal-v2 && PYTHONPATH=. uv run python scripts/run_phase4a_experiment.py --holdout --scheme <WINNER_SCHEME> --model-type <WINNER_MODEL> --r50 <R50> --r100 <R100> --version p4a_<scheme>_r<R50>_r<R100>`
 
 Replace `<WINNER_SCHEME>`, `<WINNER_MODEL>`, `<R50>`, `<R100>` with values from Task 3 analysis.
 

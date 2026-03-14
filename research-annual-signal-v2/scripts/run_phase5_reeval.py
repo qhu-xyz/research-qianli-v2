@@ -49,11 +49,35 @@ NB_FEATURES = [
 W_SCORECARD = {"VC": 0.4, "Recall": 0.2, "Dang_Recall": 0.2, "NB12_SP": 0.2}
 
 
-def train_nb(train_df: pl.DataFrame) -> lgb.Booster:
+def _weight_tiered(sp: np.ndarray) -> np.ndarray:
+    """Tiered sample weights: equal thirds 1/3/10."""
+    w = np.ones(len(sp))
+    pos = sp > 0
+    if pos.sum() == 0:
+        return w
+    ranks = sp[pos].argsort().argsort()
+    n = len(ranks)
+    w[pos] = np.where(ranks < n // 3, 1.0, np.where(ranks < 2 * n // 3, 3.0, 10.0))
+    return w
+
+
+def _weight_sqrt(sp: np.ndarray) -> np.ndarray:
+    """Sqrt(SP) sample weights: sublinear, value-proportional."""
+    w = np.ones(len(sp))
+    pos = sp > 0
+    if pos.sum() > 0:
+        w[pos] = np.sqrt(sp[pos])
+    return w
+
+
+WEIGHT_FNS = {"tiered": _weight_tiered, "sqrt": _weight_sqrt}
+
+
+def train_nb(train_df: pl.DataFrame, weight_scheme: str = "tiered") -> lgb.Booster:
     X = train_df.select(NB_FEATURES).to_numpy().astype(np.float64)
     sp = train_df["realized_shadow_price"].to_numpy().astype(np.float64)
     y = (sp > 0).astype(int)
-    w = compute_sample_weights(sp, "tiered")
+    w = WEIGHT_FNS[weight_scheme](sp)
     n0, n1 = (y == 0).sum(), (y == 1).sum()
     cw = np.where(y == 1, n0 / max(n1, 1), 1.0)
     ds = lgb.Dataset(X, label=y, weight=cw * w, feature_name=NB_FEATURES, free_raw_data=False)
@@ -116,6 +140,34 @@ def run_hard_r(gdf, base_scores, K, R, nb_model):
         b_top = np.array(dorm_idx)[np.argsort(nb_scores)[::-1][:r_actual]]
     else:
         b_top = np.array([], dtype=int)
+
+    mask = np.zeros(len(gdf), dtype=bool)
+    mask[a_top] = True
+    mask[b_top] = True
+    return eval_at_k(gdf, mask, K)
+
+
+def run_hard_r_tau(gdf, base_scores, K, R, nb_model, tau):
+    """Hard two-track with tau threshold — only insert NB picks scoring >= tau."""
+    cohorts = gdf["cohort"].to_list()
+    estab_idx = [i for i, c in enumerate(cohorts) if c == "established"]
+    dorm_idx = [i for i, c in enumerate(cohorts) if c == "history_dormant"]
+
+    if len(dorm_idx) > 0:
+        dorm_df = gdf[dorm_idx]
+        X_b = dorm_df.select(NB_FEATURES).to_numpy().astype(np.float64)
+        nb_scores = nb_model.predict(X_b)
+        qualified = nb_scores >= tau
+        r_actual = min(R, int(qualified.sum()))
+        qualified_idx = np.array(dorm_idx)[qualified]
+        qualified_scores = nb_scores[qualified]
+        b_top = qualified_idx[np.argsort(qualified_scores)[::-1][:r_actual]]
+    else:
+        r_actual = 0
+        b_top = np.array([], dtype=int)
+
+    n_a = min(K - r_actual, len(estab_idx))
+    a_top = np.array(estab_idx)[np.argsort(base_scores[estab_idx])[::-1][:n_a]]
 
     mask = np.zeros(len(gdf), dtype=bool)
     mask[a_top] = True
@@ -202,15 +254,28 @@ def main():
     for ta in ["v0c", "v3a"]:
         tag = "C1" if ta == "v0c" else "C2"
         for alpha in [0.05, 0.1, 0.15, 0.2, 0.3, 0.5]:
-            CONFIGS.append((f"{tag}_a{alpha:.2f}", ta, "blend", {"alpha": alpha}))
+            CONFIGS.append((f"{tag}_a{alpha:.2f}", ta, "blend", {"alpha": alpha, "weight": "tiered"}))
+
+    # Sqrt weight blend variants
+    for ta in ["v0c", "v3a"]:
+        tag = "S1" if ta == "v0c" else "S2"
+        for alpha in [0.05, 0.1, 0.2]:
+            CONFIGS.append((f"{tag}_sqrt_a{alpha:.2f}", ta, "blend", {"alpha": alpha, "weight": "sqrt"}))
+
+    # Adaptive-R variants (v0c only, tau from NB score percentiles)
+    for r_lo, r_hi in [(10, 20), (15, 30)]:
+        for tau_pctile in [70, 80, 90]:
+            CONFIGS.append((f"D1_R{r_lo}_{r_hi}_p{tau_pctile}", "v0c", "adaptive",
+                            {"r_pairs": (r_lo, r_hi), "tau_pctile": tau_pctile}))
 
     PAIRS = [(150, 300), (200, 400)]
 
     for target_split in (["holdout"] if args.holdout_only else ["dev", "holdout"]):
         eval_groups = DEV_GROUPS if target_split == "dev" else HOLDOUT_GROUPS
 
-        # Cache Track A scores
-        v0c_cache, v3a_cache, nb_cache, group_cache = {}, {}, {}, {}
+        # Cache Track A scores and NB models (both weight schemes)
+        v0c_cache, v3a_cache, group_cache = {}, {}, {}
+        nb_cache: dict[tuple[str, str], lgb.Booster] = {}  # (eval_key, weight_scheme) -> model
         v3a_avail = [f for f in V3A_FEATURES if f in mt.columns]
 
         for ek, si in EVAL_SPLITS.items():
@@ -227,7 +292,8 @@ def main():
                         v3a_cache[(row_py, aq)] = np.array([sm.get(b, 0.0) for b in gdf["branch_name"].to_list()])
             nb_train = mt.filter(pl.col("planning_year").is_in(si["train_pys"])
                                  & (pl.col("cohort") == "history_dormant"))
-            nb_cache[ek] = train_nb(nb_train)
+            for ws in WEIGHT_FNS:
+                nb_cache[(ek, ws)] = train_nb(nb_train, weight_scheme=ws)
 
         for (py, aq), gdf in mt.group_by(["planning_year", "aq_quarter"], maintain_order=True):
             key = f"{py}/{aq}"
@@ -250,7 +316,8 @@ def main():
                 for ek, si in EVAL_SPLITS.items():
                     if si["split"] != target_split:
                         continue
-                    nb_model = nb_cache[ek]
+                    ws = params.get("weight", "tiered")
+                    nb_model = nb_cache[(ek, ws)]
                     for py in si["eval_pys"]:
                         for aq in AQ_QUARTERS:
                             key = f"{py}/{aq}"
@@ -268,6 +335,15 @@ def main():
                                     m = run_hard_r(gdf, base, K, R, nb_model)
                                 elif mode == "blend":
                                     m = run_blend(gdf, base, K, params["alpha"], nb_model)
+                                elif mode == "adaptive":
+                                    # Compute tau from training split NB scores
+                                    nb_train_df = mt.filter(
+                                        pl.col("planning_year").is_in(si["train_pys"])
+                                        & (pl.col("cohort") == "history_dormant"))
+                                    X_train_nb = nb_train_df.select(NB_FEATURES).to_numpy().astype(np.float64)
+                                    train_nb_scores = nb_model.predict(X_train_nb)
+                                    tau = float(np.percentile(train_nb_scores, params["tau_pctile"]))
+                                    m = run_hard_r_tau(gdf, base, K, R, nb_model, tau)
                                 res[key] = m
 
                 all_results[cfg_name][(k_lo, k_hi)] = {"lo": res_lo, "hi": res_hi}

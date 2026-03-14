@@ -66,12 +66,14 @@ All values are in **monthly scale** (matching the resolved production contract).
       "bin_labels": ["q1", "q2", "q3", "q4", "q5"],
       "bin_pairs": { "q1": { "onpeak": { "p95": [-180.2, 120.5], ... }, ... }, ... },
       "empirical_clearing_rates": {
-        "buy_prevail":    { "lower_p95": 5.4, "upper_p95": 98.0, ... },
-        "buy_counter":    { "lower_p95": 2.4, "upper_p95": 96.6, ... },
-        "sell_prevail":   { "lower_p95": 94.6, "upper_p95": 2.0, ... },
-        "sell_counter":   { "lower_p95": 97.6, "upper_p95": 3.4, ... },
-        "buy_prevail_q5": { "lower_p95": 13.9, "upper_p95": 94.6, ... },
-        "buy_counter_q5": { "lower_p95": 2.4, "upper_p95": 94.6, ... }
+        "buy_prevail":     { "lower_p95": 5.4, "upper_p95": 98.0, ... },
+        "buy_counter":     { "lower_p95": 2.4, "upper_p95": 96.6, ... },
+        "sell_prevail":    { "lower_p95": 94.6, "upper_p95": 2.0, ... },
+        "sell_counter":    { "lower_p95": 97.6, "upper_p95": 3.4, ... },
+        "buy_prevail_q5":  { "lower_p95": 13.9, "upper_p95": 94.6, ... },
+        "buy_counter_q5":  { "lower_p95": 2.4, "upper_p95": 94.6, ... },
+        "sell_prevail_q5": { "lower_p95": 86.1, "upper_p95": 5.4, ... },
+        "sell_counter_q5": { "lower_p95": 97.6, "upper_p95": 5.4, ... }
       }
     }
   }
@@ -96,6 +98,11 @@ All values in monthly scale. `boundaries` are monthly |baseline| thresholds.
 
 Key: `(node_id, period_type, planning_year, class_type)`.
 
+**Deriving `planning_year`:** For MISO annual auctions, `auction_month` is always June of the
+planning year (convention in pbase). So: `planning_year = int(auction_month[:4])`.
+Example: `auction_month = "2026-06"` → `planning_year = 2026`.
+This is computed inside `generate_annual_bands_for_group()`, not passed by the caller.
+
 **Why node-level, not path-level:** The research code (`run_aq1_experiment.py` lines 396-439) stores
 node-level MCPs and computes `nodal_f0 = sink_mcp - source_mcp` at join time. Storing path-level
 would require pre-computing the cross product of all (source, sink) pairs (~27K² = 729M rows).
@@ -103,6 +110,7 @@ Node-level is ~50K rows and the path stitch is a simple join.
 
 **At inference:** Join on `(node_id=source_id, period_type, planning_year, class_type)` for source,
 then `(node_id=sink_id, ...)` for sink. `baseline = sink_mcp - source_mcp` (monthly).
+`planning_year` derived from `auction_month` as above.
 
 **Blocked until ~April 2026** for PY 2026 data. Can test with PY 2025 historical now.
 
@@ -119,8 +127,9 @@ then `(node_id=sink_id, ...)` for sink. `baseline = sink_mcp - source_mcp` (mont
 4. Look up (bin, class) quantile pairs from `bin_pairs`
 5. Compute band edges: `lower/upper = baseline + lo/hi` (monthly)
 6. Determine `flow_type` = prevail if baseline > 0, counter otherwise
-7. Determine `bin_group` = q5 if `|baseline| >= boundaries[4]`, else q1-q4
-8. Look up empirical CP from `empirical_clearing_rates[{trade_type}_{flow_type}_{bin_group}]`
+7. Determine `bin_group` = "q5" if `|baseline| >= boundaries[4]`, else "" (base key)
+8. Look up empirical CP: key = `f"{trade_type}_{flow_type}_q5"` if q5 else `f"{trade_type}_{flow_type}"`.
+   If q5 key missing in artifact, fall back to base key.
 9. Select 10 band edges, sort by trade_type, output `bid_price_1..10, clearing_prob_1..10`
 
 **Output columns (monthly scale):** `baseline, lower_p10..upper_p99, bid_price_1..10, clearing_prob_1..10`

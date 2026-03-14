@@ -190,3 +190,41 @@ Added in Phase 4a (3): `shadow_price_da`, `da_rank_value`, `historical_max_sp`
 2. Do NOT invest more in LightGBM recipe tuning — the feature set is the binding constraint.
 3. Constraint-level modeling remains theoretically promising but requires a different bridge
    mapping that allows CID sharing across branches.
+
+---
+
+## 8. Audit Verification (2026-03-14-code-audit-review.md)
+
+### Finding 3 (HIGH): R=0 rows not true solo baselines — VERIFIED, NO IMPACT
+
+Re-ran true solo baselines (all branches scored globally, no track splitting).
+v0c TRUE solo numbers are **identical** to the R=0 two-track numbers at all K levels.
+Reason: v0c formula gives dormant branches very low scores (bf_combined_12=0 → norm=0),
+so they naturally fall below rank 150-300 anyway.
+
+v3a has small differences (the two-track R=0 was slightly biased), but the v3a comparison
+was not used for the champion decision — v0c+NB was compared against v0c TRUE solo.
+
+**Pareto claim at K=300 is confirmed valid.**
+
+### Finding 1 (HIGH): Evaluator hardcoded to @50/@100 — ACKNOWLEDGED
+
+The official evaluator (`ml/evaluate.py`) needs to be updated to support K=150/200/300/400
+and dangerous branch metrics. Current champion results are from ad-hoc scripts.
+This is a reproducibility gap, not a correctness issue.
+
+### Dormant Branch Natural Inclusion (new finding)
+
+v0c naturally includes dormant branches at higher K because da_rank and density give
+them nonzero scores:
+
+| K (holdout) | v0c Dorm_in_topK | v3a Dorm_in_topK |
+|---|:---:|:---:|
+| 150 | 1.0 | 0.0 |
+| 200 | 3.3 | 0.0 |
+| 300 | 21.0 | 5.7 |
+| 400 | 63.3 | 25.3 |
+
+At K=400, v0c already includes 63 dormant branches naturally. The NB model's 30 reserved
+slots are partially redundant at this K level but still add targeted NB12 binder selection
+vs v0c's untargeted dormant inclusion.

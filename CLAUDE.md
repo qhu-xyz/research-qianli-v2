@@ -60,12 +60,51 @@ For notebooks, use `%env RAY_ADDRESS=ray://10.8.0.36:10001` in the first cell in
 ### Rules
 - Call `init_ray()` ONCE at script start, BEFORE any data access
 - **Never** use `multiprocessing`, `concurrent.futures`, `joblib`, `dask`, or `threading` — always use Ray
-- Use `@ray.remote(scheduling_strategy="SPREAD")` for all parallel tasks — always include `SPREAD`
+- Use `@ray.remote(scheduling_strategy="SPREAD")` for all parallel tasks — **always include `SPREAD`** (DEFAULT packs tasks onto one node)
 - Use `ray_map_bounded` from `pbase.utils.ray` for bounded concurrency (preferred over raw `ray.get(futures)`)
 - Use `ray.put(big_obj)` for large shared data — pass the ref to `.remote()` calls to avoid repeated serialization
 - Migrate away from `parallel_equal_pool` — use `@ray.remote` + `ray_map_bounded` instead (avoids deadlocks under nesting)
-- See the `parallel-with-ray` skill for full patterns (composable functions, ObjectRef optimization, conversion procedure)
 - The Ray cluster address `ray://10.8.0.36:10001` is the standard dev cluster
+
+### Ray Patterns for Annual Research
+
+**Nodal f0 lookup computation** (Step 3 of prod-port) requires Ray for `MisoCalculator.get_mcp_df()`:
+
+```python
+import os
+os.environ["RAY_ADDRESS"] = "ray://10.8.0.36:10001"
+from pbase.config.ray import init_ray
+import pmodel
+init_ray(extra_modules=[pmodel])
+
+from pbase.data.m2m.calculator import MisoCalculator
+from pbase.data.dataset.replacement import MisoNodalReplacement
+
+calc = MisoCalculator()
+mcp_df, _ = calc.get_mcp_df(market_month="2025-06", fillna=True)
+# Always ray.shutdown() when done to free cluster resources
+```
+
+**Composable function pattern** (for nested parallelism):
+- Coordinators: `num_cpus=0.1` — only dispatch, never do heavy compute
+- Leaf workers: `num_cpus=1+` — do the actual computation
+- Never call `ray.get()` between `.remote()` calls (submit all, then collect)
+- Pass `ObjectRef` directly to inner `.remote()` calls — Ray auto-resolves
+
+**Bounded concurrency** (when dispatching many tasks):
+```python
+from pbase.utils.ray import ray_map_bounded
+
+@ray.remote(num_cpus=0.5, scheduling_strategy="SPREAD")
+def process_item(data_ref, key):
+    return heavy_computation(ray.get(data_ref), key)
+
+data_ref = ray.put(big_dataframe)
+args_list = [(data_ref, key) for key in keys]
+results = ray_map_bounded(process_item, args_list, max_concurrent=12)
+```
+
+See `/parallel-with-ray` skill for full patterns including error handling, cancellation, and ObjectRef optimization.
 
 ## Run Performance (MANDATORY)
 

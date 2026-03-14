@@ -229,7 +229,26 @@ Phase 4a is successful if, on holdout at the selected (R50, R100):
 4. **NB threshold passes** at both K=50 and K=100
 
 If NB12_SP does not improve, the approach is not earning its complexity and Phase 4a is
-declared negative. Next step would be Phase 4b (regression), but that is out of scope here.
+declared negative.
+
+## 6.1 Phase 4b Contingency: SP Regression on Dormant Subset
+
+If Phase 4a is negative or shows only marginal NB12_SP improvement, Phase 4b explores
+regression on the dormant subset. The Track B features (12 density bin features) describe
+the forward-looking SP distribution — the same domain as the target (realized SP). This
+makes a coherent regression problem: given simulated SP distribution, predict realized SP.
+
+**Approach**: Two-stage model on dormant population:
+1. **Stage 1**: Binary P(bind) filter (reuse Phase 4a model)
+2. **Stage 2**: `log1p(realized_shadow_price)` regression on predicted-positive subset
+3. **Ranking score**: `P(bind) × E[SP | bind]`
+
+This avoids the zero-inflation problem (92% zeros dominating a single-stage regression)
+while capturing binding strength. The two-stage approach lets each model focus on what it
+does well: Stage 1 separates binders from non-binders, Stage 2 separates high-SP from
+low-SP among predicted binders.
+
+Phase 4b is out of scope for this implementation cycle.
 
 ## 7. Script Design
 

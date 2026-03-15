@@ -191,11 +191,12 @@ label_tier = tiered_labels(onpeak_sp)  # tiers based on onpeak SP only
 
 | File | Change |
 |------|--------|
-| `ml/config.py` | Add `CLASS_TYPES = ["onpeak", "offpeak"]`, class-specific BF column mapping |
-| `ml/features.py` | Parameterize `build_model_table(class_type=...)` — use class-specific BF, target, cohort |
-| `ml/ground_truth.py` | Add `class_type` param — return `onpeak_sp` or `offpeak_sp` as target |
-| `ml/history_features.py` | Already has `bf_12` and `bfo_12` — just needs routing |
-| `ml/nb_detection.py` | Already has `nb_onpeak_12` and `nb_offpeak_12` — just needs routing |
+| `ml/config.py` | Add `CLASS_TYPES`, class-specific BF/target/cohort column mappings |
+| `ml/features.py` | Parameterize `build_model_table(class_type=...)` — route class-specific target, BF, cohort, AND cross-class features |
+| `ml/ground_truth.py` | Add `class_type` param — return `onpeak_sp` or `offpeak_sp` as target, recompute `label_tier` per class |
+| `ml/history_features.py` | New outputs: class-specific `shadow_price_da_{ctype}`, `da_rank_value_{ctype}`, AND cross-class columns (`bf_12` available to offpeak model, `bfo_12` available to onpeak model). Not just routing — needs to expose both same-class and cross-class history as separate features. |
+| `ml/nb_detection.py` | Route `nb_onpeak_12` / `nb_offpeak_12` per class |
+| `ml/features_trackb.py` | Recompute `historical_max_sp` per class (currently combined) |
 | `ml/evaluate.py` | No change — evaluation is target-agnostic |
 
 ### 7.2 New Scripts

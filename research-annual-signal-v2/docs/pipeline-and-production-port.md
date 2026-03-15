@@ -81,11 +81,11 @@ source contracts, not V6.1 inheritance.
 | Column | Source (V6.1 overlap) | Source (new constraints) |
 |--------|----------------------|------------------------|
 | constraint_id | Bridge mapping | Bridge mapping |
-| flow_direction | V6.1 | SPICE density |
+| flow_direction | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO or bridge |
 | branch_name | V6.1 | Bridge mapping |
-| bus_key | V6.1 | SPICE density |
-| bus_key_group | V6.1 | SPICE density |
-| equipment | V6.1 | SPICE density |
+| bus_key | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO |
+| bus_key_group | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO |
+| equipment | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO |
 | shadow_price_da | V6.1 (inherited) | DA history (branch-level, class-specific) |
 | da_rank_value | V6.1 (inherited) | Rank of computed shadow_price_da |
 | ori_mean | V6.1 (inherited) | SPICE density |
@@ -106,26 +106,26 @@ source contracts, not V6.1 inheritance.
 
 ## 3. Remaining Gaps
 
-### 3.1 shadow_price Derivation
+### 3.1 shadow_price — FROZEN: use shadow_sign
 
-V6.1's `shadow_price` is computed by SPICE from forward-looking simulation. We don't
-have access to the SPICE shadow price computation for our custom constraint ranking.
+**Decision**: `shadow_price = shadow_sign` (just +1 or -1).
 
-**Options**:
-1. **Inherit V6.1's shadow_price** — for constraints in V6.1, use their shadow_price.
-   For new constraints not in V6.1 (rare), use shadow_price_da as fallback.
-2. **Derive from density** — compute an expected shadow price from the density
-   distribution. Less accurate than SPICE but purely from our data.
-3. **Use shadow_price_da** — historical DA shadow price. Available for all constraints
-   but backward-looking, not forward.
+pmodel uses `shadow_price` in `get_node_exposure()` as: `exposure = SF × shadow_price × tier_weight`.
+With `shadow_price = shadow_sign`, this becomes `exposure = SF × direction × tier_weight`,
+which is tier-driven ranking. This matches the business decision to use tiers only.
 
-**Recommendation**: Option 1 (inherit from V6.1 where available, shadow_price_da fallback).
-This preserves the SPICE-quality forward estimate for the vast majority of constraints.
+This is simpler, avoids the SPICE shadow_price computation gap, and does not break
+pmodel (verified: the optimizer accepts any non-NaN float in shadow_price).
 
 ### 3.2 Constraint Universe Size
 
-V6.1 publishes ~3,000 constraints per aq. After our dedup (max 3/branch, SF Chebyshev,
-correlation bounds), we'll have ~300-1,500. This is intentional — we publish the
+**Pre-dedup density universe**: ~12,800-13,000 constraints per (PY, aq). Class-agnostic —
+the density universe does not change by class_type.
+
+**V6.1 published**: ~280-480 per (PY, aq, class_type) after V6.1's selection/dedup.
+
+**Our post-dedup V7.0**: will be in a similar range (~300-500 per (PY, aq, ctype)),
+depending on scoring + dedup thresholds. This is intentional — we publish the
 post-dedup set that pmodel will actually use.
 
 **Gap**: If pmodel expects to load multiple signals and union their constraint sets
@@ -262,7 +262,7 @@ Step 2: Expand branch → constraints (FROZEN: pure branch inheritance)
 
 Step 3: Join V6.1 metadata
   └─ shadow_price_da, da_rank_value, ori_mean, mix_mean, rank_ori, etc.
-  └─ shadow_price: inherit V6.1 where available, shadow_price_da fallback
+  └─ shadow_price = shadow_sign (direction only, frozen contract)
 
 Step 4: Assign tiers (0-4) by blend score rank
 

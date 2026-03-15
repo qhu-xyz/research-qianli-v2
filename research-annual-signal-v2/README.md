@@ -66,12 +66,13 @@ prediction for dormant branches only. No forced slot reservation.
 | `model-comparison-report.md` | **Current** — all models compared with holdout tables |
 | `pipeline-and-production-port.md` | **Current** — full pipeline + V6.1/V7.0 artifact map + gaps |
 | `signal-generation-procedure.md` | Reference — SPICE V6.2B signal generation procedure |
-| `superpowers/specs/project1-annual-signal-publication.md` | **Active — next implementation** |
-| `superpowers/specs/project2-path-rating-band-validation.md` | **Active — next implementation** |
+| `superpowers/specs/class-specific-pipeline-design.md` | **Active — class-type separation** |
+| `superpowers/specs/project1-annual-signal-publication.md` | **Active — constraint-level publication** |
+| `superpowers/specs/project2-path-rating-band-validation.md` | **Active — path rating** |
 | `superpowers/specs/project1-test-specification.md` | **Active — 90-case test plan** |
-| `superpowers/specs/phase5-reeval-design.md` | Executed |
-| `superpowers/findings/nb-two-track-consolidated.md` | **Current findings** |
-| `archive/` | Historical (phase1-2 plans, phase3-4 designs, old reviews) |
+| `superpowers/specs/phase5-reeval-design.md` | Executed (combined-ctype baseline) |
+| `superpowers/findings/nb-two-track-consolidated.md` | **Current findings** (combined-ctype) |
+| `archive/` | Historical (phase1-4 designs, old reviews) |
 
 ## Key Findings
 

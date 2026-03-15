@@ -3,6 +3,11 @@
 **Date**: 2026-03-14
 **Scope**: Full pipeline — existing ML library through Project 1 publication and Project 2 path rating
 
+> **NOTE**: Layers 1-5 test the current combined-ctype pipeline. Once the class-specific
+> pipeline is built (see `2026-03-15-class-specific-pipeline-design.md`), additional
+> class-specific test cases will be needed for: class-specific targets, BF, cohorts,
+> and per-class champion validation.
+
 ---
 
 ## Test Architecture

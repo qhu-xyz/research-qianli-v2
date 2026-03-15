@@ -248,6 +248,11 @@ DANGEROUS_THRESHOLD, PHASE5_GATE_METRICS. Old constants preserved.
 
 ## 9. Phase 5: Final Re-evaluation (audited, with registry artifacts)
 
+> **COMBINED-CTYPE BASELINE**: All Phase 5 results below were trained on combined
+> `onpeak_sp + offpeak_sp`. V6.1 production signals are class-specific. These results
+> serve as the combined-ctype baseline. Class-specific pipeline is the required next
+> step — see `docs/superpowers/specs/2026-03-15-class-specific-pipeline-design.md`.
+
 Phase 5 re-evaluated all candidates under the new metric framework using true solo
 baselines (not biased R=0 two-track), paired scorecard, and saved to registry.
 

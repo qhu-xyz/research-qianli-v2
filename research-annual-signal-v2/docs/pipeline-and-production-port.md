@@ -175,27 +175,16 @@ custom logic from the team.
 ### 3.5 Per-Class-Type Signal — MUST BE CLASS-SPECIFIC
 
 V6.1 publishes **genuinely different signals** for onpeak and offpeak (verified):
-- Different constraint sets: 425 onpeak vs 413 offpeak (78% overlap) for 2024-06/aq1
-- Different `shadow_price_da`: max diff $7,318 for same constraint across class types
-- Different rankings, tiers: up to 3 tier difference for same constraint
-- Root cause: `shadow_price_da` is computed from historical DA separately per hour type
-- `ori_mean`, `mix_mean`, SF values: identical across class types (class-agnostic)
+- Different constraint sets: 425 onpeak vs 413 offpeak (78% overlap)
+- Different `shadow_price_da`: max diff $7,318 for same constraint
+- Different rankings and tiers: up to 3 tier difference for same constraint
 
-**Current research limitation**: Our Phase 5 models were trained on combined SP
-(`onpeak_sp + offpeak_sp`). This is a known gap — the current champion results are
-from a combined-ctype model.
+**Current limitation**: Phase 5 models were trained on combined SP. Class-specific
+pipeline is required for production.
 
-**Required for V7.0**: Build class-specific pipeline:
-- Separate targets: `onpeak_sp` for onpeak model, `offpeak_sp` for offpeak
-- Separate BF: `bf_12` for onpeak, `bfo_12` for offpeak
-- Separate cohorts: dormant = `bf_12 == 0` for onpeak (not `bf_combined_12`)
-- Class-specific `shadow_price_da` / `da_rank_value` from V6.1 or computed from DA
-- Separate NB model per class_type
-- Publish separate signal artifacts per class_type
-
-The existing ML infrastructure supports this — all class-specific columns already
-exist in the pipeline (`onpeak_sp`, `offpeak_sp`, `bf_12`, `bfo_12`, `nb_onpeak_12`,
-`nb_offpeak_12`). The change is using them separately instead of combining.
+**See**: `docs/superpowers/specs/2026-03-15-class-specific-pipeline-design.md` for the
+full class-separation design — what changes, what stays, experiment plan, and
+implementation details.
 
 ---
 

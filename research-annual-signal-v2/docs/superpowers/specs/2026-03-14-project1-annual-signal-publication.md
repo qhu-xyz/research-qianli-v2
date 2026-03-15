@@ -31,7 +31,9 @@ Therefore:
 **Index**: `"{constraint_id}|{shadow_sign}|{scenario}"` — the join key into SF and tier
 sets. Must be unique and stable. `scenario` = `"spice"` for our signal.
 
-**All 21 columns** (matching V6.1 and V6.2B schema exactly):
+**20 data columns + parquet index** (matching V6.1 and V6.2B schema exactly).
+Note: `__index_level_0__` appears when loaded via polars but is the parquet index,
+not a data column. The actual parquet has 20 data columns:
 
 | Column | Type | Source | Notes |
 |--------|------|--------|-------|

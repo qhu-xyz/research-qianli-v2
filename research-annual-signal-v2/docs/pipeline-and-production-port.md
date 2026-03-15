@@ -13,13 +13,16 @@
 V6.2B is the monthly constraint signal for f0p period types. For each
 `(auction_month, period_type, class_type)`, it publishes:
 
-**Constraints parquet** (21 columns):
+**Constraints parquet** (20 data columns + parquet index):
 ```
-constraint_id, flow_direction, branch_name, bus_key, bus_key_group, equipment,
-shadow_price_da, shadow_price, shadow_sign, da_rank_value, ori_mean, mix_mean,
-density_mix_rank_value, density_ori_rank_value, rank_ori, density_mix_rank,
-rank, tier, mean_branch_max, mean_branch_max_fillna, __index_level_0__
+Index: "{constraint_id}|{shadow_sign}|{scenario}" (parquet index, not a data column)
+Columns (20): constraint_id, flow_direction, branch_name, bus_key, bus_key_group,
+  equipment, shadow_price_da, shadow_price, shadow_sign, da_rank_value, ori_mean,
+  mix_mean, density_mix_rank_value, density_ori_rank_value, rank_ori,
+  density_mix_rank, rank, tier, mean_branch_max, mean_branch_max_fillna
 ```
+Note: `__index_level_0__` appears as a column when loaded via polars (which reads
+the parquet index as a column). The actual parquet has 20 data columns.
 
 **SF parquet**: pnode × constraint matrix (rows = pnode_ids, columns = constraint index)
 
@@ -27,13 +30,13 @@ rank, tier, mean_branch_max, mean_branch_max_fillna, __index_level_0__
 
 ### 1.2 V6.1 (Annual Signal) Artifacts
 
-V6.1 is the existing annual constraint signal. **Identical 21-column schema** as V6.2B.
+V6.1 is the existing annual constraint signal. **Identical 20-column schema** as V6.2B.
 
 | Difference | V6.2B | V6.1 |
 |---|---|---|
 | Period types | f0, f1, f2, ... | aq1, aq2, aq3, aq4 |
 | Auction month | Calendar month (2024-01, etc.) | Planning year (2024-06) |
-| Constraint universe | ~1,111 per (month, ptype) | ~2,900-3,400 per (PY, aq) |
+| Constraint universe | ~550 per (month, ptype, ctype) | **~280-480 per (PY, aq, ctype)** |
 | shadow_price_da values | f0p-specific historical DA | Annual-specific historical DA |
 | Values overlap? | **NO** — $30k max diff on same constraint_id | |
 
@@ -41,7 +44,7 @@ V6.1 is the existing annual constraint signal. **Identical 21-column schema** as
 
 | Artifact | Format | Consumer |
 |----------|--------|----------|
-| Constraints parquet | 21 cols, indexed by `{cid}\|{sign}\|{scenario}` | pmodel `load_constraints_and_tier_set()` |
+| Constraints parquet | 20 cols, indexed by `{cid}\|{sign}\|{scenario}` | pmodel `load_constraints_and_tier_set()` |
 | SF parquet | pnode × constraint matrix | pmodel exposure computation |
 | Tier assignment | Integer 0-4, cumulative semantics | pmodel tier_set construction |
 
@@ -53,42 +56,46 @@ V6.1 is the existing annual constraint signal. **Identical 21-column schema** as
 
 | Artifact | V6.1 (existing) | V7.0 (ours) | Match? |
 |----------|-----------------|-------------|--------|
-| **Constraints parquet** | 21 cols, ~3,000 rows/aq | 21 cols, ~300-1,500 rows/aq (post-dedup) | **Schema: YES. Row count: SMALLER** |
-| **SF parquet** | pnode × constraint | pnode × constraint | **YES** |
+| **Constraints parquet** | 20 cols, ~280-480 rows per (aq, ctype) | 20 cols, similar range (post-dedup) | **Schema: YES** |
+| **SF parquet** | pnode × constraint | pnode × constraint | **YES (exact parity verified)** |
 | **Index format** | `{cid}\|{sign}\|spice` | `{cid}\|{sign}\|spice` | **YES** |
 | **Tier 0-4** | Assigned by V6.1 rank_ori | Assigned by our blend score | **Format: YES. Values: DIFFERENT** |
-| **shadow_price_da** | V6.1 annual-specific | Inherited from V6.1 | **IDENTICAL** |
-| **da_rank_value** | V6.1 annual-specific | Inherited from V6.1 | **IDENTICAL** |
-| **ori_mean, mix_mean** | V6.1 annual-specific | Inherited from V6.1 | **IDENTICAL** |
-| **rank_ori** | 0.60*da_rank + 0.30*mix + 0.10*ori | Same formula | **IDENTICAL** |
+| **shadow_price_da** | V6.1 annual-specific | For V6.1 overlap: inherited. For new: computed from DA history (branch-level) | **Overlap: IDENTICAL. New: computed** |
+| **da_rank_value** | V6.1 annual-specific | Recomputed from shadow_price_da | **DIFFERENT (our universe may differ)** |
+| **ori_mean, mix_mean** | V6.1 annual-specific | From SPICE density (same source) | **IDENTICAL for overlap** |
+| **rank_ori** | 0.60*da_rank + 0.30*mix + 0.10*ori | Same formula, different inputs if universe differs | **IDENTICAL for overlap** |
 | **rank** | = rank_ori in V6.1 | **Our blend score** (v0c + NB) | **DIFFERENT** |
 | **tier** | Derived from rank_ori | Derived from our blend rank | **DIFFERENT** |
-| **shadow_price** | SPICE-computed | **Our model-derived estimate** | **DIFFERENT** |
+| **shadow_price** | SPICE-computed | `shadow_sign` (direction only, per business decision) | **DIFFERENT** |
 
-**What's identical**: All metadata columns inherited from V6.1 (shadow_price_da, da_rank_value, ori_mean, mix_mean, density ranks, rank_ori, branch_name, bus_key_group, equipment, flow_direction, shadow_sign, mean_branch_max).
+**For overlapping constraints** (our universe ∩ V6.1): metadata inherited from V6.1,
+values identical.
 
-**What's different**: `rank` (our blend score vs rank_ori), `tier` (our ranking vs V6.1 ranking), `shadow_price` (our estimate vs SPICE estimate), and the constraint universe (smaller after our dedup).
+**For new constraints** (in our universe but not V6.1): metadata computed from raw
+sources — `shadow_price_da` from DA history at branch level, density features from
+SPICE density, SF from `MISO_SPICE_SF.parquet`. These constraints need explicit
+source contracts, not V6.1 inheritance.
 
 ### 2.2 Column-Level Source Map
 
-| Column | Source for V7.0 | Same as V6.1? |
-|--------|----------------|---------------|
-| constraint_id | SPICE density → bridge | Yes |
-| flow_direction | V6.1 | Yes |
-| branch_name | V6.1 | Yes |
-| bus_key | V6.1 | Yes |
-| bus_key_group | V6.1 | Yes |
-| equipment | V6.1 | Yes |
-| shadow_price_da | V6.1 | **Yes (inherited)** |
-| da_rank_value | V6.1 | **Yes (inherited)** |
-| ori_mean | V6.1 | **Yes (inherited)** |
-| mix_mean | V6.1 | **Yes (inherited)** |
-| density_mix_rank_value | V6.1 | **Yes (inherited)** |
-| density_ori_rank_value | V6.1 | **Yes (inherited)** |
-| rank_ori | V6.1 formula | **Yes (inherited)** |
-| density_mix_rank | V6.1 | **Yes (inherited)** |
-| mean_branch_max | V6.1 | **Yes (inherited)** |
-| mean_branch_max_fillna | V6.1 | **Yes (inherited)** |
+| Column | Source (V6.1 overlap) | Source (new constraints) |
+|--------|----------------------|------------------------|
+| constraint_id | Bridge mapping | Bridge mapping |
+| flow_direction | V6.1 | SPICE density |
+| branch_name | V6.1 | Bridge mapping |
+| bus_key | V6.1 | SPICE density |
+| bus_key_group | V6.1 | SPICE density |
+| equipment | V6.1 | SPICE density |
+| shadow_price_da | V6.1 (inherited) | DA history (branch-level, class-specific) |
+| da_rank_value | V6.1 (inherited) | Rank of computed shadow_price_da |
+| ori_mean | V6.1 (inherited) | SPICE density |
+| mix_mean | V6.1 (inherited) | SPICE density |
+| density_mix_rank_value | V6.1 (inherited) | Rank of mix_mean |
+| density_ori_rank_value | V6.1 (inherited) | Rank of ori_mean |
+| rank_ori | V6.1 (inherited) | Computed from ranks |
+| density_mix_rank | V6.1 (inherited) | Rank of mix_mean |
+| mean_branch_max | V6.1 (inherited) | SPICE density |
+| mean_branch_max_fillna | V6.1 (inherited) | SPICE density |
 | shadow_sign | V6.1 | **Yes (inherited)** |
 | **rank** | Our blend score | **NO — our ranking** |
 | **tier** | Our blend ranking | **NO — our tiers** |
@@ -150,7 +157,9 @@ per annual PY because it's the f0p pipeline output.
   Only the constraint selection differs per class_type.
 
 **Aggregation method**: Mean across outage dates within the 3 market months of each
-quarter. Verified: V6.1 SF correlates 0.98-0.999 with this aggregation.
+quarter. **Verified: exact parity** — max_diff = 0.000000, correlation = 1.000000
+for all 50 tested constraints (2024-06/aq1). V6.1 SF is exactly the mean of raw
+SPICE SF from `MISO_SPICE_SF.parquet`.
 
 **Our approach**: For each quarter's constraint set:
 1. Load raw SF from `MISO_SPICE_SF.parquet` for the 3 market months of that quarter
@@ -245,9 +254,11 @@ final[zero_history] = v0c_score
 Step 1: Score branches (v0c + NB blend)
   └─ Same as research scoring, applied to target PY
 
-Step 2: Expand branch → constraints
+Step 2: Expand branch → constraints (FROZEN: pure branch inheritance)
   └─ CID mapping from load_cid_mapping()
-  └─ Each constraint inherits branch score
+  └─ Each constraint inherits its branch's blend score
+  └─ No within-branch constraint tie-breaking in V7.0
+  └─ Dedup (Step 6) handles constraint selection within branch
 
 Step 3: Join V6.1 metadata
   └─ shadow_price_da, da_rank_value, ori_mean, mix_mean, rank_ori, etc.

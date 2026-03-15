@@ -32,8 +32,8 @@ pipelines to match production behavior and capture class-specific binding patter
 | **BF for formula** | `bf_combined_12` | `bf_12` | `bfo_12` |
 | **Cohort: dormant** | `bf_combined_12 == 0` | `bf_12 == 0` | `bfo_12 == 0` |
 | **NB flags** | `is_nb_12` (combined) | `nb_onpeak_12` | `nb_offpeak_12` |
-| **V6.1 metadata** | N/A (loaded flat) | V6.1 onpeak partition | V6.1 offpeak partition |
-| **shadow_price_da** | From V6.2B (flat) | Class-specific from V6.1 or DA | Class-specific |
+| **V6.1 metadata** | N/A | V6.1 onpeak partition | V6.1 offpeak partition |
+| **shadow_price_da** | From `history_features.py` (combined DA) | Class-specific from DA history | Class-specific |
 | **da_rank_value** | Rank of combined spda | Rank of onpeak spda | Rank of offpeak spda |
 | **Published signal** | N/A | Separate onpeak parquet | Separate offpeak parquet |
 
@@ -148,11 +148,14 @@ Two options:
 - Pro: exact match to production baseline
 - Con: only available for V6.1's ~400 constraints per (aq, ctype)
 
-### Option B: Compute from realized DA
-- For each constraint, aggregate historical realized DA per class_type
-- `shadow_price_da_onpeak = mean(abs(realized_sp_onpeak))` across historical months
-- Pro: available for all constraints in our universe
-- Con: may differ slightly from V6.1's SPICE-computed value
+### Option B: Compute from realized DA at branch level
+- Aggregate historical realized DA per class_type **at branch level** (matching
+  the current pipeline in `history_features.py`)
+- `shadow_price_da_onpeak = sum(abs(onpeak_sp))` across historical months per branch
+- Each constraint inherits its branch's class-specific `shadow_price_da`
+- Pro: available for all branches in our universe
+- Con: may differ slightly from V6.1's value (V6.1 verified: all constraints on
+  same branch have identical `shadow_price_da`)
 
 **Recommendation**: Option B for training (full universe coverage), with Option A
 values for verification (confirm our computation matches V6.1 where they overlap).

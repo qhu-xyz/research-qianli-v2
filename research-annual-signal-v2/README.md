@@ -63,11 +63,15 @@ prediction for dormant branches only. No forced slot reservation.
 ### Docs (`docs/`)
 | Document | Status |
 |----------|--------|
-| `specs/project1-annual-signal-publication.md` | **Active — next implementation** |
-| `specs/project2-path-rating-band-validation.md` | **Active — next implementation** |
-| `specs/phase5-reeval-design.md` | Executed |
-| `findings/nb-two-track-consolidated.md` | **Current findings** |
-| `archive/phase3/`, `archive/phase4/` | Completed/negative phases (moved from specs/plans) |
+| `model-comparison-report.md` | **Current** — all models compared with holdout tables |
+| `pipeline-and-production-port.md` | **Current** — full pipeline + V6.1/V7.0 artifact map + gaps |
+| `signal-generation-procedure.md` | Reference — SPICE V6.2B signal generation procedure |
+| `superpowers/specs/project1-annual-signal-publication.md` | **Active — next implementation** |
+| `superpowers/specs/project2-path-rating-band-validation.md` | **Active — next implementation** |
+| `superpowers/specs/project1-test-specification.md` | **Active — 90-case test plan** |
+| `superpowers/specs/phase5-reeval-design.md` | Executed |
+| `superpowers/findings/nb-two-track-consolidated.md` | **Current findings** |
+| `archive/` | Historical (phase1-2 plans, phase3-4 designs, old reviews) |
 
 ## Key Findings
 

@@ -114,8 +114,12 @@ Step 3: Attach metadata from V6.1
 
 Step 4: Assign tiers (0-4) based on blend score rank
 
-Step 5: Build SF matrix from SPICE outage data
-  └─ Source: same density partitions used by data_loader
+Step 5: Build SF matrix from raw SPICE SF outputs
+  └─ Source: MisoSpiceSFOutput (NOT V6.1 signal SF)
+  └─ Path: spice6/prod_f0p_model_miso/sf/auction_month={PY}/market_month=.../
+  └─ Raw: 12,824 constraints × 2,290 pnodes per outage date
+  └─ Aggregate: mean across outage dates (matches V6.1 method, corr 0.99)
+  └─ Subset columns to our post-dedup constraint set
   └─ Validate: columns = constraints index, no NaN
 
 Step 6: Constraint selection / dedup (PUBLISH POST-DEDUP)
@@ -168,8 +172,9 @@ Step 7: Format index + validate + publish
 - `pbase.data.dataset.signal.general.ConstraintsSignal` (save_data, load_data)
 - `pbase.data.dataset.signal.general.ShiftFactorSignal` (save_data, load_data)
 - `ml/data_loader.py:load_cid_mapping()` (branch→constraint mapping)
-- V6.1 annual signal (metadata source)
-- SPICE annual density data (SF source)
+- V6.1 annual signal (metadata source: shadow_price_da, da_rank_value, etc.)
+- `MisoSpiceSFOutput` from pbase (raw SF source: 12,824 constraints × 2,290 pnodes)
+- Aggregation: mean across outage dates, matching V6.1 method
 
 ## 6. Signal Name
 

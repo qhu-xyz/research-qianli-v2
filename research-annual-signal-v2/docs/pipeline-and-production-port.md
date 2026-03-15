@@ -129,24 +129,35 @@ of several.
 **Mitigation**: Check with the team whether V7.0 replaces V6.1 entirely or supplements
 it. If supplement, publish the full pre-dedup set and let pmodel handle dedup.
 
-### 3.3 SF Matrix Availability
+### 3.3 SF Matrix Construction — RESOLVED
 
-V6.1's SF matrix comes from SPICE outage simulation data. We need the same SF source.
+**Source**: Raw SPICE SF outputs at
+`/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/sf/auction_month={YYYY-06}/market_month={YYYY-MM}/market_round=1/outage_date={date}/sf.parquet`
 
-**Current state**: The SF data exists in SPICE density partitions, but extracting a
-clean pnode × constraint SF matrix requires processing the raw outage data differently
-than our current density pipeline (which collapses to branch level).
+**Loader**: `MisoSpiceSFOutput` in pbase
 
-**Gap**: `ml/data_loader.py` collapses SF information during Level 2 (max/min per branch).
-The SF matrix needs to be extracted BEFORE collapse, at the constraint level.
+**Key facts** (verified):
+- Raw SPICE has **12,824 constraints × 2,290 pnodes** per outage date
+- V6.1 selected ~400 from these 12,824. Our post-dedup set is a different subset.
+- **Any constraint in our universe has SF in the raw data** — no gaps.
+- Pnodes are **identical across quarters within a PY** (100% overlap aq1-aq4).
+  Slowly grows across PYs (91-95% overlap year-to-year).
+- Annual auction has only 1 market_month per auction_month (e.g., 2024-06),
+  with 10 outage dates.
+- Constraint universe **differs by quarter** (aq1 vs aq2 overlap ~44%).
 
-**Mitigation**: The CID mapping cache (`load_cid_mapping()`) preserves the
-constraint→branch mapping. The SF matrix can be built by:
-1. Loading the same SPICE outage data
-2. Keeping per-constraint SF values (not collapsing to branch)
-3. Pivoting to pnode × constraint format
+**Aggregation method**: Mean across outage dates. Verified: V6.1 SF correlates 0.98-0.999
+with mean-of-raw-outage-SF. Small diffs (~0.01 max) likely from filtering/rounding.
 
-This requires new code but uses the same source data.
+**Our approach**: For each constraint in our post-dedup set:
+1. Load raw SF from `MisoSpiceSFOutput` for the target (auction_month, market_round)
+2. Filter to outage dates for the relevant quarter
+3. Mean across outage dates → one SF value per (pnode, constraint)
+4. Subset columns to our post-dedup constraint set
+5. Publish as the SF parquet
+
+This is NOT inherited from V6.1 — we build our own SF from the same upstream source
+that V6.1 used. This ensures coverage for any constraint, not just V6.1's selection.
 
 ### 3.4 Dedup Parameters
 

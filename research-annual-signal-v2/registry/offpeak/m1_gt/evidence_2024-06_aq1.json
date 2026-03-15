@@ -1,0 +1,14 @@
+{
+  "planning_year": "2024-06",
+  "aq_quarter": "aq1",
+  "class_type": "offpeak",
+  "n_branches": 2339,
+  "n_binders": 297,
+  "n_established": 659,
+  "n_dormant": 1176,
+  "n_zero_history": 504,
+  "total_sp": 517987.4,
+  "cross_class_dormant": 186,
+  "sp_sum_check_max_diff": 3.637978807091713e-12,
+  "checks_passed": 7
+}

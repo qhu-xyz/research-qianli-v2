@@ -28,6 +28,28 @@ clear before R1 and establish prior clearing prices. Therefore:
 
 This makes PJM annual banding **much simpler** than MISO.
 
+## mtm_1st_mean Source (CONFIRMED)
+
+The M2M system returns all auction clearing prices for a path, ordered by recency:
+
+```
+For R1 PY2024 annual:
+  ar1Jun24 = Annual R1 (own MCP, LEAKY)
+  lr5Jun24 = Long-term yr1 R5 (~March 2024, NON-LEAKY) ← this is mtm_1st
+  lr4Jun24 = Long-term yr1 R4 (~December 2023)          ← this is mtm_2nd
+  lr3Jun24 = Long-term yr1 R3 (~October 2023)           ← this is mtm_3rd
+  ...
+```
+
+| Round | `mtm_1st_mean` source | When it clears |
+|-------|----------------------|----------------|
+| R1 | **Long-term yr1 Round 5** (same PY) | ~March (before annual R1 in ~April) |
+| R2 | Annual R1 (same PY) | ~April |
+| R3 | Annual R2 (same PY) | ~June |
+| R4 | Annual R3 (same PY) | ~August |
+
+R1's baseline is the long-term yr1 R5 MCP — NOT the prior year's R4 annual MCP.
+
 ## Scale Convention (CONFIRMED)
 
 | Column | Scale | Formula |

@@ -64,7 +64,41 @@ With class-specific cohorts, some branches change status:
 model treats all of these as established — the class-specific model correctly puts them
 in Track B for the dormant class, giving the NB model a chance to find them.
 
-## 3. v0c Formula Changes
+## 3. Cross-Class Features (new opportunity)
+
+Cross-class history is almost as predictive as same-class history (verified):
+
+| Feature → Target | Spearman |
+|---|:---:|
+| offpeak BF → offpeak SP (same-class) | 0.4368 |
+| **onpeak BF → offpeak SP (cross-class)** | **0.4297** |
+| onpeak BF → onpeak SP (same-class) | 0.4233 |
+| **offpeak BF → onpeak SP (cross-class)** | **0.4270** |
+| onpeak SP ↔ offpeak SP | **0.7958** |
+
+Among class-dormant branches, cross-class binding is highly informative:
+- 82.5% of offpeak-dormant binders also bind onpeak
+- 62.0% of onpeak-dormant binders also bind offpeak
+- 126 offpeak-dormant branches have `bf_12 > 0` (onpeak active)
+
+**Feature set for each class-specific model**:
+
+| Feature | Onpeak model | Offpeak model | Why |
+|---|---|---|---|
+| Same-class BF (`bf_12` / `bfo_12`) | `bf_12` | `bfo_12` | Primary BF signal |
+| **Cross-class BF** | `bfo_12` | `bf_12` | Almost equal predictive power |
+| Same-class `shadow_price_da` | onpeak spda | offpeak spda | Class-specific DA history |
+| **Cross-class `shadow_price_da`** | offpeak spda | onpeak spda | Cross-class congestion signal |
+| Same-class `da_rank_value` | onpeak rank | offpeak rank | Rank of same-class spda |
+| `bf_combined_12` | Yes | Yes | Combined BF (backward compat) |
+| Density bins | Same | Same | Class-agnostic |
+| `ori_mean`, `mix_mean` | Same | Same | Class-agnostic |
+
+**For the NB model**: cross-class BF is especially valuable. A branch that is offpeak-
+dormant but onpeak-active (`bfo_12 == 0, bf_12 > 0`) is a much better NB candidate
+than one dormant in both classes. Include cross-class BF as a feature.
+
+## 4. v0c Formula Changes
 
 Current (combined):
 ```python
@@ -92,13 +126,18 @@ Separate NB model per class_type:
 - Population: `bf_12 == 0` AND `has_hist_da == True`
 - Target: `onpeak_sp > 0`
 - Sample weights: sqrt(onpeak_sp) or tiered by onpeak_sp
-- Features: same 14 (density bins + class-specific `shadow_price_da`, `da_rank_value`, `historical_max_sp`)
-  - `historical_max_sp` should be recomputed as max onpeak-only SP
+- Features (~17):
+  - Density bins (11): class-agnostic, same as before
+  - Same-class: `shadow_price_da_onpeak`, `da_rank_value_onpeak`, `historical_max_sp_onpeak`
+  - **Cross-class: `bfo_12`, `shadow_price_da_offpeak`** — a branch active in offpeak
+    is a strong NB candidate for onpeak (82.5% of offpeak-dormant binders also bind onpeak)
+  - `count_active_cids`
 
 **Offpeak NB model**:
 - Population: `bfo_12 == 0` AND `has_hist_da == True`
 - Target: `offpeak_sp > 0`
-- Same feature set with offpeak-specific values
+- Same feature structure with offpeak-specific values + onpeak cross-class features
+- **Cross-class: `bf_12`, `shadow_price_da_onpeak`**
 
 ## 5. shadow_price_da Construction
 
@@ -166,22 +205,47 @@ label_tier = tiered_labels(onpeak_sp)  # tiers based on onpeak SP only
 
 ```
 For each class_type in [onpeak, offpeak]:
+
+    Phase A: Baselines (rebuild from scratch)
+    ─────────────────────────────────────────
     1. Build class-specific model table
        └─ target = {ctype}_sp
-       └─ BF = bf_12 or bfo_12
+       └─ BF: same-class + cross-class (bf_12 + bfo_12)
        └─ cohort = bf_12==0 or bfo_12==0
        └─ shadow_price_da = class-specific from V6.1 or DA
+       └─ cross-class features included
 
-    2. Score with class-specific v0c formula
+    2. v0 baselines:
+       └─ v0a: da_rank_value_{ctype} only
+       └─ v0c: 0.40×da_rank + 0.30×rt_max + 0.30×bf_{ctype}
 
-    3. Train class-specific NB model on class-specific dormant population
+    Phase B: ML + NB models
+    ──────────────────────────
+    3. v3a: LambdaRank with class-specific + cross-class features
 
-    4. Blend (same α=0.05 as combined, or sweep)
+    4. NB model: class-specific dormant, with cross-class BF/spda as features
 
-    5. Evaluate at K=150/200/300/400 with class-specific target
+    5. Blend sweep: v0c + α×NB for α ∈ {0.05, 0.10, 0.15, 0.20}
 
-    6. Select champion for this class_type
+    Phase C: Evaluation + champion selection
+    ─────────────────────────────────────────
+    6. Evaluate all configs at K=150/200/300/400
+       └─ class-specific target (onpeak_sp or offpeak_sp)
+       └─ class-specific dangerous threshold ($25k per class)
+
+    7. Paired scorecard per class_type → champion per class_type
 ```
+
+### 7.4 Metrics (class-specific)
+
+Dangerous threshold should be scaled: $25k per class_type (half of combined $50k,
+since SP is split). Or keep $50k if the team considers that the meaningful threshold
+regardless of class split — this is a business decision.
+
+Evaluation target:
+- Onpeak: `realized_shadow_price = onpeak_sp` (NOT combined)
+- Offpeak: `realized_shadow_price = offpeak_sp`
+- `label_tier` recomputed per class: tertiles of class-specific SP among binders
 
 ### 7.4 Reusable from Current Repo
 

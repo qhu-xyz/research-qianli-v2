@@ -139,9 +139,25 @@ def build_class_model_table(
         pl.col(cross_bf_col).alias("cross_class_bf")
     )
 
-    # total_da_sp_quarter from GT diagnostics
+    # ── Class-specific shadow_price_da + da_rank_value ──────────────────
+    # The shared history_features computes these from combined_sp.
+    # We recompute from class-specific SP using the monthly binding table.
+    sp_col = "onpeak_sp" if class_type == "onpeak" else "offpeak_sp"
+    class_spda = _compute_class_shadow_price_da(monthly_binding, branches, sp_col)
+    # Drop combined shadow_price_da and da_rank_value, replace with class-specific
+    table = table.drop(["shadow_price_da", "da_rank_value"])
+    table = table.join(class_spda, on="branch_name", how="left")
     table = table.with_columns(
-        pl.lit(gt_diag["total_da_sp"]).alias("total_da_sp_quarter")
+        pl.col("shadow_price_da").fill_null(0.0),
+        pl.col("da_rank_value").fill_null(
+            float(len(branches) + 1)  # sentinel for zero-history
+        ),
+    )
+
+    # Class-specific total_da_sp_quarter: sum of class-specific realized SP
+    class_total_da_sp = float(table["realized_shadow_price"].sum())
+    table = table.with_columns(
+        pl.lit(class_total_da_sp).alias("total_da_sp_quarter")
     )
 
     # Add PY, quarter, class_type columns
@@ -166,6 +182,56 @@ def build_class_model_table(
     )
 
     return table
+
+
+def _compute_class_shadow_price_da(
+    monthly_binding: pl.DataFrame,
+    universe_branches: list[str],
+    sp_col: str,
+) -> pl.DataFrame:
+    """Compute class-specific shadow_price_da and da_rank_value from monthly binding.
+
+    shadow_price_da = cumulative class-specific SP per branch (branch-level).
+    da_rank_value = dense rank descending of shadow_price_da among positive branches.
+
+    Args:
+        monthly_binding: from compute_history_features, has onpeak_sp/offpeak_sp per month
+        universe_branches: all branches in the universe
+        sp_col: "onpeak_sp" or "offpeak_sp"
+    """
+    # Cumulative class-specific SP per branch
+    cumulative = monthly_binding.group_by("branch_name").agg(
+        pl.col(sp_col).sum().alias("shadow_price_da")
+    )
+
+    # Ensure all universe branches present
+    all_branches = pl.DataFrame({"branch_name": universe_branches})
+    result = all_branches.join(cumulative, on="branch_name", how="left")
+    result = result.with_columns(pl.col("shadow_price_da").fill_null(0.0))
+
+    # Dense rank descending for positive-SP branches
+    positive = result.filter(pl.col("shadow_price_da") > 0)
+    n_positive = len(positive)
+
+    if n_positive > 0:
+        positive = positive.with_columns(
+            pl.col("shadow_price_da")
+            .rank(method="dense", descending=True)
+            .cast(pl.Float64)
+            .alias("da_rank_value")
+        )
+        sentinel = float(int(positive["da_rank_value"].max()) + 1)
+        result = result.join(
+            positive.select(["branch_name", "da_rank_value"]),
+            on="branch_name",
+            how="left",
+        ).with_columns(
+            pl.col("da_rank_value").fill_null(sentinel)
+        )
+    else:
+        result = result.with_columns(pl.lit(1.0).alias("da_rank_value"))
+
+    return result
 
 
 def _recompute_class_tiers(table: pl.DataFrame) -> pl.DataFrame:

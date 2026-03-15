@@ -8,7 +8,12 @@
   "n_dormant": 1110,
   "n_zero_history": 504,
   "total_sp": 796961.35,
+  "total_da_sp_quarter": 796961.35,
+  "shadow_price_da_nonzero": 1743,
+  "da_rank_value_range": [
+    1.0,
+    1739.0
+  ],
   "cross_class_dormant": 186,
-  "sp_sum_check_max_diff": 3.637978807091713e-12,
-  "checks_passed": 7
+  "checks_passed": 10
 }

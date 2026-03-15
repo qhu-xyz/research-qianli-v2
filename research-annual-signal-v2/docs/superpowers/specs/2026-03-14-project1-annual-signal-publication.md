@@ -59,8 +59,9 @@ not a data column. The actual parquet has 20 data columns:
 | `density_mix_rank` | float | V6.1 annual signal | rank of mix_mean (numeric rank, not rank_value) |
 | `__index_level_0__` | str | constraint index string | pandas artifact: same as DataFrame index. V6.1 stores this as a column when serialized from pandas with index. |
 
-**Verified**: V6.1 parquet has exactly 21 columns (20 data + `__index_level_0__`).
-Our publication must match this exactly.
+**Verified**: V6.1 parquet has 20 data columns. The `__index_level_0__` that appears
+when loaded via polars is the parquet index, not a data column.
+Our publication must match the 20-column schema exactly.
 
 **CRITICAL: Metadata source is V6.1 annual, NOT V6.2B monthly.** Verified: V6.1 and
 V6.2B have different values for overlapping constraints (`shadow_price_da` max diff =
@@ -142,7 +143,7 @@ Step 7: Format index + validate + publish
 ## 4. Verification Strategy
 
 ### 4.1 Schema Verification
-- Assert 21 columns match V6.1 exactly (names, dtypes)
+- Assert 20 data columns match V6.1 exactly (names, dtypes)
 - Assert constraint index format: `"{cid}|{sign}|spice"`
 - Assert `set(sf.columns) == set(cstrs.index)`
 

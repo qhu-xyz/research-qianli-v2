@@ -294,3 +294,61 @@ Class-Specific Pipeline (this doc)     →  Project 1 (publication)
 
 The current combined-ctype Phase 5 results are archived as baseline — not discarded,
 but not used for production.
+
+## 10. Milestone Verification Contract
+
+Each milestone has: deliverable, verification checks, pass rule, and saved evidence.
+If any check fails, **stop and diagnose** before proceeding.
+
+### M1: Class-Specific Ground Truth
+
+| | |
+|---|---|
+| **Deliverable** | `build_model_table(class_type="onpeak")` and `"offpeak"` |
+| **Checks** | (1) `onpeak_sp + offpeak_sp == combined_sp` within 1e-6 for all branches. (2) No null targets. (3) Class-specific dormant count: `bf_12==0` ≠ `bf_combined_12==0` for some branches. (4) `label_tier` recomputed per class. |
+| **Pass rule** | All 4 checks pass. Dormant cross-class count matches earlier verified 186. |
+| **Evidence** | Save row counts, dormant counts, and SP distribution per class to `registry/m1_class_gt/`. |
+
+### M2: Class-Specific v0c Baseline
+
+| | |
+|---|---|
+| **Deliverable** | v0c scores using `bf_12`/`bfo_12` and class-specific `da_rank_value` |
+| **Checks** | (1) Onpeak v0c ≠ offpeak v0c for same branch (different BF and da_rank). (2) v0c scores ∈ [0, 1]. (3) VC@300 for class-specific v0c is within 20% of combined v0c (not wildly different). |
+| **Pass rule** | Class-specific scores differ meaningfully; VC is reasonable. |
+| **Evidence** | Save `registry/m2_v0c_class/{onpeak,offpeak}/metrics.json`. |
+
+### M3: Class-Specific NB Model + Blend
+
+| | |
+|---|---|
+| **Deliverable** | NB model per class, blend champion per class |
+| **Checks** | (1) NB model trained on class-specific dormant. (2) Cross-class features have nonzero importance. (3) Blend beats v0c solo on paired scorecard for at least one K pair. (4) Holdout validation passes gates. |
+| **Pass rule** | Champion per class passes all gates vs class-specific v0c solo. |
+| **Evidence** | Save `registry/m3_blend_class/{onpeak,offpeak}/config.json + metrics.json`. |
+
+### M4: Constraint-Level Publication
+
+| | |
+|---|---|
+| **Deliverable** | Published constraints + SF parquets per (PY, aq, ctype) |
+| **Checks** | (1) 20-column schema matches V6.1. (2) Index format correct. (3) SF exact parity with raw SPICE (max_diff < 1e-6). (4) Metadata matches V6.1 for overlapping constraints. (5) `shadow_price = shadow_sign`. (6) 5 tiers × 200 = ~1,000 constraints. (7) Dedup: max 3/branch/bus_key_group. |
+| **Pass rule** | All 7 checks pass. ConstraintsSignal round-trip succeeds. |
+| **Evidence** | Save signal to production path. Save verification report to `registry/m4_publication/`. |
+
+### M5: Consumer Validation
+
+| | |
+|---|---|
+| **Deliverable** | pmodel loads our signal without crash |
+| **Checks** | (1) `load_constraints_and_tier_set()` succeeds. (2) Tier sets build correctly (cumulative). (3) SF intersection ≥ 80%. (4) shadow_price clipping is no-op (values are ±1). |
+| **Pass rule** | pmodel smoke test passes. |
+| **Evidence** | Save pmodel load log to `registry/m5_consumer_test/`. |
+
+### Unresolved-Gap Register
+
+At each milestone, explicitly state:
+
+| What is now proven | What is still assumption |
+|---|---|
+| (filled after each milestone) | (filled after each milestone) |

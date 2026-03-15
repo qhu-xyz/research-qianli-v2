@@ -15,7 +15,7 @@ serve as the baseline — not used for production because V6.1 signals are
 class-specific. See `docs/model-comparison-report.md` for full comparison.
 
 **Script**: `scripts/run_phase5_reeval.py`
-**Registry**: `registry/archive/phase5_final_150_300/`, `registry/archive/phase5_final_200_400/`
+**Registry (archived)**: `registry/archive/phase5_final_150_300/`, `registry/archive/phase5_final_200_400/`
 
 ## Repo Structure
 
@@ -39,11 +39,11 @@ Reused by both combined and class-specific pipelines.
 | `merge.py` | Two-track merge with tau support |
 | `registry.py` | Experiment save/load |
 
-### Class-Specific Pipeline (`ml/phase6/`)
+### Class-Specific Pipeline (`ml/phase6/`) — PLACEHOLDER, NOT YET BUILT
 
-New modules for onpeak/offpeak separation. Uses shared infrastructure above.
+Will contain class-specific modules. Currently only `__init__.py`.
 
-| Module | Purpose |
+| Module (planned) | Purpose |
 |--------|---------|
 | `features.py` | Class-specific model table (class-specific target, BF, cohort + cross-class features) |
 | `scoring.py` | Class-specific v0c formula + NB model + blend |
@@ -52,7 +52,7 @@ New modules for onpeak/offpeak separation. Uses shared infrastructure above.
 
 | Directory | Contents |
 |-----------|---------|
-| `scripts/phase6/` | Class-specific experiment scripts (v0a, v0c, blend per class) |
+| `scripts/phase6/` | Class-specific scripts — **PLACEHOLDER, empty** |
 | `scripts/` | Active shared scripts (Phase 5 reeval, v0c baseline, utilities) |
 | `scripts/archive/` | Historical combined-ctype scripts (Phase 3, 4a, 4b, etc.) |
 
@@ -60,15 +60,15 @@ New modules for onpeak/offpeak separation. Uses shared infrastructure above.
 
 | Directory | Contents |
 |-----------|---------|
-| `registry/onpeak/` | Class-specific onpeak results (M1 GT, M2 models, M3 blend) |
-| `registry/offpeak/` | Class-specific offpeak results |
+| `registry/onpeak/` | Onpeak results — **PLACEHOLDER, empty** |
+| `registry/offpeak/` | Offpeak results — **PLACEHOLDER, empty** |
 | `registry/archive/` | 31 combined-ctype entries (Phase 3-5, v0a-v3g, etc.) |
 
 ### Docs
 
 | Document | Status |
 |----------|--------|
-| `superpowers/specs/class-specific-pipeline-design.md` | **Active — Phase 6 design + milestone verification** |
+| `superpowers/specs/2026-03-15-class-specific-pipeline-design.md` | **Active — Phase 6 design + milestone verification** |
 | `superpowers/specs/project1-annual-signal-publication.md` | **Active — constraint-level publication** |
 | `superpowers/specs/project2-path-rating-band-validation.md` | **Active — path rating** |
 | `superpowers/specs/project1-test-specification.md` | **Active — 90-case test plan** |

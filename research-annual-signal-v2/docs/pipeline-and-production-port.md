@@ -106,6 +106,12 @@ source contracts, not V6.1 inheritance.
 
 ## 3. Remaining Gaps
 
+> **TOP BLOCKER for M3 (publication)**: New-constraint metadata source is unresolved.
+> `flow_direction`, `shadow_sign`, `bus_key`, `bus_key_group`, `equipment` have no
+> known raw source outside V6.1. For V6.1-overlapping constraints these are inherited;
+> for new constraints they are OPEN GAPS. Need `MISO_SPICE_CONSTRAINT_INFO` or
+> equivalent. **M1-M2 (modeling) can proceed without this; M3 cannot.**
+
 ### 3.1 shadow_price — FROZEN: use shadow_sign
 
 **Decision**: `shadow_price = shadow_sign` (just +1 or -1).
@@ -304,7 +310,7 @@ sf = ShiftFactorSignal(rto="miso", signal_name="TEST.Signal.MISO.SPICE_ANNUAL_V7
 | V6.1 annual SF | `/opt/data/xyz-dataset/signal_data/miso/sf/Signal.MISO.SPICE_ANNUAL_V6.1/` |
 | V6.2B monthly signal | `/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1/` |
 | Our signal (V7.0) | `/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.Signal.MISO.SPICE_ANNUAL_V7.0.R1/` |
-| Phase 5 registry | `registry/phase5_final_150_300/`, `registry/phase5_final_200_400/` |
+| Phase 5 registry | `registry/archive/phase5_final_150_300/`, `registry/archive/phase5_final_200_400/` |
 | Annual band port | `research-annual-band/docs/prod-port.md` |
 
 **NOTE**: The `pw_data` SF path (`prod_f0p_model_miso/sf/`) only has 1 market_month

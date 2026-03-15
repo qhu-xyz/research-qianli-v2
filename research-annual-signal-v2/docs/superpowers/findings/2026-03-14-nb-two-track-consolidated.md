@@ -257,7 +257,7 @@ Phase 5 re-evaluated all candidates under the new metric framework using true so
 baselines (not biased R=0 two-track), paired scorecard, and saved to registry.
 
 **Script**: `scripts/run_phase5_reeval.py`
-**Registry**: `registry/phase5_champ_150_300/`, `registry/phase5_champ_200_400/`
+**Registry**: `registry/archive/phase5_champ_150_300/`, `registry/archive/phase5_champ_200_400/`
 
 ### Champion: C1_a0.05 (v0c + 0.05 × NB blend)
 

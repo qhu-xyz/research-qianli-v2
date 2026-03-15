@@ -34,7 +34,7 @@ from ml.train import train_and_predict
 from ml.evaluate import evaluate_group
 from ml.merge import merge_tracks
 from ml.registry import save_experiment
-from scripts.run_phase4a_experiment import compute_v0c_scores, compute_sample_weights
+from scripts.archive.run_phase4a_experiment import compute_v0c_scores, compute_sample_weights
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -214,7 +214,7 @@ def main():
     args = parser.parse_args()
 
     t0 = time.time()
-    V3A_FEATURES = json.load(open("registry/v3a/config.json"))["features"]
+    V3A_FEATURES = json.load(open("registry/archive/v3a/config.json"))["features"]
 
     # Build data
     all_needed = set()

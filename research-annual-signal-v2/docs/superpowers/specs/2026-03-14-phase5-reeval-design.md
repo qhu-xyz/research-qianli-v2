@@ -1,7 +1,7 @@
 # Phase 5 Design: Re-evaluation Under New Metric Framework
 
 **Date**: 2026-03-14
-**Status**: Executed (Phase 5 completed, results in registry/phase5_final_*)
+**Status**: Executed (Phase 5 completed, results in registry/archive/phase5_final_*)
 **Depends on**: Phase 3 (two-track infra), Phase 4a (Track B model), code audit review
 
 ---

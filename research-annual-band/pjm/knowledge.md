@@ -43,12 +43,17 @@ For R1 PY2024 annual:
 
 | Round | `mtm_1st_mean` source | When it clears |
 |-------|----------------------|----------------|
-| R1 | **Long-term yr1 Round 5** (same PY) | ~March (before annual R1 in ~April) |
-| R2 | Annual R1 (same PY) | ~April |
-| R3 | Annual R2 (same PY) | ~June |
-| R4 | Annual R3 (same PY) | ~August |
+| R1 | **Long-term yr1 Round 5** (same PY) | ~March |
+| R2 | Annual R1 (same PY) | ~April (same auction event) |
+| R3 | Annual R2 (same PY) | ~April (same auction event) |
+| R4 | Annual R3 (same PY) | ~April (same auction event) |
 
-R1's baseline is the long-term yr1 R5 MCP — NOT the prior year's R4 annual MCP.
+**All 4 annual rounds clear in April** within the same auction event (days apart, not months).
+R1's baseline is the long-term yr1 R5 MCP (~March) — NOT the prior year's R4 annual MCP.
+
+The MAE gap between R1 (65.7) and R2-R4 (17-24) is due to sequential price discovery
+within the April auction, not timing differences. R2 sees R1's price from hours/days earlier,
+R3 sees R2's, etc. Each round refines within the same event.
 
 ## Scale Convention (CONFIRMED)
 

@@ -73,7 +73,7 @@ Layer 8: Annual-Band Join / Segmentation (5)   — does the validation pipeline 
 | 37 | Gate check uses class-specific solo baseline | Not combined baseline |
 | 38 | Onpeak and offpeak champions can differ | Different winning configs allowed |
 | 39 | Cross-class feature has signal | Spearman(offpeak_sp, bf_12) > 0.3 |
-| 40 | Dangerous threshold scaled per class | $25k per class (or $50k if business decision) |
+| 40 | Dangerous thresholds per class | $20k (low) and $40k (high) per class |
 
 ## Layer 4: Registry / Reproducibility (10 cases)
 

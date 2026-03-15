@@ -180,7 +180,10 @@ GATE_HOLDOUT_COUNT: int = 3
 
 # ─── Phase 5: new metric universe ──────────────────────────────────────
 PHASE5_K_LEVELS: list[int] = [150, 200, 300, 400]
+# Combined-ctype dangerous threshold (Phase 5 baseline, archived)
 DANGEROUS_THRESHOLD: float = 50000.0
+# Class-specific dangerous thresholds (Phase 6)
+DANGEROUS_THRESHOLD_CLASS: dict[str, float] = {"low": 20000.0, "high": 40000.0}
 PHASE5_GATE_METRICS_150_300: list[str] = [
     "VC@150", "VC@300", "Recall@150", "Recall@300",
     "Abs_SP@150", "Abs_SP@300", "Dang_Recall@300",

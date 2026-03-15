@@ -262,16 +262,16 @@ For each class_type in [onpeak, offpeak]:
     ─────────────────────────────────────────
     6. Evaluate all configs at K=150/200/300/400
        └─ class-specific target (onpeak_sp or offpeak_sp)
-       └─ class-specific dangerous threshold ($25k per class)
+       └─ class-specific dangerous thresholds ($20k and $40k per class)
 
     7. Paired scorecard per class_type → champion per class_type
 ```
 
 ### 7.4 Metrics (class-specific)
 
-Dangerous threshold should be scaled: $25k per class_type (half of combined $50k,
-since SP is split). Or keep $50k if the team considers that the meaningful threshold
-regardless of class split — this is a business decision.
+Dangerous thresholds per class: **$20k (low) and $40k (high)**.
+Report at both levels. Combined pipeline used $50k on combined SP; with class split,
+$20k and $40k give comparable branch counts per class.
 
 Evaluation target:
 - Onpeak: `realized_shadow_price = onpeak_sp` (NOT combined)

@@ -114,12 +114,14 @@ Step 3: Attach metadata from V6.1
 
 Step 4: Assign tiers (0-4) based on blend score rank
 
-Step 5: Build SF matrix from raw SPICE SF outputs
-  └─ Source: MisoSpiceSFOutput (NOT V6.1 signal SF)
-  └─ Path: spice6/prod_f0p_model_miso/sf/auction_month={PY}/market_month=.../
-  └─ Raw: 12,824 constraints × 2,290 pnodes per outage date
-  └─ Aggregate: mean across outage dates (matches V6.1 method, corr 0.99)
+Step 5: Build SF matrix from MISO_SPICE_SF.parquet
+  └─ Source: /opt/data/xyz-dataset/spice_data/miso/MISO_SPICE_SF.parquet
+  └─ NOT pw_data (that only has 1 market_month for annual)
+  └─ 12 market months per PY: 3 per quarter (aq1=Jun/Jul/Aug, etc.)
+  └─ 13,207 constraints × 2,225 pnodes per outage date
+  └─ Aggregate: mean across all outage dates within the 3 quarter months
   └─ Subset columns to our post-dedup constraint set
+  └─ SF is class-type-agnostic (same values, different constraint subsets)
   └─ Validate: columns = constraints index, no NaN
 
 Step 6: Constraint selection / dedup (PUBLISH POST-DEDUP)
@@ -172,9 +174,9 @@ Step 7: Format index + validate + publish
 - `pbase.data.dataset.signal.general.ConstraintsSignal` (save_data, load_data)
 - `pbase.data.dataset.signal.general.ShiftFactorSignal` (save_data, load_data)
 - `ml/data_loader.py:load_cid_mapping()` (branch→constraint mapping)
-- V6.1 annual signal (metadata source: shadow_price_da, da_rank_value, etc.)
-- `MisoSpiceSFOutput` from pbase (raw SF source: 12,824 constraints × 2,290 pnodes)
-- Aggregation: mean across outage dates, matching V6.1 method
+- V6.1 annual signal (metadata source: class-specific shadow_price_da, da_rank_value)
+- `MISO_SPICE_SF.parquet` at `/opt/data/xyz-dataset/spice_data/miso/` (13,207 constraints × 2,225 pnodes, 12 market months per PY)
+- Aggregation: mean across outage dates within 3 market months per quarter
 
 ## 6. Signal Name
 

@@ -131,33 +131,34 @@ it. If supplement, publish the full pre-dedup set and let pmodel handle dedup.
 
 ### 3.3 SF Matrix Construction — RESOLVED
 
-**Source**: Raw SPICE SF outputs at
-`/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/sf/auction_month={YYYY-06}/market_month={YYYY-MM}/market_round=1/outage_date={date}/sf.parquet`
+**Source**: `MISO_SPICE_SF.parquet` in the canonical spice_data path:
+`/opt/data/xyz-dataset/spice_data/miso/MISO_SPICE_SF.parquet/spice_version=v6/auction_type=annual/auction_month={YYYY-06}/market_month={YYYY-MM}/market_round=1/outage_date={date}/`
 
-**Loader**: `MisoSpiceSFOutput` in pbase
+NOT the `pw_data` path (`prod_f0p_model_miso/sf/`) — that only has 1 market_month
+per annual PY because it's the f0p pipeline output.
 
 **Key facts** (verified):
-- Raw SPICE has **12,824 constraints × 2,290 pnodes** per outage date
-- V6.1 selected ~400 from these 12,824. Our post-dedup set is a different subset.
+- Raw SPICE has **13,207 constraints × 2,225 pnodes** per outage date
+- **12 market months** per annual PY (one per delivery month Jun-May)
+- 10-11 outage dates per market month
+- Quarter mapping: aq1 = Jun/Jul/Aug, aq2 = Sep/Oct/Nov, aq3 = Dec/Jan/Feb, aq4 = Mar/Apr/May
+- V6.1 selected ~300-480 from these 13,207. Our post-dedup set is a different subset.
 - **Any constraint in our universe has SF in the raw data** — no gaps.
 - Pnodes are **identical across quarters within a PY** (100% overlap aq1-aq4).
   Slowly grows across PYs (91-95% overlap year-to-year).
-- Annual auction has only 1 market_month per auction_month (e.g., 2024-06),
-  with 10 outage dates.
-- Constraint universe **differs by quarter** (aq1 vs aq2 overlap ~44%).
+- SF values are **class-type-agnostic** (onpeak SF == offpeak SF for same constraint).
+  Only the constraint selection differs per class_type.
 
-**Aggregation method**: Mean across outage dates. Verified: V6.1 SF correlates 0.98-0.999
-with mean-of-raw-outage-SF. Small diffs (~0.01 max) likely from filtering/rounding.
+**Aggregation method**: Mean across outage dates within the 3 market months of each
+quarter. Verified: V6.1 SF correlates 0.98-0.999 with this aggregation.
 
-**Our approach**: For each constraint in our post-dedup set:
-1. Load raw SF from `MisoSpiceSFOutput` for the target (auction_month, market_round)
-2. Filter to outage dates for the relevant quarter
-3. Mean across outage dates → one SF value per (pnode, constraint)
-4. Subset columns to our post-dedup constraint set
-5. Publish as the SF parquet
+**Our approach**: For each quarter's constraint set:
+1. Load raw SF from `MISO_SPICE_SF.parquet` for the 3 market months of that quarter
+2. Mean across all outage dates (30-33 per quarter)
+3. Subset columns to our post-dedup constraint set for that (aq, class_type)
+4. Publish as the SF parquet
 
-This is NOT inherited from V6.1 — we build our own SF from the same upstream source
-that V6.1 used. This ensures coverage for any constraint, not just V6.1's selection.
+This is NOT inherited from V6.1 — we build our own SF from the same upstream source.
 
 ### 3.4 Dedup Parameters
 
@@ -171,17 +172,30 @@ custom logic from the team.
 
 **Mitigation**: Confirm with team which dedup logic to use — pbase's or the custom one.
 
-### 3.5 Per-Class-Type Signal
+### 3.5 Per-Class-Type Signal — MUST BE CLASS-SPECIFIC
 
-V6.1 publishes separate signals for onpeak and offpeak. Our research pipeline evaluates
-combined (onpeak + offpeak SP as `realized_shadow_price`). We need to decide:
+V6.1 publishes **genuinely different signals** for onpeak and offpeak (verified):
+- Different constraint sets: 425 onpeak vs 413 offpeak (78% overlap) for 2024-06/aq1
+- Different `shadow_price_da`: max diff $7,318 for same constraint across class types
+- Different rankings, tiers: up to 3 tier difference for same constraint
+- Root cause: `shadow_price_da` is computed from historical DA separately per hour type
+- `ori_mean`, `mix_mean`, SF values: identical across class types (class-agnostic)
 
-**Options**:
-1. **Publish identical signal for both class_types** — same ranking for onpeak and offpeak
-2. **Publish class-specific signals** — train separate NB models per class_type
+**Current research limitation**: Our Phase 5 models were trained on combined SP
+(`onpeak_sp + offpeak_sp`). This is a known gap — the current champion results are
+from a combined-ctype model.
 
-**Recommendation**: Option 1 for V7.0 (same ranking). The v0c formula and NB model were
-both trained on combined SP. Class-specific models can be a future enhancement.
+**Required for V7.0**: Build class-specific pipeline:
+- Separate targets: `onpeak_sp` for onpeak model, `offpeak_sp` for offpeak
+- Separate BF: `bf_12` for onpeak, `bfo_12` for offpeak
+- Separate cohorts: dormant = `bf_12 == 0` for onpeak (not `bf_combined_12`)
+- Class-specific `shadow_price_da` / `da_rank_value` from V6.1 or computed from DA
+- Separate NB model per class_type
+- Publish separate signal artifacts per class_type
+
+The existing ML infrastructure supports this — all class-specific columns already
+exist in the pipeline (`onpeak_sp`, `offpeak_sp`, `bf_12`, `bfo_12`, `nb_onpeak_12`,
+`nb_offpeak_12`). The change is using them separately instead of combining.
 
 ---
 
@@ -280,8 +294,15 @@ sf = ShiftFactorSignal(rto="miso", signal_name="TEST.Signal.MISO.SPICE_ANNUAL_V7
 | Data | Path |
 |------|------|
 | SPICE density | `/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/density/` |
-| V6.1 annual | `/opt/data/xyz-dataset/signal_data/miso/constraints/Signal.MISO.SPICE_ANNUAL_V6.1/` |
-| V6.2B monthly | `/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1/` |
+| **SPICE SF (annual, canonical)** | **`/opt/data/xyz-dataset/spice_data/miso/MISO_SPICE_SF.parquet/`** |
+| SPICE SF (f0p only, 1 month) | `/opt/temp/tmp/pw_data/spice6/prod_f0p_model_miso/sf/` |
+| V6.1 annual signal | `/opt/data/xyz-dataset/signal_data/miso/constraints/Signal.MISO.SPICE_ANNUAL_V6.1/` |
+| V6.1 annual SF | `/opt/data/xyz-dataset/signal_data/miso/sf/Signal.MISO.SPICE_ANNUAL_V6.1/` |
+| V6.2B monthly signal | `/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.TEST.Signal.MISO.SPICE_F0P_V6.2B.R1/` |
 | Our signal (V7.0) | `/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.Signal.MISO.SPICE_ANNUAL_V7.0.R1/` |
 | Phase 5 registry | `registry/phase5_final_150_300/`, `registry/phase5_final_200_400/` |
 | Annual band port | `research-annual-band/docs/prod-port.md` |
+
+**NOTE**: The `pw_data` SF path (`prod_f0p_model_miso/sf/`) only has 1 market_month
+per annual PY. The canonical annual SF source with all 12 delivery months is
+`MISO_SPICE_SF.parquet` in `spice_data`. Always use the `spice_data` path for annual.

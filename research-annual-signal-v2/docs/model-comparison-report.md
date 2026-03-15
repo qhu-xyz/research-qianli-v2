@@ -3,6 +3,11 @@
 **Date**: 2026-03-15
 **Repo**: research-annual-signal-v2
 
+> **IMPORTANT**: All models below were trained on **combined class_type** data
+> (`realized_shadow_price = onpeak_sp + offpeak_sp`). V6.1 production signals are
+> class-specific (different rankings for onpeak vs offpeak). The class-specific
+> pipeline is the next step — these results serve as the combined-ctype baseline.
+
 ---
 
 ## 1. Model Inventory

@@ -192,23 +192,45 @@ label_tier = tiered_labels(onpeak_sp)  # tiers based on onpeak SP only
 
 ## 7. Implementation Plan
 
-### 7.1 Module Changes
+### 7.1 New Modules (`ml/phase6/`)
+
+Class-specific pipeline is built as NEW code, not patching old combined modules.
+Shared infrastructure (`ml/data_loader.py`, `ml/bridge.py`, `ml/realized_da.py`,
+`ml/evaluate.py`, `ml/merge.py`, `ml/registry.py`) is imported as-is.
+
+| File | Purpose |
+|------|--------|
+| `ml/phase6/__init__.py` | Package init |
+| `ml/phase6/features.py` | Class-specific model table builder (class-specific target, BF, cohort + cross-class features). Calls shared `ml/ground_truth.py`, `ml/history_features.py` etc. |
+| `ml/phase6/scoring.py` | Class-specific v0c formula, NB model training, blend scoring |
+
+### 7.2 Shared Module Changes
 
 | File | Change |
 |------|--------|
-| `ml/config.py` | Add `CLASS_TYPES`, class-specific BF/target/cohort column mappings |
-| `ml/features.py` | Parameterize `build_model_table(class_type=...)` — route class-specific target, BF, cohort, AND cross-class features |
-| `ml/ground_truth.py` | Add `class_type` param — return `onpeak_sp` or `offpeak_sp` as target, recompute `label_tier` per class |
-| `ml/history_features.py` | New outputs: class-specific `shadow_price_da_{ctype}`, `da_rank_value_{ctype}`, AND cross-class columns (`bf_12` available to offpeak model, `bfo_12` available to onpeak model). Not just routing — needs to expose both same-class and cross-class history as separate features. |
-| `ml/nb_detection.py` | Route `nb_onpeak_12` / `nb_offpeak_12` per class |
-| `ml/features_trackb.py` | Recompute `historical_max_sp` per class (currently combined) |
+| `ml/config.py` | Add `CLASS_TYPES`, `CLASS_BF_COL`, `CLASS_TARGET_COL`, `CLASS_NB_FLAG_COL`, `CROSS_CLASS_BF_COL` (already done) |
+| `ml/history_features.py` | Already exposes `bf_12`, `bfo_12`, `bf_combined_12` — no change needed |
+| `ml/ground_truth.py` | Already exposes `onpeak_sp`, `offpeak_sp` — no change needed |
 | `ml/evaluate.py` | No change — evaluation is target-agnostic |
 
-### 7.2 New Scripts
+### 7.3 New Scripts (`scripts/phase6/`)
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/run_phase6_class_specific.py` | Phase 6: class-specific champion selection |
+| `scripts/phase6/run_v0a.py` | Step 1: class-specific da_rank baseline |
+| `scripts/phase6/run_v0c.py` | Step 3: class-specific full formula |
+| `scripts/phase6/run_blend.py` | Step 7: blend sweep + champion per class |
+
+### 7.4 Registry Structure
+
+| Path | Contents |
+|------|---------|
+| `registry/onpeak/m1_gt/` | M1 ground truth verification |
+| `registry/onpeak/m2_v0a/` | M2 v0a baseline |
+| `registry/onpeak/m2_v0c/` | M2 v0c formula |
+| `registry/onpeak/m2_blend/` | M2 blend champion |
+| `registry/offpeak/` | Same structure |
+| `registry/archive/` | 31 combined-ctype entries (frozen) |
 
 ### 7.3 Experiment Structure
 
@@ -307,7 +329,7 @@ If any check fails, **stop and diagnose** before proceeding.
 | **Deliverable** | `build_model_table(class_type="onpeak")` and `"offpeak"` |
 | **Checks** | (1) `onpeak_sp + offpeak_sp == combined_sp` within 1e-6 for all branches. (2) No null targets. (3) Class-specific dormant count: `bf_12==0` ≠ `bf_combined_12==0` for some branches. (4) `label_tier` recomputed per class. |
 | **Pass rule** | All 4 checks pass. Dormant cross-class count matches earlier verified 186. |
-| **Evidence** | Save row counts, dormant counts, and SP distribution per class to `registry/m1_class_gt/`. |
+| **Evidence** | Save to `registry/{onpeak,offpeak}/m1_gt/`. |
 
 ### M2: Class-Specific v0c Baseline
 
@@ -316,7 +338,7 @@ If any check fails, **stop and diagnose** before proceeding.
 | **Deliverable** | v0c scores using `bf_12`/`bfo_12` and class-specific `da_rank_value` |
 | **Checks** | (1) Onpeak v0c ≠ offpeak v0c for same branch (different BF and da_rank). (2) v0c scores ∈ [0, 1]. (3) VC@300 for class-specific v0c is within 20% of combined v0c (not wildly different). |
 | **Pass rule** | Class-specific scores differ meaningfully; VC is reasonable. |
-| **Evidence** | Save `registry/m2_v0c_class/{onpeak,offpeak}/metrics.json`. |
+| **Evidence** | Save to `registry/{onpeak,offpeak}/m2_v0c/metrics.json`. |
 
 ### M3: Class-Specific NB Model + Blend
 
@@ -325,7 +347,7 @@ If any check fails, **stop and diagnose** before proceeding.
 | **Deliverable** | NB model per class, blend champion per class |
 | **Checks** | (1) NB model trained on class-specific dormant. (2) Cross-class features have nonzero importance. (3) Blend beats v0c solo on paired scorecard for at least one K pair. (4) Holdout validation passes gates. |
 | **Pass rule** | Champion per class passes all gates vs class-specific v0c solo. |
-| **Evidence** | Save `registry/m3_blend_class/{onpeak,offpeak}/config.json + metrics.json`. |
+| **Evidence** | Save to `registry/{onpeak,offpeak}/m2_blend/config.json + metrics.json`. |
 
 ### M4: Constraint-Level Publication
 
@@ -334,7 +356,7 @@ If any check fails, **stop and diagnose** before proceeding.
 | **Deliverable** | Published constraints + SF parquets per (PY, aq, ctype) |
 | **Checks** | (1) 20-column schema matches V6.1. (2) Index format correct. (3) SF exact parity with raw SPICE (max_diff < 1e-6). (4) Metadata matches V6.1 for overlapping constraints. (5) `shadow_price = shadow_sign`. (6) 5 tiers × 200 = ~1,000 constraints. (7) Dedup: max 3/branch/bus_key_group. |
 | **Pass rule** | All 7 checks pass. ConstraintsSignal round-trip succeeds. |
-| **Evidence** | Save signal to production path. Save verification report to `registry/m4_publication/`. |
+| **Evidence** | Save signal to production path. Save verification report to `registry/{onpeak,offpeak}/m4_publication/`. |
 
 ### M5: Consumer Validation
 
@@ -343,7 +365,7 @@ If any check fails, **stop and diagnose** before proceeding.
 | **Deliverable** | pmodel loads our signal without crash |
 | **Checks** | (1) `load_constraints_and_tier_set()` succeeds. (2) Tier sets build correctly (cumulative). (3) SF intersection ≥ 80%. (4) shadow_price clipping is no-op (values are ±1). |
 | **Pass rule** | pmodel smoke test passes. |
-| **Evidence** | Save pmodel load log to `registry/m5_consumer_test/`. |
+| **Evidence** | Save pmodel load log to `registry/{onpeak,offpeak}/m5_consumer_test/`. |
 
 ### Unresolved-Gap Register
 

@@ -189,3 +189,13 @@ PHASE5_GATE_METRICS_200_400: list[str] = [
     "VC@200", "VC@400", "Recall@200", "Recall@400",
     "Abs_SP@200", "Abs_SP@400", "Dang_Recall@400",
 ]
+
+# ─── Phase 6: class-specific pipeline ──────────────────────────────────
+CLASS_TYPES: list[str] = ["onpeak", "offpeak"]
+
+# Per-class column mappings
+CLASS_BF_COL: dict[str, str] = {"onpeak": "bf_12", "offpeak": "bfo_12"}
+CLASS_TARGET_COL: dict[str, str] = {"onpeak": "onpeak_sp", "offpeak": "offpeak_sp"}
+CLASS_NB_FLAG_COL: dict[str, str] = {"onpeak": "nb_onpeak_12", "offpeak": "nb_offpeak_12"}
+# Cross-class BF: the OTHER class's BF column
+CROSS_CLASS_BF_COL: dict[str, str] = {"onpeak": "bfo_12", "offpeak": "bf_12"}

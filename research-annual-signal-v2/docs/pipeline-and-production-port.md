@@ -56,7 +56,7 @@ V6.1 is the existing annual constraint signal. **Identical 20-column schema** as
 
 | Artifact | V6.1 (existing) | V7.0 (ours) | Match? |
 |----------|-----------------|-------------|--------|
-| **Constraints parquet** | 20 cols, ~280-480 rows per (aq, ctype) | 20 cols, similar range (post-dedup) | **Schema: YES** |
+| **Constraints parquet** | 20 cols, ~280-480 rows per (aq, ctype) | 20 cols, **~1,000** per (aq, ctype) post-dedup | **Schema: YES. Count: LARGER** |
 | **SF parquet** | pnode × constraint | pnode × constraint | **YES (exact parity verified)** |
 | **Index format** | `{cid}\|{sign}\|spice` | `{cid}\|{sign}\|spice` | **YES** |
 | **Tier 0-4** | Assigned by V6.1 rank_ori | Assigned by our blend score | **Format: YES. Values: DIFFERENT** |
@@ -81,7 +81,7 @@ source contracts, not V6.1 inheritance.
 | Column | Source (V6.1 overlap) | Source (new constraints) |
 |--------|----------------------|------------------------|
 | constraint_id | Bridge mapping | Bridge mapping |
-| flow_direction | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO or bridge |
+| flow_direction | V6.1 | **OPEN GAP** — need MISO_SPICE_CONSTRAINT_INFO. shadow_sign depends on this. |
 | branch_name | V6.1 | Bridge mapping |
 | bus_key | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO |
 | bus_key_group | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO |
@@ -96,7 +96,7 @@ source contracts, not V6.1 inheritance.
 | density_mix_rank | V6.1 (inherited) | Rank of mix_mean |
 | mean_branch_max | V6.1 (inherited) | SPICE density |
 | mean_branch_max_fillna | V6.1 (inherited) | SPICE density |
-| shadow_sign | V6.1 | **Yes (inherited)** |
+| shadow_sign | V6.1 | **OPEN GAP** — derived from flow_direction; same gap as flow_direction |
 | **rank** | Our blend score | **NO — our ranking** |
 | **tier** | Our blend ranking | **NO — our tiers** |
 | **shadow_price** | Our model estimate | **NO — our estimate** |
@@ -119,22 +119,19 @@ pmodel (verified: the optimizer accepts any non-NaN float in shadow_price).
 
 ### 3.2 Constraint Universe Size
 
-**Pre-dedup density universe**: ~12,800-13,000 constraints per (PY, aq). Class-agnostic —
-the density universe does not change by class_type.
+**Pre-dedup density universe**: ~12,800-13,000 constraints per (PY, aq). Class-agnostic.
 
-**V6.1 published**: ~280-480 per (PY, aq, class_type) after V6.1's selection/dedup.
+**V6.1 published**: ~280-480 per (PY, aq, class_type).
 
-**Our post-dedup V7.0**: will be in a similar range (~300-500 per (PY, aq, ctype)),
-depending on scoring + dedup thresholds. This is intentional — we publish the
-post-dedup set that pmodel will actually use.
+**V7.0 target: 1,000 per (PY, aq, ctype)** = 5 tiers × 200 each.
 
-**Gap**: If pmodel expects to load multiple signals and union their constraint sets
-(as it does for f0p: DZ + SPICE + DA), our smaller set may not cover all constraints
-the optimizer needs. This depends on whether V7.0 is the sole annual signal or one
-of several.
+This is larger than V6.1 (367 avg) but within the range of existing annual signals
+(SPICE_ANNUAL_V4.5 peaks at 889, DA_ANNUAL_V1.4 at 549). The larger count gives
+more coverage for the optimizer's constraint universe.
 
-**Mitigation**: Check with the team whether V7.0 replaces V6.1 entirely or supplements
-it. If supplement, publish the full pre-dedup set and let pmodel handle dedup.
+**Published signal is always post-dedup.** pmodel does not apply our branch-cap +
+SF correlation dedup on load. If V7.0 is loaded alongside other signals, pmodel
+unions the constraint sets and uses all of them.
 
 ### 3.3 SF Matrix Construction — RESOLVED
 
@@ -258,7 +255,6 @@ Step 2: Expand branch → constraints (FROZEN: pure branch inheritance)
   └─ CID mapping from load_cid_mapping()
   └─ Each constraint inherits its branch's blend score
   └─ No within-branch constraint tie-breaking in V7.0
-  └─ Dedup (Step 6) handles constraint selection within branch
 
 Step 3: Join V6.1 metadata
   └─ shadow_price_da, da_rank_value, ori_mean, mix_mean, rank_ori, etc.
@@ -268,9 +264,17 @@ Step 4: Assign tiers (0-4) by blend score rank
 
 Step 5: Build SF matrix from SPICE outage data
 
-Step 6: Dedup (publish post-dedup)
-  └─ Max 3/branch/bus_key_group
-  └─ Chebyshev ≥ 0.05, correlation bounds
+Step 6: Selection + dedup (walk-and-fill, publish post-dedup)
+  └─ Target: 5 tiers × 200 = 1,000 constraints
+  └─ Algorithm: walk ranking top-to-bottom, apply dedup while selecting:
+     1. Rank all ~13k candidates by blend score (descending)
+     2. For each candidate:
+        - Skip if branch already has 3 in this bus_key_group
+        - Skip if SF Chebyshev < 0.05 vs any selected in same group
+        - Otherwise: accept, assign to current tier
+     3. When tier reaches 200: advance to next tier
+     4. Stop when tier 4 filled (or candidates exhausted)
+  └─ Do NOT "select 1000 then dedup" — dedup during selection
 
 Step 7: Validate (schema, no NaN, SF alignment) + publish
   └─ ConstraintsSignal.save_data()

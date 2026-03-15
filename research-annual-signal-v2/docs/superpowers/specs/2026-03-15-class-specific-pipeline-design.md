@@ -124,6 +124,11 @@ Separate NB model per class_type:
 
 **Onpeak NB model**:
 - Population: `bf_12 == 0` AND `has_hist_da == True`
+  - `has_hist_da` remains **combined** (not class-specific): it means "has any DA
+    history record at all" (from either onpeak or offpeak). A branch with only offpeak
+    DA history still has `has_hist_da = True` and should be in the onpeak NB pool
+    (it has features from density + cross-class history). Only `history_zero` branches
+    (`has_hist_da = False`) are excluded — they have no DA records at all.
 - Target: `onpeak_sp > 0`
 - Sample weights: sqrt(onpeak_sp) or tiered by onpeak_sp
 - Features (~17):

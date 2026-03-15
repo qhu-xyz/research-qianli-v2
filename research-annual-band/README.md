@@ -3,20 +3,22 @@
 ## Structure
 
 ```
-miso/           # MISO annual band research (complete)
-  scripts/      # Experiment scripts (v1-v11)
-  versions/     # Band calibration results
-  docs/         # Reports, plans, prod-port spec
-  archive/      # Phase 1-3 historical research
-  pipeline/     # Pipeline CLI tools
-
-pjm/            # PJM annual band research (starting)
+miso/           # MISO annual band research
+pjm/            # PJM annual band research (not started)
 ```
 
 ## MISO Status
-- V10 empirical asymmetric bands: holdout validated (PY 2025, 95-97% P95 coverage)
-- Pre-port validation: 6/6 steps passed
-- Production module: not yet built (annual_band_generator.py)
+- V10 empirical asymmetric bands: dev + holdout evaluated
+- Remaining gaps before production port:
+  - E2E inference test not committed as reusable script
+  - prod-port.md has stale monthly references in some sections
+  - Production module (annual_band_generator.py) not built
+- No shared annual-band interface exists yet
 
 ## PJM Status
 - Not started
+
+## Notes
+- Scripts under miso/scripts/ have hardcoded paths referencing old layout in docstrings.
+  ROOT is computed relative to script location so execution still works.
+- No common/shared module exists. Interface will emerge from PJM implementation.

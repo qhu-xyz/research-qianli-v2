@@ -1,7 +1,7 @@
 # PJM Annual Band Research — Knowledge Base
 
-**Last updated:** 2026-03-15
-**Status:** MTM data loaded, scale + baseline confirmed
+**Last updated:** 2026-03-16
+**Status:** Baseline research complete. Ready for banding phase.
 
 ---
 
@@ -12,48 +12,71 @@
 | Period type | `a` (12-month, Jun-May) | `aq1`-`aq4` (quarterly) |
 | Rounds | **4** (R1-R4) | 3 (R1-R3) |
 | Settlement | 12 months | 3 months per quarter |
+| All rounds clear | **~April** (same auction event) | ~April (R1), ~May (R2), ~Jun (R3) |
 | Auction month convention | June (month 6) | June (month 6) |
 | Class types (production) | `onpeak`, `dailyoffpeak`, `wkndonpeak` | `onpeak`, `offpeak` |
 | Hedge types | `obligation` (97%) + `option` (3%) | `obligation` only |
 
-## Key Difference from MISO: ALL Rounds Have Prior MCP
+## Baseline Decision: `mtm_1st_mean` for ALL Rounds (FINAL)
 
-PJM R1 annual is NOT the first auction for the planning year. Long-term auctions (yr1-yr3)
-clear before R1 and establish prior clearing prices. Therefore:
+### Why mtm_1st_mean
 
-- **All 4 rounds have `mtm_1st_mean`** — R1 coverage = 99.9%, R2-R4 = 100%
-- **No need for H baseline** (historical DA congestion fallback)
-- **No need for nodal_f0 stitch** (the complex baseline MISO R1 requires)
-- **Only filter to `hedge_type == 'obligation'`** — options (3%) not banded
+- All 4 rounds have `mtm_1st_mean` with 99.9-100% coverage
+- No need for H baseline, nodal_f0 stitch, or any fallback
+- Simpler than MISO (no Ray, no nodal lookup, no fallback chain)
 
-This makes PJM annual banding **much simpler** than MISO.
+### What mtm_1st_mean Is
 
-## mtm_1st_mean Source (CONFIRMED)
+| Round | Source | When It Clears |
+|-------|--------|:---:|
+| R1 | Long-term yr1 Round 5 (same PY) | ~March |
+| R2 | Annual R1 (same PY) | ~April |
+| R3 | Annual R2 (same PY) | ~April |
+| R4 | Annual R3 (same PY) | ~April |
 
-The M2M system returns all auction clearing prices for a path, ordered by recency:
+Verified from raw M2M columns: `lr5Jun24 == mtm_1st` (exact match, diff=0.0000).
 
-```
-For R1 PY2024 annual:
-  ar1Jun24 = Annual R1 (own MCP, LEAKY)
-  lr5Jun24 = Long-term yr1 R5 (~March 2024, NON-LEAKY) ← this is mtm_1st
-  lr4Jun24 = Long-term yr1 R4 (~December 2023)          ← this is mtm_2nd
-  lr3Jun24 = Long-term yr1 R3 (~October 2023)           ← this is mtm_3rd
-  ...
-```
+### Why We Can't Improve It (Exhaustive Search)
 
-| Round | `mtm_1st_mean` source | When it clears |
-|-------|----------------------|----------------|
-| R1 | **Long-term yr1 Round 5** (same PY) | ~March |
-| R2 | Annual R1 (same PY) | ~April (same auction event) |
-| R3 | Annual R2 (same PY) | ~April (same auction event) |
-| R4 | Annual R3 (same PY) | ~April (same auction event) |
+| Approach | Best MAE (monthly) | vs mtm_1st | Verdict |
+|----------|---:|---:|---|
+| **mtm_1st_mean (lr5)** | **65.7** | — | **BEST** |
+| Nodal f0 stitch (PjmCalculator) | 110.3 | +68% | Much worse |
+| ML regression (8 features) | 82.8 | +26% | Worse, overfits |
+| LT round blend (lr5+lr4+lr3) | 65.6 | -0.2% | Negligible |
+| Prior year R1 MCP blend | 54.8 | -2.7% | Low coverage |
+| Best nodal blend (90/10) | 64.7 | -1.4% | Negligible |
+| Monthly f0 path MCPs | 78.6 | +20% | Worse, 18% coverage |
 
-**All 4 annual rounds clear in April** within the same auction event (days apart, not months).
-R1's baseline is the long-term yr1 R5 MCP (~March) — NOT the prior year's R4 annual MCP.
+For R2-R4: same conclusion. `1.2*m1 - 0.2*m2` gives at most -3.6% on R3, -2.7% on R4 — not worth the complexity. For R2, nothing beats mtm_1st at all.
 
-The MAE gap between R1 (65.7) and R2-R4 (17-24) is due to sequential price discovery
-within the April auction, not timing differences. R2 sees R1's price from hours/days earlier,
-R3 sees R2's, etc. Each round refines within the same event.
+### R1 MAE Is Improving Over Time
+
+| Period | R1 MAE (monthly) | R1/R2 Ratio |
+|--------|---:|:---:|
+| PY 2017-2020 | ~105 | 3.4-4.8x |
+| PY 2021 | 51.8 | 2.5x |
+| PY 2022 | 95.8 | 2.3x |
+| PY 2023-2025 | **~52** | **1.6-2.8x** |
+
+For PY 2026 production: expect R1 MAE ~40-50 monthly (480-600 annual).
+R2-R4 MAE is stable at 15-25 monthly across all years (except PY 2022: 38-43).
+
+### R2-R4 MAE Is Stable (No Improvement Needed)
+
+| PY | R1 | R2 | R3 | R4 |
+|----|---:|---:|---:|---:|
+| 2017 | 101.4 | 30.2 | 22.0 | 15.4 |
+| 2018 | 99.5 | 22.1 | 18.1 | 13.5 |
+| 2019 | 105.7 | 26.3 | 22.9 | 17.8 |
+| 2020 | 114.6 | 23.9 | 17.8 | 15.3 |
+| 2021 | 51.8 | 20.6 | 19.5 | 19.0 |
+| **2022** | **95.8** | **42.5** | **38.9** | **43.4** |
+| 2023 | 62.0 | 22.0 | 16.5 | 15.8 |
+| **2024** | **41.2** | **16.3** | **12.7** | **11.7** |
+| 2025 | 49.9 | 30.3 | 21.9 | 20.4 |
+
+PY 2022 is the universal worst year. PY 2024 is the best.
 
 ## Scale Convention (CONFIRMED)
 
@@ -63,44 +86,7 @@ R3 sees R2's, etc. Each round refines within the same event.
 | `mcp_mean` | **Monthly average** | `mcp / 12` (confirmed: ratio = 12.0000) |
 | `mtm_1st_mean` | **Monthly average** | Prior round's `mcp_mean` |
 
-**Convention:** Use `mcp` (annual total) as target. Scale baseline to annual: `mtm_1st_mean * 12`.
-Or equivalently, work in monthly scale (`mcp_mean` vs `mtm_1st_mean`) and multiply at the end.
-
-**For consistency with MISO:** Use `mcp` directly and `baseline = mtm_1st_mean * 12`.
-
-## Baseline Performance (mtm_1st_mean × 12 vs mcp)
-
-Residual = `mcp_mean - mtm_1st_mean` (monthly scale, for comparison):
-
-| Round | n | Bias | MAE | P95 |
-|-------|--:|-----:|----:|----:|
-| **R1** | 3,896,628 | -8.8 | **65.7** | 251 |
-| **R2** | 4,749,876 | +4.1 | **24.4** | 88 |
-| **R3** | 5,365,044 | +1.6 | **19.2** | 70 |
-| **R4** | 5,362,812 | +0.1 | **17.4** | 65 |
-
-In annual scale (×12):
-
-| Round | MAE (annual) | P95 (annual) |
-|-------|-------------:|-------------:|
-| R1 | **788** | 3,012 |
-| R2 | **293** | 1,056 |
-| R3 | **230** | 840 |
-| R4 | **209** | 780 |
-
-**Key insight:** R1 MAE (788 annual) is 3-4x worse than R2-R4 because the long-term
-auction clearing price is a weaker baseline than the prior annual round's MCP.
-But it's still much better than having NO baseline (MISO R1 without nodal_f0).
-
-**Comparison with MISO:**
-
-| Metric | PJM R1 (annual) | MISO R1 (quarterly) |
-|--------|----------------:|--------------------:|
-| Baseline MAE | 788 | 792 (nodal_f0 × 3) |
-| Baseline source | mtm_1st_mean (long-term MCP) | nodal_f0 (stitched f0 forwards) |
-| Baseline coverage | 99.9% | 89-100% |
-
-PJM R1 has similar MAE to MISO R1 but with 99.9% coverage and no complex stitch.
+**For banding:** Use `mcp` as target, `baseline = mtm_1st_mean * 12`. All band widths in annual scale.
 
 ## Data Profile
 
@@ -108,78 +94,51 @@ PJM R1 has similar MAE to MISO R1 but with 99.9% coverage and no complex stitch.
 |-----------|-------|
 | Raw data | `/opt/temp/qianli/annual_research/pjm_annual_cleared_all.parquet` (238 MB) |
 | With MTM | `/opt/temp/qianli/annual_research/pjm_annual_with_mcp.parquet` (403 MB) |
-| Total rows (obligations) | 19.4M |
+| Total rows (obligations, prod classes) | 19.4M |
 | PYs | 2017-2025 (9 years) |
 | Unique paths | 194,778 |
 | Rows per round | R1: 3.9M, R2: 4.7M, R3: 5.4M, R4: 5.4M |
 
-### Class Types in Data
+### Important: PY 2017-2022 R1 was onpeak-only
 
-| Class | Rows | Production? |
-|-------|-----:|:---:|
-| `onpeak` | 12.1M | Yes |
-| `dailyoffpeak` | 4.1M | Yes |
-| `wkndonpeak` | 4.2M | Yes |
-| `offpeak` | 6.6M | Legacy — filter out |
-| `24h` | 0.9M | Legacy — filter out |
-| `option` | 0.9M | Filter out (obligation only) |
+`dailyoffpeak` and `wkndonpeak` only appear in R1 from PY 2023. This means:
+- Per-class stratification falls back to pooled for early PYs in R1
+- Recent years (2023+) give more accurate per-class bands for R1
+- R2-R4 have all 3 classes starting PY 2023 as well
 
-### Split Structure
+## Preliminary Band Results (V1, Dev)
 
-| Class | Split Rows/Trade | `mcp / sum(split)` |
-|-------|---:|---:|
-| onpeak | 24 | 0.5 |
-| dailyoffpeak | 24 | 0.5 |
-| wkndonpeak | 12 | 1.0 |
+| Round | P95 Cov | P95 HW (annual) | PY2022 (worst) | onpeak P95 | dailyoff P95 | wkndon P95 |
+|-------|:---:|---:|:---:|:---:|:---:|:---:|
+| R1 | 97.1% | 2,863 | 94.0% | 96.6% | 97.7% | 98.1% |
+| R2 | 95.6% | 803 | 88.3% | 94.5% | 97.7% | 97.2% |
+| R3 | 95.8% | 670 | 86.0% | 94.5% | 97.8% | 97.9% |
+| R4 | 94.6% | 569 | 82.4% | 92.7% | 97.9% | 97.5% |
 
-## Band Calibration Results (Preliminary)
+## Banding Phase Plan
 
-### R1 Baseline Improvement Attempts
+1. **Write PJM band script** — adapted from MISO `run_v9_bands.py`:
+   - 4 rounds (not 3)
+   - 3 class types (not 2)
+   - Period type `a` (not `aq1`-`aq4`)
+   - Annual scale × 12 (not quarterly × 3)
+   - `mtm_1st_mean * 12` baseline for ALL rounds (no nodal stitch needed)
+   - `hedge_type == 'obligation'` filter
 
-| Approach | MAE (monthly) | vs mtm_1st |
-|----------|---:|---:|
-| **mtm_1st_mean (lr5)** | **65.7** | — |
-| Nodal f0 stitch | 110.3 | +68% (worse) |
-| Best blend (90% mtm + 10% f0) | 64.7 | -1.4% |
-| ML regression (various features) | 82.8 | +26% (worse) |
-| Prior year R1 MCP blend | 54.8 | -2.7% (low coverage) |
+2. **Dev run** — temporal expanding CV, min_train_pys=2, dev PYs 2017-2024
 
-**Conclusion:** mtm_1st_mean is the best available R1 baseline. Cannot improve >3%.
+3. **Holdout** — PY 2025, min_train_pys=3
 
-### R1 MAE By Era
+4. **Comprehensive report** — same format as MISO v9/v10 reports
 
-| Period | MAE (monthly) | Notes |
-|--------|---:|---|
-| PY 2017-2020 | ~105 | Only onpeak traded in R1 |
-| PY 2021 | 51.8 | Low volatility year |
-| PY 2022 | 95.8 | High volatility |
-| PY 2023-2025 | ~52 | All 3 classes traded, lower MAE |
+5. **Production port planning** — much simpler than MISO (no nodal lookup needed)
 
-### Band Width Results (All Rounds, Annual Scale)
+## Completed Steps
 
-| Round | P95 Cov | P95 HW (annual) | Baseline |
-|-------|:---:|---:|---|
-| R1 (all years) | 96.8% | 3,290 | LT yr1 R5 × 12 |
-| R1 (recent 2yr) | 97.1% | 2,132 | LT yr1 R5 × 12 |
-| R2 | 93.9% | 836 | R1 MCP × 12 |
-| R3 | 93.9% | 698 | R2 MCP × 12 |
-| R4 | 91.9% | 560 | R3 MCP × 12 |
-
-### Key Findings
-
-1. **R1 bands are 4-6x wider than R2-R4** — structural, due to LT→annual price discovery gap
-2. **Recent years (2023+) have much tighter R1 bands** — using recent data only gives 35% narrower widths
-3. **PY 2017-2022 R1 had only onpeak class** — dailyoffpeak/wkndonpeak appear from PY 2023
-4. **R1 vs R2 residuals are uncorrelated (r=0.087)** — the price genuinely changes between March and April auctions
-5. **R1/R2 MAE ratio is shrinking**: PY2017=3.4x → PY2025=1.6x, suggesting improving LT liquidity
-
-## Next Steps
-
-1. ~~Check mcp_mean = mcp/12~~ ✅ Confirmed
-2. ~~Check R1 mtm_1st_mean coverage~~ ✅ 99.9%
-3. ~~Check residual magnitude across rounds~~ ✅ Done
-4. ~~Run asymmetric quantile band calibration~~ ✅ Preliminary results
-5. ~~Test baseline improvement approaches~~ ✅ mtm_1st is best, can't improve >3%
-6. Full V10-equivalent run with holdout validation
-7. Generate comprehensive report (like MISO v9 report)
-8. Production port planning
+1. ~~Data loading + profiling~~ ✅
+2. ~~Scale verification (mcp/12)~~ ✅
+3. ~~MTM source tracing (lr5 for R1)~~ ✅
+4. ~~Baseline improvement exhaustive search~~ ✅ mtm_1st is best
+5. ~~MAE trend analysis (all rounds × all PYs)~~ ✅
+6. ~~R2-R4 improvement search~~ ✅ Can't beat mtm_1st
+7. ~~Preliminary band calibration~~ ✅ V1 results saved

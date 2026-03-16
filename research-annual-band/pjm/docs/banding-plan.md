@@ -74,14 +74,81 @@ Report walltimes.
 
 ## Task 4: Dev Results Report
 
-`pjm/docs/v1-dev-results-report.md` — same format as MISO:
+`pjm/docs/v1-dev-results-report.md`
 
-- Table A: Overall coverage all 8 levels × 4 rounds
-- Table B: Per-bin coverage all 8 levels × 4 rounds
-- Table C: Per-PY P95 + per-bin + per-class breakdown × 4 rounds
-- Table D: Width at all levels (annual scale) × 4 rounds
-- Table E: Class parity at P95
-- Red flag analysis
+**Two equally important metrics: coverage accuracy AND band width.**
+Coverage tells us if we're capturing the right percentage. Width tells us if the bands are economically useful (narrower = better, as long as coverage holds).
+
+### Coverage Analysis (is target reached?)
+
+**Table 1: Overall coverage vs target — all 8 levels × 4 rounds**
+```
+Round | P10 err | P30 err | P50 err | P70 err | P80 err | P90 err | P95 err | P99 err
+```
+Flag any cell where |error| > 5pp.
+
+**Table 2: Per-bin coverage at P95 — 5 bins × 4 rounds**
+Find the weakest bin per round. q5 expected to under-cover.
+```
+Round | q1 | q2 | q3 | q4 | q5 | WEAKEST
+```
+
+**Table 3: Per-PY coverage at P95 — all PYs × 4 rounds**
+Find the weakest year per round. PY2022 expected to be worst.
+```
+Round | PY2019 | PY2020 | ... | PY2024 | WEAKEST | RANGE
+```
+
+**Table 4: Per-class coverage at P95 — 3 classes × 4 rounds**
+Find the weakest class per round. onpeak expected to be weakest.
+```
+Round | onpeak | dailyoffpeak | wkndonpeak | WEAKEST | GAP
+```
+
+**Table 5: Per-PY × Per-bin P95 breakdown (the full grid)**
+For each round, a matrix of PY × bin showing P95 coverage.
+Highlight any cell below 85%.
+
+### Width Analysis (are bands economically useful?)
+
+**Table 6: Width at all levels — all 8 levels × 4 rounds (annual $)**
+```
+Round | P10 | P30 | P50 | P70 | P80 | P90 | P95 | P99
+```
+
+**Table 7: Per-bin P95 width — 5 bins × 4 rounds**
+Find the widest bin per round. q5 expected to dominate.
+```
+Round | q1 | q2 | q3 | q4 | q5 | q5/q1 ratio
+```
+
+**Table 8: Per-PY P95 width — all PYs × 4 rounds**
+Find the widest year. Track if width is shrinking over time.
+```
+Round | PY2019 | ... | PY2024 | TREND
+```
+
+**Table 9: Per-class P95 width — 3 classes × 4 rounds**
+```
+Round | onpeak | dailyoffpeak | wkndonpeak | onpeak/wkndon ratio
+```
+
+### Combined Analysis
+
+**Table 10: Coverage-Width tradeoff summary**
+For each round: avg P95 coverage, avg P95 width, worst cell (coverage), widest cell (width).
+```
+Round | Avg Cov | Avg Width | Worst Cov Cell | Widest Cell
+```
+
+**Red flags:** Any cell where BOTH coverage < 90% AND width is in the top 20% — these are paths getting bad coverage despite wide bands.
+
+### Comparison with MISO
+
+**Table 11: PJM vs MISO side-by-side**
+```
+Metric | PJM R1 | MISO R1 | PJM R2 | MISO R2 | ...
+```
 
 ## Task 5: Holdout Validation (PY 2025)
 

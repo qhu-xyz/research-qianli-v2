@@ -132,11 +132,54 @@ PJM R1 has similar MAE to MISO R1 but with 99.9% coverage and no complex stitch.
 | dailyoffpeak | 24 | 0.5 |
 | wkndonpeak | 12 | 1.0 |
 
+## Band Calibration Results (Preliminary)
+
+### R1 Baseline Improvement Attempts
+
+| Approach | MAE (monthly) | vs mtm_1st |
+|----------|---:|---:|
+| **mtm_1st_mean (lr5)** | **65.7** | — |
+| Nodal f0 stitch | 110.3 | +68% (worse) |
+| Best blend (90% mtm + 10% f0) | 64.7 | -1.4% |
+| ML regression (various features) | 82.8 | +26% (worse) |
+| Prior year R1 MCP blend | 54.8 | -2.7% (low coverage) |
+
+**Conclusion:** mtm_1st_mean is the best available R1 baseline. Cannot improve >3%.
+
+### R1 MAE By Era
+
+| Period | MAE (monthly) | Notes |
+|--------|---:|---|
+| PY 2017-2020 | ~105 | Only onpeak traded in R1 |
+| PY 2021 | 51.8 | Low volatility year |
+| PY 2022 | 95.8 | High volatility |
+| PY 2023-2025 | ~52 | All 3 classes traded, lower MAE |
+
+### Band Width Results (All Rounds, Annual Scale)
+
+| Round | P95 Cov | P95 HW (annual) | Baseline |
+|-------|:---:|---:|---|
+| R1 (all years) | 96.8% | 3,290 | LT yr1 R5 × 12 |
+| R1 (recent 2yr) | 97.1% | 2,132 | LT yr1 R5 × 12 |
+| R2 | 93.9% | 836 | R1 MCP × 12 |
+| R3 | 93.9% | 698 | R2 MCP × 12 |
+| R4 | 91.9% | 560 | R3 MCP × 12 |
+
+### Key Findings
+
+1. **R1 bands are 4-6x wider than R2-R4** — structural, due to LT→annual price discovery gap
+2. **Recent years (2023+) have much tighter R1 bands** — using recent data only gives 35% narrower widths
+3. **PY 2017-2022 R1 had only onpeak class** — dailyoffpeak/wkndonpeak appear from PY 2023
+4. **R1 vs R2 residuals are uncorrelated (r=0.087)** — the price genuinely changes between March and April auctions
+5. **R1/R2 MAE ratio is shrinking**: PY2017=3.4x → PY2025=1.6x, suggesting improving LT liquidity
+
 ## Next Steps
 
 1. ~~Check mcp_mean = mcp/12~~ ✅ Confirmed
 2. ~~Check R1 mtm_1st_mean coverage~~ ✅ 99.9%
 3. ~~Check residual magnitude across rounds~~ ✅ Done
-4. Compute residuals in annual scale, run asymmetric quantile band calibration
-5. Temporal CV with same framework as MISO
-6. Compare PJM vs MISO results
+4. ~~Run asymmetric quantile band calibration~~ ✅ Preliminary results
+5. ~~Test baseline improvement approaches~~ ✅ mtm_1st is best, can't improve >3%
+6. Full V10-equivalent run with holdout validation
+7. Generate comprehensive report (like MISO v9 report)
+8. Production port planning

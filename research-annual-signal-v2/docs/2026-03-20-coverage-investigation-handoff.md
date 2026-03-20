@@ -346,14 +346,38 @@ The Caledonia–Fargo 115kV line was never in any SPICE planning model.
 
 Top 10 = $157K = 71% of all truly unmapped SP.
 
-### Corrected decomposition
+### Corrected decomposition (V3: generalized algorithm)
+
+The matching algorithm uses a cascading match — no LN/XF-specific logic — so it generalizes to PY 2026+ without modification:
+
+```
+1. Strip parenthetical (.*) from DA branch_name
+2. Handle semicolons (take first segment)
+3. Try full cleaned string against SPICE branches
+4. Try drop first token (remainder) — catches LN-type lines
+5. Try first two tokens (station + device) — catches XF-type transformers
+6. First match wins
+```
+
+**Per-year results (generalized algorithm, aq2/offpeak):**
+
+| PY | CID-unmapped | CID SP% | Recovered | Rec SP% | Truly unmapped | True SP% | No branch |
+|----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 2019-06 | 7 | 0.1% | 2 | 0.0% | 4 | **0.1%** | 1 |
+| 2020-06 | 9 | 2.3% | 3 | 2.1% | 5 | **0.1%** | 1 |
+| 2021-06 | 8 | 2.1% | 0 | 0.0% | 6 | **2.0%** | 2 |
+| 2022-06 | 17 | 2.7% | 2 | 1.6% | 9 | **1.0%** | 6 |
+| 2023-06 | 28 | 1.7% | 5 | 0.0% | 13 | **1.4%** | 10 |
+| 2024-06 | 19 | 1.8% | 11 | 0.5% | 4 | **1.0%** | 4 |
+| **2025-06** | **129** | **29.2%** | **53** | **21.8%** | **30** | **6.2%** | **46** |
 
 | Layer | 2019-2024 | 2025-06 | Fix |
 |-------|:---:|:---:|---|
 | CID-level "unmapped" (old metric) | 0.1-2.7% | 29.2% | *(overstates problem)* |
-| Branch-recoverable (new CIDs on known branches) | 0-2.1% | 18.0% | Match DA branch_name → SPICE branch_name |
-| XF extraction failures (known branch, bad parse) | ~0% | ~5% (est.) | Fix transformer parsing |
-| Truly new branches | 0.1-1.6% | ~6% (est.) | Cannot fix — genuinely new transmission elements |
+| Recovered via `drop_first` (LN-like) | 0-2.1% | 17.9% | Generalized cascade step 4 |
+| Recovered via `first_two` (XF-like) | 0% | 3.8% | Generalized cascade step 5 |
+| No `branch_name` in DA | 0-1.4% | 1.2% | DA data quality — cannot fix by matching |
+| **Truly new branches** | **0.1-2.0%** | **6.2%** | Cannot fix — genuinely new transmission elements |
 
 ---
 
@@ -429,11 +453,11 @@ All in `research-annual-signal-v2/scripts/`:
 
 ## 9. Questions for Investigation
 
-1. **Branch-level recovery**: Can the GT pipeline be updated to match DA → SPICE by branch_name (not just CID)? This would recover ~18% of the "unmapped" SP for 2025-06 without any upstream data changes.
+1. **Implement generalized branch matching in the GT pipeline**: The cascading algorithm (full → drop_first → first_two) recovers 53/129 CID-unmapped constraints (74.7% of SP) for 2025-06. It works identically across all PYs without type-specific logic, and should generalize to PY 2026+. This is the highest-leverage fix.
 
-2. **Transformer name parsing**: CIDs 511847 ($82K) and 513520 ($8K) are on branches that likely exist in SPICE (`MNTCELO TR6`, `HORNLK AT3`) but the DA branch_name format `STATION DEVICE DEVICE__2 (XF/...)` extracts incorrectly. Can we fix the extraction for transformer-type constraints?
+2. **Handle DA CIDs with `branch_name = None`**: 46 CIDs in 2025-06 ($7,652 SP) have no branch_name in DA data at all. These need `monitored_line` or `constraint_name` parsing as a secondary fallback.
 
-3. **Are the ~83 truly unmapped CIDs real transmission constraints, or modeling artifacts** (e.g., RDT/interface constraints, temporary emergency constraints)?
+3. **Are the ~30 truly unmapped branches real transmission constraints, or modeling artifacts** (e.g., RDT/interface constraints, temporary emergency constraints)?
 
 4. **Is the density threshold (0.000347) too aggressive?** Branch `78L_TNATIO11_1 1` missed by 2× ($15K SP lost). Lowering the threshold would include more branches but increase the universe size and dilute the model.
 

@@ -249,11 +249,40 @@ Even the 11% is overstated: some "truly unmapped" are transformer extraction fai
 
 Top 10 = $157K = 71% of all truly unmapped SP.
 
-### Corrected decomposition
+### Corrected decomposition (V3: generalized algorithm)
 
-| Layer | 2019-2024 | 2025-06 | Fix |
-|-------|:---:|:---:|---|
-| CID-level "unmapped" (old metric) | 0.1-2.7% | 29.2% | *(overstates problem)* |
-| Branch-recoverable (new CIDs on known branches) | 0-2.1% | 18.0% | Match DA branch_name → SPICE branch_name |
-| XF extraction failures (known branch, bad parse) | ~0% | ~5% (est.) | Fix transformer parsing |
-| Truly new branches | 0.1-1.6% | ~6% (est.) | Cannot fix — genuinely new transmission elements |
+The matching algorithm should NOT hardcode LN/XF-specific logic. Instead, use a cascading
+match that tries multiple extractions. This is robust to future format changes:
+
+```
+1. Strip parenthetical (.*) from DA branch_name
+2. Handle semicolons (take first segment)
+3. Try full cleaned string against SPICE branches
+4. Try drop first token (remainder) — works for LN-type lines
+5. Try first two tokens (station + device) — works for XF-type transformers
+6. First match wins
+```
+
+This produces identical results to the type-specific LN/XF algorithm on all tested PYs, and
+will generalize to PY 2026+ without modification as long as the DA branch_name format keeps
+the parenthetical suffix convention.
+
+**Per-year results (generalized algorithm, aq2/offpeak, sampled month):**
+
+| PY | DA CIDs | CID-unmapped | CID SP% | Recovered | Rec SP% | Truly unmapped | True SP% | No branch_name |
+|----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 2019-06 | 231 | 7 | 0.1% | 2 | 0.0% | 4 | **0.1%** | 1 |
+| 2020-06 | 338 | 9 | 2.3% | 3 | 2.1% | 5 | **0.1%** | 1 |
+| 2021-06 | 306 | 8 | 2.1% | 0 | 0.0% | 6 | **2.0%** | 2 |
+| 2022-06 | 326 | 17 | 2.7% | 2 | 1.6% | 9 | **1.0%** | 6 |
+| 2023-06 | 358 | 28 | 1.7% | 5 | 0.0% | 13 | **1.4%** | 10 |
+| 2024-06 | 355 | 19 | 1.8% | 11 | 0.5% | 4 | **1.0%** | 4 |
+| **2025-06** | **368** | **129** | **29.2%** | **53** | **21.8%** | **30** | **6.2%** | **46** |
+
+**2025-06 recovery breakdown by match method:**
+- `drop_first` (LN-like): 46 CIDs, $114,008
+- `first_two` (XF-like): 7 CIDs, $24,192
+
+**Remaining unrecoverable for 2025-06:**
+- 30 branches not in SPICE: $39,163 (6.2% of DA SP) — genuinely new transmission elements
+- 46 DA CIDs with `branch_name = None`: $7,652 (1.2%) — DA data quality issue

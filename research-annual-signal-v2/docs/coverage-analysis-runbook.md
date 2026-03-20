@@ -2,6 +2,8 @@
 
 **Purpose**: Measure how much realized DA binding value is visible to the V7.0 signal pipeline, broken down by failure mode.
 
+**Canonical method**: Use `MisoDaShadowPriceSupplement` structured keys to construct branch names from DA CIDs, then match against SPICE branches. This replaces the earlier string-parsing approach.
+
 ---
 
 ## Prerequisites
@@ -16,273 +18,153 @@ Ray is needed for `MisoApTools.get_da_shadow_by_peaktype()`.
 
 ---
 
-## Step 1: DA CID vs Bridge CID Profile by PY
+## Data Sources
 
-For each PY, sample one month of raw DA (aq2, offpeak, middle month) and compare:
-- How many DA CIDs exist?
-- How many are in the annual bridge?
-- What are the DA-only CIDs? Do they exist in any other PY's bridge?
-- What are their constraint names?
-
-```bash
-uv run python -c "
-import os
-os.environ['RAY_ADDRESS'] = 'ray://10.8.0.36:10001'
-from pbase.config.ray import init_ray
-init_ray()
-
-from pbase.analysis.tools.all_positions import MisoApTools
-tools = MisoApTools().tools
-
-import polars as pl
-from ml.bridge import load_bridge_partition
-
-PYS = [
-    ('2021-06', '2021-10'),
-    ('2022-06', '2022-10'),
-    ('2023-06', '2023-10'),
-    ('2024-06', '2024-10'),
-    ('2025-06', '2025-10'),
-]
-
-print(f'{\"PY\":<10} {\"Sample\":<10} {\"DA_CIDs\":>8} {\"DA-only\":>8} {\"DA-only%\":>9} {\"DA-onlySP%\":>11} {\"DA-only_med\":>12} {\"Mapped_max\":>11}')
-print('-' * 90)
-
-for py, sample_month in PYS:
-    st = f'{sample_month}-01'
-    next_m = int(sample_month[-2:]) + 1
-    next_y = int(sample_month[:4])
-    if next_m > 12:
-        next_m = 1
-        next_y += 1
-    et = f'{next_y}-{next_m:02d}-01'
-
-    da = tools.get_da_shadow_by_peaktype(st=st, et_ex=et, peak_type='offpeak')
-    if da is None or len(da) == 0:
-        print(f'{py:<10} {sample_month:<10} NO DATA')
-        continue
-
-    da_cids = da.groupby('constraint_id').agg({'shadow_price': 'sum'}).reset_index()
-    da_cids['abs_sp'] = da_cids['shadow_price'].abs()
-    da_cid_set = set(da_cids['constraint_id'].astype(str).tolist())
-
-    bridge = load_bridge_partition('annual', py, 'aq2')
-    bridge_cids = set(bridge['constraint_id'].to_list())
-
-    in_both = da_cid_set & bridge_cids
-    da_only = da_cid_set - bridge_cids
-
-    da_only_sp = da_cids[da_cids['constraint_id'].astype(str).isin(da_only)]['abs_sp'].sum()
-    total_sp = da_cids['abs_sp'].sum()
-    da_only_pct = len(da_only) / len(da_cid_set) * 100
-    da_only_sp_pct = da_only_sp / total_sp * 100 if total_sp > 0 else 0
-
-    da_only_ids = sorted([int(c) for c in da_only if c.isdigit()])
-    in_both_ids = sorted([int(c) for c in in_both if c.isdigit()])
-    da_only_med = da_only_ids[len(da_only_ids)//2] if da_only_ids else 0
-    mapped_max = max(in_both_ids) if in_both_ids else 0
-
-    print(f'{py:<10} {sample_month:<10} {len(da_cid_set):>8} {len(da_only):>8} {da_only_pct:>8.0f}% {da_only_sp_pct:>10.1f}% {da_only_med:>12} {mapped_max:>11}')
-
-print()
-
-# Cross-PY bridge check for DA-only CIDs in 2025-06
-print('=== 2025-06 DA-only CIDs: exist in any other PY bridge? ===')
-da_2025 = tools.get_da_shadow_by_peaktype(st='2025-10-01', et_ex='2025-11-01', peak_type='offpeak')
-da_cid_set_2025 = set(da_2025['constraint_id'].astype(str).unique())
-bridge_2025 = load_bridge_partition('annual', '2025-06', 'aq2')
-da_only_2025 = da_cid_set_2025 - set(bridge_2025['constraint_id'].to_list())
-print(f'  DA-only in 2025-06: {len(da_only_2025)} CIDs')
-for other_py in ['2019-06','2020-06','2021-06','2022-06','2023-06','2024-06']:
-    try:
-        ob = load_bridge_partition('annual', other_py, 'aq2')
-        overlap = da_only_2025 & set(ob['constraint_id'].to_list())
-        if overlap:
-            print(f'  Found in {other_py}: {len(overlap)}')
-    except:
-        pass
-
-print()
-
-# Top 10 DA-only CIDs with names for 2025-06
-print('=== Top 10 DA-only CIDs (2025-06, 2025-10/offpeak) by SP ===')
-da_only_rows = da_2025[da_2025['constraint_id'].astype(str).isin(da_only_2025)]
-da_only_agg = da_only_rows.groupby('constraint_id').agg({'shadow_price': lambda x: x.abs().sum()}).reset_index()
-da_only_agg.columns = ['constraint_id', 'abs_sp']
-da_only_top = da_only_agg.nlargest(10, 'abs_sp')
-for _, r in da_only_top.iterrows():
-    cid = str(r['constraint_id'])
-    sp = r['abs_sp']
-    name_row = da_2025[da_2025['constraint_id'].astype(str) == cid].iloc[0]
-    name = name_row.get('constraint_name', '?')
-    print(f'  CID {cid:>10}: \${sp:>10,.0f}  {name}')
-"
-```
+| Source | Path | What it provides |
+|--------|------|-----------------|
+| DA Shadow Price | via `MisoApTools.get_da_shadow_by_peaktype()` | Realized DA CIDs + shadow prices |
+| DA Supplement | `/opt/data/xyz-dataset/modeling_data/miso/MISO_DA_SHADOW_PRICE_SUPPLEMENT.parquet` | Structured keys: `key1`, `key2`, `key3`, `device_type` per CID |
+| SPICE Bridge | `MISO_SPICE_CONSTRAINT_INFO.parquet` (via `load_bridge_partition()`) | CID → branch_name mapping |
 
 ---
 
-## Step 2: Interpret Results
+## Branch Matching Algorithm
 
-Key columns:
-- **DA_CIDs**: total unique constraint_ids in DA for that month
-- **DA-only**: CIDs not in the annual bridge (cannot map to any branch)
-- **DA-only%**: fraction of DA CIDs that are unmapped
-- **DA-onlySP%**: fraction of DA SP from unmapped CIDs (more important than count)
-- **DA-only_med**: median numeric CID of unmapped constraints
-- **Mapped_max**: highest numeric CID that exists in BOTH DA and bridge
+### Why CID-level matching is insufficient
 
-If DA-only_med >> Mapped_max, the unmapped CIDs are numerically newer than anything in the bridge.
-If DA-only CIDs don't exist in any other PY's bridge, they were never part of any SPICE planning model.
+A DA constraint may have a brand-new CID not in the SPICE bridge, but the physical branch it monitors may already exist in the SPICE universe under different CIDs.
 
----
+Example: DA CID 513025 for `MAPLE R-WINGER` has a new CID, but branch `MAPLEWINGE23_1 1` already exists in SPICE with other CIDs.
 
-## Results
+### Supplement key rules
 
-### Run 1: 2026-03-20 (pre-refresh)
+The DA supplement parquet has structured keys per CID. The `device_type` field determines the rule:
 
-| PY | DA CIDs | DA-only | DA-only % | DA-only SP% | DA-only median CID | Mapped max CID |
-|----|:---:|:---:|:---:|:---:|:---:|:---:|
-| 2021-06 | 306 | 8 | 3% | 2.1% | 350,272 | 351,769 |
-| 2022-06 | 326 | 17 | 5% | 2.7% | 384,627 | 390,097 |
-| 2023-06 | 358 | 28 | 8% | 1.7% | 414,702 | 426,143 |
-| 2024-06 | 355 | 19 | 5% | 1.9% | 462,093 | 465,848 |
-| 2025-06 | 368 | 136 | 37% | 30.1% | 511,233 | 476,330 |
+| device_type | Rule | Example CID | key1 | key2 | key3 | Constructed branch |
+|:-----------:|------|:-----------:|------|------|------|-------------------|
+| **XF** (transformer) | `key1 + key3` | 511847 | MNTCELO | TR6 | TR6__2 | `MNTCELO TR6__2` |
+| **LN** (line) | `key2 + key3` | 513025 | MAPLE_R | MAPLEWINGE23_1 | 1 | `MAPLEWINGE23_1 1` |
 
-2025-06 DA-only CIDs: 136 checked against all other PY bridges — only 1 found.
+Then normalize whitespace and match against SPICE bridge branch_names.
 
-### Run 2: 2026-03-20 (post-refresh)
+### Why supplement is preferred over string parsing
 
-| PY | DA CIDs | DA-only | DA-only % | DA-only SP% | DA-only median CID | Mapped max CID |
-|----|:---:|:---:|:---:|:---:|:---:|:---:|
-| 2021-06 | 306 | 8 | 3% | 2.1% | 350,272 | 351,769 |
-| 2022-06 | 326 | 17 | 5% | 2.7% | 384,627 | 390,097 |
-| 2023-06 | 358 | 28 | 8% | 1.7% | 414,702 | 426,143 |
-| 2024-06 | 355 | 19 | 5% | 1.9% | 462,093 | 465,848 |
-| 2025-06 | 368 | **129** | **35%** | **29.3%** | **511,558** | **482,684** |
+| Approach | Recovered (2025-06) | Method |
+|----------|:---:|---|
+| String parsing (drop first token) | 46 CIDs, $114K | Regex on free-text DA `branch_name` |
+| String parsing (generalized cascade) | 53 CIDs, $138K | Try full → drop first → first two tokens |
+| **Supplement keys** | **86 CIDs, $142K** | Structured `key1/key2/key3` from MISO data |
 
-**Changes post-refresh:**
-- 2021-2024: identical (no change)
-- 2025-06: DA-only dropped from 136 → 129 (7 CIDs recovered), SP% from 30.1% → 29.3%
-- Mapped max CID increased from 476,330 → 482,684 (bridge gained ~6K new CIDs)
-- DA-only median CID shifted from 511,233 → 511,558 (slight)
-
-**Interpretation**: The bridge refresh added ~7 new CID mappings for 2025-06, recovering about 1% of DA SP.
-
-2025-06 DA-only CIDs: 129 checked against all other PY bridges — only 1 found in each of 2020/2022/2023/2024.
-
-**Top 10 DA-only CIDs (2025-06, 2025-10/offpeak, post-refresh):**
-
-| DA CID | SP | Constraint Name |
-|:---:|---:|---|
-| 512454 | $36,515 | LAKEGEO-TOWER_RD FLO MICH CITY-BABCOCK |
-| 513621 | $14,213 | CLDONIAW-FARGO FLO JAMESTOWN-PICKERT 230 |
-| 514142 | $11,180 | OSEOL2-WILSON FLO DELL 500/161 AT2 |
-| 513025 | $9,248 | MAPLE R-WINGER FLO JAMSTN-PICK-GRFRK |
-| 511847 | $9,073 | MNTCELO TR6 XF FLO MNTCELO-QUARRYN |
-| 513520 | $8,330 | HORNLK AT3 FLO GENTRX T1+GENTX-FREPT |
-| 514750 | $7,914 | LAKEGEO-TOWER_RD FLO BABCOCK3-DUNEACRE |
-| 515317 | $7,228 | WINGRIV-VERNDLE FLO BRAINRD-MUDLAKE |
-| 511239 | $6,315 | MAPLE_R-WINGER FLO AUDUBON-SHEYNNE |
-| 512028 | $6,159 | WILISTN2-LTLMUDDY FLO LELANDO2 KU2A XF |
+Supplement is more accurate (+33 CIDs), uses structured data (no regex), and covers 128/129 unmapped CIDs. It generalizes to PY 2026+ because the keys come from MISO's own data model.
 
 ---
 
-## CORRECTION: CID-level mapping overstates the problem (2026-03-20)
+## Results (Canonical — Supplement Method)
 
-### The issue
+**Per-year coverage (aq2/offpeak, sampled month, post-refresh):**
 
-Runs 1 and 2 above match DA to SPICE by **constraint_id**. A DA CID not found in the SPICE bridge was classified as "unmapped." But this overstates the problem because:
-
-**A DA constraint with a new CID may monitor a branch that already exists in the SPICE universe under different CIDs.**
-
-The raw DA data has a `branch_name` column (e.g., `MNTCELO TR6 TR6__2 (XF/NSP/*)`). The SPICE bridge also maps CIDs to branch_names. If we match on **branch_name** instead of constraint_id, we may find that many "unmapped" DA CIDs are actually on branches we already know about — just with new constraint formulations.
-
-Example: DA CID 511847 (`MNTCELO TR6 XF FLO MNTCELO-QUARRYN`) has DA branch `MNTCELO TR6 TR6__2 (XF/NSP/*)`. The SPICE bridge might have other CIDs that also map to a MNTCELO TR6 branch. The CID is new, but the physical branch is not.
-
-### What to do
-
-Re-run the coverage analysis matching by branch_name:
-1. Extract monitored_line or branch_name from raw DA
-2. Match against SPICE branch_names in the bridge
-3. Measure: how many "CID-unmapped" DA constraints are actually on known branches?
-
-This will split the "unmapped" bucket into:
-- **Truly new branches**: DA constraint on a branch not in SPICE at all
-- **Known branches, new CIDs**: DA constraint on a branch we already model, just a new CID
-
-### Run 3: Branch-level matching (post-refresh, 2026-03-20)
-
-DA branch_name format: `STATION SPICE_BRANCH (TYPE/AREA/AREA)`.
-Extraction: strip station prefix + parenthetical → compare against SPICE bridge branch_names.
-Verified on mapped CIDs: 62% exact match (transformers extract poorly due to `STATION DEVICE DEVICE__2` format).
-
-**Per-year coverage with branch recovery (aq2/offpeak, sampled month):**
-
-| PY | DA CIDs | CID-unmapped | CID SP% | Branch recovered | Recovered SP% | Truly unmapped | True SP% |
-|----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 2019-06 | 231 | 7 | 0.1% | 2 | 0.0% | 5 | **0.1%** |
-| 2020-06 | 338 | 9 | 2.3% | 3 | 2.1% | 6 | **0.1%** |
-| 2021-06 | 306 | 8 | 2.1% | 0 | 0.0% | 8 | **2.1%** |
-| 2022-06 | 326 | 17 | 2.7% | 2 | 1.6% | 15 | **1.0%** |
-| 2023-06 | 358 | 28 | 1.7% | 5 | 0.0% | 23 | **1.6%** |
-| 2024-06 | 355 | 19 | 1.8% | 10 | 0.5% | 9 | **1.3%** |
-| **2025-06** | **368** | **129** | **29.2%** | **46** | **18.0%** | **83** | **11.2%** |
-
-**Key finding**: CID-level matching overstated the 2025-06 gap by ~2.6×. The true gap (branches not in any SPICE model) is ~11%, not 29%. The other 18% is recoverable — new CIDs on branches we already model.
-
-Even the 11% is overstated: some "truly unmapped" are transformer extraction failures (e.g., CID 511847 `MNTCELO TR6` extracts as `TR6 TR6__2` instead of `MNTCELO TR6`). Fixing transformer parsing would recover more.
-
-**Top 10 truly unrecoverable DA CIDs (2025-06/aq2/offpeak, all 3 months):**
-
-| Rank | CID | SP | Extracted Branch | Constraint Name | Category |
-|:---:|:---:|---:|---|---|---|
-| 1 | 511847 | $81,878 | `TR6 TR6__2` | MNTCELO TR6 XF FLO MNTCELO-QUARRYN | XF extraction failure |
-| 2 | 519135 | $18,355 | `WESTWMEI_I11_1 1` | WESTWD2-MEI INT FLO MONTECELLO TR6 | Genuinely new branch |
-| 3 | 513621 | $15,045 | `CLDONFARGO11_1 1` | CLDONIAW-FARGO FLO JAMESTOWN-PICKERT 230 | Genuinely new branch |
-| 4 | 513520 | $8,330 | `AT3 AT3` | HORNLK AT3 FLO GENTRX T1+GENTX-FREPT | XF extraction failure |
-| 5 | 516279 | $7,387 | `RACELA_NVILLE3 A` | NVILLE-RACELA FLO RICHARDSON-ADDIS | Genuinely new branch |
-| 6 | 518353 | $7,289 | `BOXC_EMST_1339 A` | BOXC-EMAINST FLO PANA-AUSTIN | Genuinely new branch |
-| 7 | 475465 | $5,315 | `BUGL_MASN_6564 B` | HNTT-MASN 6564 FLO WARSON-MASON-4 138 | Genuinely new branch |
-| 8 | 508074 | $5,231 | `ROOT_MTGY_5218 A` | ROOT-MTGY FLO CALLAWAY-BLAN | Genuinely new branch |
-| 9 | 516133 | $4,606 | *(empty)* | WISHEKNW WISHNWLINT11_1 1 MDU23010 | DA branch_name is None |
-| 10 | 511647 | $3,916 | `BISMAJAMES23_1 1` | BISMARK2-JAMESTN FLO CENTER2-JMSTNOTP | Genuinely new branch |
-
-Top 10 = $157K = 71% of all truly unmapped SP.
-
-### Corrected decomposition (V3: generalized algorithm)
-
-The matching algorithm should NOT hardcode LN/XF-specific logic. Instead, use a cascading
-match that tries multiple extractions. This is robust to future format changes:
-
-```
-1. Strip parenthetical (.*) from DA branch_name
-2. Handle semicolons (take first segment)
-3. Try full cleaned string against SPICE branches
-4. Try drop first token (remainder) — works for LN-type lines
-5. Try first two tokens (station + device) — works for XF-type transformers
-6. First match wins
-```
-
-This produces identical results to the type-specific LN/XF algorithm on all tested PYs, and
-will generalize to PY 2026+ without modification as long as the DA branch_name format keeps
-the parenthetical suffix convention.
-
-**Per-year results (generalized algorithm, aq2/offpeak, sampled month):**
-
-| PY | DA CIDs | CID-unmapped | CID SP% | Recovered | Rec SP% | Truly unmapped | True SP% | No branch_name |
+| PY | DA CIDs | CID-unmapped | CID SP% | Recovered | Rec SP% | Truly unmapped | True SP% | No supplement |
 |----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | 2019-06 | 231 | 7 | 0.1% | 2 | 0.0% | 4 | **0.1%** | 1 |
-| 2020-06 | 338 | 9 | 2.3% | 3 | 2.1% | 5 | **0.1%** | 1 |
-| 2021-06 | 306 | 8 | 2.1% | 0 | 0.0% | 6 | **2.0%** | 2 |
-| 2022-06 | 326 | 17 | 2.7% | 2 | 1.6% | 9 | **1.0%** | 6 |
-| 2023-06 | 358 | 28 | 1.7% | 5 | 0.0% | 13 | **1.4%** | 10 |
-| 2024-06 | 355 | 19 | 1.8% | 11 | 0.5% | 4 | **1.0%** | 4 |
-| **2025-06** | **368** | **129** | **29.2%** | **53** | **21.8%** | **30** | **6.2%** | **46** |
+| 2020-06 | 338 | 9 | 2.3% | 1 | 0.2% | 5 | **0.1%** | 3 |
+| 2021-06 | 306 | 8 | 2.1% | 1 | 0.0% | 6 | **2.0%** | 1 |
+| 2022-06 | 326 | 17 | 2.7% | 4 | 1.6% | 12 | **1.0%** | 1 |
+| 2023-06 | 358 | 28 | 1.7% | 7 | 0.2% | 18 | **1.4%** | 3 |
+| 2024-06 | 355 | 19 | 1.8% | 10 | 0.5% | 7 | **1.2%** | 2 |
+| **2025-06** | **368** | **129** | **29.2%** | **86** | **22.4%** | **42** | **6.7%** | **1** |
 
-**2025-06 recovery breakdown by match method:**
-- `drop_first` (LN-like): 46 CIDs, $114,008
-- `first_two` (XF-like): 7 CIDs, $24,192
+### Key findings
 
-**Remaining unrecoverable for 2025-06:**
-- 30 branches not in SPICE: $39,163 (6.2% of DA SP) — genuinely new transmission elements
-- 46 DA CIDs with `branch_name = None`: $7,652 (1.2%) — DA data quality issue
+1. **CID-level matching overstated the problem by ~4×** for 2025-06. CID SP% = 29.2%, True SP% = 6.7%.
+2. **86/129 CID-unmapped constraints in 2025-06 are on branches we already model** — new constraint formulations on known physical lines/transformers.
+3. **For 2019-2024, the true gap is 0.1-2.0%** — essentially negligible.
+4. **The supplement covers 128/129 CID-unmapped constraints** — only 1 has no supplement entry.
+
+### Decomposition
+
+| Layer | 2019-2024 | 2025-06 | Fix |
+|-------|:---:|:---:|---|
+| CID-level "unmapped" (old metric) | 0.1-2.7% | 29.2% | *(overstates problem)* |
+| **Recovered via supplement keys** | 0-1.6% | **22.4%** | Match `key1+key3` (XF) or `key2+key3` (LN) → SPICE branch |
+| **Truly unmapped (branch not in SPICE)** | **0.1-2.0%** | **6.7%** | Cannot fix — genuinely new transmission elements |
+| No supplement entry | 0-0.4% | 0.4% | DA data gap |
+
+---
+
+## Concrete Examples
+
+### Recovered: CID 511847 (XF transformer)
+
+```
+DA CID:           511847
+SP:               $9,073
+device_type:      XF
+key1:             MNTCELO
+key2:             TR6
+key3:             TR6__2
+Constructed:      key1 + key3 = "MNTCELO TR6__2"
+SPICE branch:     "MNTCELO  TR6__2" ✓ (exists in bridge)
+```
+
+The old string-parsing approach FAILED on this CID (extracted `TR6 TR6__2`). The supplement gets it right.
+
+### Recovered: CID 513025 (LN line)
+
+```
+DA CID:           513025
+SP:               $9,248
+device_type:      LN
+key1:             MAPLE_R
+key2:             MAPLEWINGE23_1
+key3:             1
+Constructed:      key2 + key3 = "MAPLEWINGE23_1 1"
+SPICE branch:     "MAPLEWINGE23_1 1" ✓ (exists in bridge)
+```
+
+### Truly unmapped: CID 513621 (LN line)
+
+```
+DA CID:           513621
+SP:               $15,045
+device_type:      LN
+key1:             CLDONIAW
+key2:             CLDONFARGO11_1
+key3:             1
+Constructed:      key2 + key3 = "CLDONFARGO11_1 1"
+SPICE branch:     NOT FOUND — genuinely new branch
+```
+
+The Caledonia–Fargo 115kV line was never in any SPICE planning model.
+
+---
+
+## How to Re-Run
+
+See the full script in the Prerequisites section. The core logic:
+
+```python
+import polars as pl, re
+from ml.bridge import load_bridge_partition
+
+def norm(x):
+    return re.sub(r'\s+', ' ', str(x).strip()) if x else ''
+
+# Load supplement keys
+cols = ['constraint_id','key1','key2','key3','device_type','year','month']
+supp = pl.scan_parquet(
+    '/opt/data/xyz-dataset/modeling_data/miso/MISO_DA_SHADOW_PRICE_SUPPLEMENT.parquet'
+).select(cols).filter(
+    (pl.col('year') == YEAR) & (pl.col('month') == MONTH)
+).collect().unique('constraint_id')
+
+# Load SPICE branches
+bridge = load_bridge_partition('annual', PY, AQ)
+spice_norm = {norm(b): b for b in bridge['branch_name'].unique().to_list()}
+
+# For each CID-unmapped DA constraint:
+row = supp.filter(pl.col('constraint_id') == cid)
+dt = row['device_type'][0]
+k1, k2, k3 = row['key1'][0], row['key2'][0], row['key3'][0]
+branch = norm(f'{k1} {k3}') if dt == 'XF' else norm(f'{k2} {k3}')
+matched = branch in spice_norm
+```

@@ -78,31 +78,26 @@ The fraction of DA SP that successfully maps to branches is **declining over tim
 | 2024-06/aq4 | onpeak | 0.740 | 315 | 26.0% |
 | 2025-06/aq1 | onpeak | 0.735 | 245 | 26.5% |
 
-### 3.2 Gap decomposition — two distinct problems
+### 3.2 Gap decomposition — three distinct problems
 
-The Abs/VC gap is NOT just "unmapped CIDs." It has two sources with different character:
+The Abs/VC gap has three sources. The first was initially overstated because CID-level matching misses branch-level recovery.
 
-**Source A — Bridge coverage (unmapped CIDs)**: DA constraint_ids that cannot be assigned to any branch_name by the bridge logic (`ground_truth.py:81` annual bridge, `ground_truth.py:96` monthly f0 fallback, ambiguous mappings dropped at `bridge.py:86`). Their DA value never enters branch-level GT, history features, or evaluation.
+**Source A — CID-unmapped DA constraints**: DA constraint_ids not in the SPICE bridge. Initially reported as 23-30% of DA SP for 2025-06. However, many of these are new CIDs on branches that already exist in the SPICE universe.
 
-**Source B — Density universe coverage (out-of-universe branches)**: Binding branches that successfully map through the bridge but are NOT in the density universe built by `load_collapsed()` in `features.py:52`. These branches have GT but are excluded from the model table because they fail the density threshold filter.
+**Source A corrected — Supplement key matching**: Using `MisoDaShadowPriceSupplement` structured keys (`key1+key3` for XF transformers, `key2+key3` for LN lines), 86/129 CID-unmapped constraints in 2025-06 are recoverable — they are new constraint formulations on known branches.
 
-| PY | Unmapped CIDs (% of DA SP) | Out-of-Universe (% of DA SP) | Total gap |
-|----|:---:|:---:|:---:|
-| 2022-06 | 3-4% | 4-10% | 8-15% |
-| 2023-06 | 2-5% | 4-14% | 6-18% |
-| 2024-06 aq1-2 | 2% | 4-6% | 5-9% |
-| 2024-06 aq3-4 | 8-20% | 2-7% | 8-26% |
-| 2025-06 | 23-30% | 2-5% | 24-38% |
+**Source B — Density universe coverage (out-of-universe branches)**: Binding branches that map through the bridge but fail the density threshold filter. Stable at 2-14% across all PYs.
 
-**Key insight**: The two problems have different character:
-- **Unmapped CIDs**: Growing rapidly (2-4% in 2022 to 23-30% in 2025). Observed trend, not yet root-caused. Dominates the gap for 2024-aq4 onward.
-- **Out-of-Universe branches**: Relatively stable at 2-14% across all PYs. Always present, density threshold filters out some binding branches. Dominates the gap for 2022-2023.
+| PY | CID-unmapped SP% | Recovered SP% | Truly unmapped SP% | Out-of-Universe SP% |
+|----|:---:|:---:|:---:|:---:|
+| 2022-06 | 3-4% | 0-2% | **1.0%** | 4-10% |
+| 2023-06 | 2-5% | 0-0.2% | **1.4%** | 4-14% |
+| 2024-06 | 2-20% | 0.5% | **1.2%** | 2-7% |
+| 2025-06 | 29% | **22%** | **6.7%** | 2-12% |
 
-Spot-checked examples of out-of-universe branches:
-- 2024-06/aq4 onpeak: 69 class-binding branches missing from density universe
-- 2025-06/aq2 offpeak: 56 class-binding branches missing from density universe
+**Key insight**: The true 2025-06 gap from unmapped branches is ~6.7%, not 29%. The other 22% is new CIDs on branches we already model — recoverable by implementing supplement key matching in the GT pipeline.
 
-Ambiguous CIDs (dropped by `bridge.py:86`): SP = 0 in all groups checked. Not a material contributor.
+**Source C — Ambiguous CIDs**: Dropped by `bridge.py:86`. SP = 0 in all groups checked. Not a material contributor.
 
 ### 3.3 Consequence for reported metrics
 
@@ -110,16 +105,17 @@ Ambiguous CIDs (dropped by `bridge.py:86`): SP = 0 in all groups checked. Not a 
 - **Holdout VC@400 looks strongest** (0.75-0.82) but the universe it measures against covers only 62-76% of total DA SP
 - **Holdout Abs_SP@400 is the honest number**: v0c captures 61-69% of actual DA value on holdout
 - **Model-vs-model comparisons remain valid**: all models face the same denominator, so relative rankings are unaffected
+- **With supplement key matching implemented**, the holdout Abs_SP@400 would improve because more DA SP would be credited to modeled branches
 
 ### 3.4 Root cause
 
-The mapping path goes through annual and monthly bridge partitions loaded in `bridge.py:18`, tried in sequence in `ground_truth.py:81` (annual first) and `ground_truth.py:96` (monthly f0 fallback). New DA constraints appearing since late 2024 don't have entries in either bridge source.
+Three factors contribute to the Abs/VC gap:
 
-This is a combined data-infrastructure and universe-construction problem:
-1. **Bridge coverage**: Annual and monthly bridge partitions are not keeping up with new DA constraints. This is the dominant and growing source.
-2. **Density universe filtering**: The density threshold in `load_collapsed()` excludes some binding branches. This is stable and expected — a deliberate precision/recall tradeoff.
+1. **New CIDs on known branches (recoverable)**: MISO creates new constraint formulations (new contingencies, new operating conditions) on existing physical branches. These get new CIDs not in the SPICE bridge, but the branch is already modeled. Fix: implement supplement key matching using `MisoDaShadowPriceSupplement` keys.
 
-No amount of model improvement can capture SP from constraints that don't exist in the branch universe. Fixing the bridge coverage for recent PYs is the highest-leverage data infrastructure action.
+2. **Genuinely new branches**: Some DA constraints monitor physical transmission elements never included in any SPICE planning model. This is the irreducible gap (~6.7% for 2025-06, 0.1-2.0% for earlier PYs).
+
+3. **Density threshold filtering**: The `is_active` threshold in `load_collapsed()` excludes branches where the density model predicts near-zero binding probability. Stable at 2-14% across all PYs. A deliberate precision/recall tradeoff.
 
 ---
 
@@ -267,10 +263,10 @@ Holdout coverage is 8-10 percentage points worse than dev, consistent with the g
 
 ## 7. Open Items
 
-1. **Published artifact validation** — `signal_publisher.py` needs branch-collapsed VC. Without it, anyone evaluating the V7 parquet gets inflated numbers from sibling constraints.
+1. **Implement supplement key matching** — Use `MisoDaShadowPriceSupplement` keys (`key1+key3` for XF, `key2+key3` for LN) in the GT pipeline to recover DA CIDs on known SPICE branches. Recovers 86/129 CID-unmapped constraints (22% of DA SP) for 2025-06. See `docs/coverage-analysis-runbook.md` for algorithm and examples.
 
-2. **Bridge coverage for recent PYs** — Unmapped CIDs jumped from ~50 to ~400 between 2023 and 2025. The annual and monthly bridge partitions (loaded in `bridge.py:18`) are not keeping up with new DA constraints. Root cause not yet determined — could be stale bridge data, new MISO constraint types, or changes in DA constraint modeling since late 2024.
+2. **Published artifact validation** — `signal_publisher.py` needs branch-collapsed VC. Without it, anyone evaluating the V7 parquet gets inflated numbers from sibling constraints.
 
-3. **Separate out-of-universe loss tracking** — The density threshold in `load_collapsed()` excludes 56-69 binding branches per slice (2-14% of DA SP). This is currently mixed into the same Abs/VC gap as unmapped CIDs. These two losses should be tracked and reported separately.
+3. **Doc corrections** — Retract "ALL binding captured" claim. Update Abs_SP columns in model comparison report. Correct PLESNLEEDS case study.
 
-4. **Doc corrections** — Retract "ALL binding captured" claim. Update Abs_SP columns in model comparison report. Correct PLESNLEEDS case study.
+4. **Zero-SF filter in publisher** — One-liner fix, 0.34% of slots wasted on average, 2023-06 outlier at 1.3%.

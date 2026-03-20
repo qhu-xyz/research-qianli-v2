@@ -346,38 +346,41 @@ The Caledonia–Fargo 115kV line was never in any SPICE planning model.
 
 Top 10 = $157K = 71% of all truly unmapped SP.
 
-### Corrected decomposition (V3: generalized algorithm)
+### Corrected decomposition (canonical: supplement key matching)
 
-The matching algorithm uses a cascading match — no LN/XF-specific logic — so it generalizes to PY 2026+ without modification:
+**Method**: Use `MisoDaShadowPriceSupplement` structured keys to construct branch names from DA CIDs. This replaces the earlier string-parsing approaches.
 
-```
-1. Strip parenthetical (.*) from DA branch_name
-2. Handle semicolons (take first segment)
-3. Try full cleaned string against SPICE branches
-4. Try drop first token (remainder) — catches LN-type lines
-5. Try first two tokens (station + device) — catches XF-type transformers
-6. First match wins
-```
+Source: `/opt/data/xyz-dataset/modeling_data/miso/MISO_DA_SHADOW_PRICE_SUPPLEMENT.parquet`
 
-**Per-year results (generalized algorithm, aq2/offpeak):**
+Rules by `device_type`:
+- **XF** (transformer): branch = `key1 + " " + key3` (e.g., `MNTCELO` + `TR6__2` = `MNTCELO TR6__2`)
+- **LN** (line): branch = `key2 + " " + key3` (e.g., `MAPLEWINGE23_1` + `1` = `MAPLEWINGE23_1 1`)
 
-| PY | CID-unmapped | CID SP% | Recovered | Rec SP% | Truly unmapped | True SP% | No branch |
+Then normalize whitespace and match against SPICE bridge branch_names.
+
+**Why supplement is preferred over string parsing:**
+- Uses MISO's own structured keys (no regex, no format guessing)
+- Covers 128/129 CID-unmapped constraints (vs string parsing failing on 46 with no `branch_name`)
+- Recovers 86 CIDs vs 53 from the best string-parsing approach (+33 CIDs, +$4K SP)
+- Generalizes to PY 2026+ because keys come from MISO's data model, not free-text conventions
+
+**Per-year results (supplement method, aq2/offpeak, sampled month):**
+
+| PY | DA CIDs | CID-unmapped | CID SP% | Recovered | Rec SP% | Truly unmapped | True SP% |
 |----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 2019-06 | 7 | 0.1% | 2 | 0.0% | 4 | **0.1%** | 1 |
-| 2020-06 | 9 | 2.3% | 3 | 2.1% | 5 | **0.1%** | 1 |
-| 2021-06 | 8 | 2.1% | 0 | 0.0% | 6 | **2.0%** | 2 |
-| 2022-06 | 17 | 2.7% | 2 | 1.6% | 9 | **1.0%** | 6 |
-| 2023-06 | 28 | 1.7% | 5 | 0.0% | 13 | **1.4%** | 10 |
-| 2024-06 | 19 | 1.8% | 11 | 0.5% | 4 | **1.0%** | 4 |
-| **2025-06** | **129** | **29.2%** | **53** | **21.8%** | **30** | **6.2%** | **46** |
+| 2019-06 | 231 | 7 | 0.1% | 2 | 0.0% | 4 | **0.1%** |
+| 2020-06 | 338 | 9 | 2.3% | 1 | 0.2% | 5 | **0.1%** |
+| 2021-06 | 306 | 8 | 2.1% | 1 | 0.0% | 6 | **2.0%** |
+| 2022-06 | 326 | 17 | 2.7% | 4 | 1.6% | 12 | **1.0%** |
+| 2023-06 | 358 | 28 | 1.7% | 7 | 0.2% | 18 | **1.4%** |
+| 2024-06 | 355 | 19 | 1.8% | 10 | 0.5% | 7 | **1.2%** |
+| **2025-06** | **368** | **129** | **29.2%** | **86** | **22.4%** | **42** | **6.7%** |
 
 | Layer | 2019-2024 | 2025-06 | Fix |
 |-------|:---:|:---:|---|
 | CID-level "unmapped" (old metric) | 0.1-2.7% | 29.2% | *(overstates problem)* |
-| Recovered via `drop_first` (LN-like) | 0-2.1% | 17.9% | Generalized cascade step 4 |
-| Recovered via `first_two` (XF-like) | 0% | 3.8% | Generalized cascade step 5 |
-| No `branch_name` in DA | 0-1.4% | 1.2% | DA data quality — cannot fix by matching |
-| **Truly new branches** | **0.1-2.0%** | **6.2%** | Cannot fix — genuinely new transmission elements |
+| **Recovered via supplement keys** | 0-1.6% | **22.4%** | `key1+key3` (XF) or `key2+key3` (LN) → SPICE branch |
+| **Truly unmapped** | **0.1-2.0%** | **6.7%** | Cannot fix — genuinely new transmission elements |
 
 ---
 
@@ -453,11 +456,9 @@ All in `research-annual-signal-v2/scripts/`:
 
 ## 9. Questions for Investigation
 
-1. **Implement generalized branch matching in the GT pipeline**: The cascading algorithm (full → drop_first → first_two) recovers 53/129 CID-unmapped constraints (74.7% of SP) for 2025-06. It works identically across all PYs without type-specific logic, and should generalize to PY 2026+. This is the highest-leverage fix.
+1. **Implement supplement key matching in the GT pipeline**: Use `MisoDaShadowPriceSupplement` keys (`key1+key3` for XF, `key2+key3` for LN) to recover DA CIDs on known SPICE branches. This recovers 86/129 CID-unmapped constraints (76.7% of SP) for 2025-06. Preferred over string-parsing because it uses MISO's structured data and generalizes to PY 2026+.
 
-2. **Handle DA CIDs with `branch_name = None`**: 46 CIDs in 2025-06 ($7,652 SP) have no branch_name in DA data at all. These need `monitored_line` or `constraint_name` parsing as a secondary fallback.
-
-3. **Are the ~30 truly unmapped branches real transmission constraints, or modeling artifacts** (e.g., RDT/interface constraints, temporary emergency constraints)?
+2. **Are the ~42 truly unmapped CIDs in 2025-06 real transmission constraints, or modeling artifacts** (e.g., RDT/interface constraints, temporary emergency constraints)?
 
 4. **Is the density threshold (0.000347) too aggressive?** Branch `78L_TNATIO11_1 1` missed by 2× ($15K SP lost). Lowering the threshold would include more branches but increase the universe size and dilute the model.
 

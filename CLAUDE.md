@@ -106,6 +106,10 @@ results = ray_map_bounded(process_item, args_list, max_concurrent=12)
 
 See `/parallel-with-ray` skill for full patterns including error handling, cancellation, and ObjectRef optimization.
 
+## Exhaustive Post-Step Inspection (MANDATORY)
+
+After every data load, join, feature computation, band calibration, and modeling step: print shape, dtypes, nulls, uniques, per-column stats, groupby counts, join coverage, fan-out checks, band monotonicity. The rule: **if something is wrong, the output should make it obvious within seconds.**
+
 ## Run Performance (MANDATORY)
 
 When runs are slow, always investigate and optimize:

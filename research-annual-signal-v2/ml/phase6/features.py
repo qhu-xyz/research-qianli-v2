@@ -87,7 +87,15 @@ def build_class_model_table(
 
     # LEFT JOIN history features
     table = table.join(hist_df, on="branch_name", how="left")
-    bf_cols = ["bf_6", "bf_12", "bf_15", "bfo_6", "bfo_12", "bf_combined_6", "bf_combined_12"]
+    bf_cols = [
+        "bf_6", "bf_12", "bf_15", "bf_24", "bfo_6", "bfo_12", "bfo_24",
+        "bf_combined_6", "bf_combined_12", "bf_combined_24",
+        "bfsp_12", "bfsp_off_12",
+        "spda_6", "spda_24", "spda_off_6", "spda_off_24",
+        "bf_trend_6_12", "bf_accel_6_12", "bfo_trend_6_12", "bfo_accel_6_12",
+        "recency_months_since", "recency_off_months_since",
+        "recent_max_sp", "recent_max_sp_off",
+    ]
     for col in bf_cols:
         if col in table.columns:
             table = table.with_columns(pl.col(col).fill_null(0.0))
@@ -104,7 +112,9 @@ def build_class_model_table(
 
     # LEFT JOIN NB flags
     table = table.join(nb_df, on="branch_name", how="left")
-    for col in ["is_nb_6", "is_nb_12", "is_nb_24", "nb_onpeak_12", "nb_offpeak_12"]:
+    for col in ["is_nb_6", "is_nb_12", "is_nb_24",
+                 "nb_onpeak_6", "nb_onpeak_12", "nb_onpeak_24",
+                 "nb_offpeak_6", "nb_offpeak_12", "nb_offpeak_24"]:
         if col in table.columns:
             table = table.with_columns(pl.col(col).fill_null(False))
 
@@ -129,15 +139,28 @@ def build_class_model_table(
         .alias("cohort")
     )
 
-    # Override is_nb_12 with class-specific NB flag
+    # Override is_nb_N with class-specific NB flags
+    nb_prefix = "nb_onpeak" if class_type == "onpeak" else "nb_offpeak"
     table = table.with_columns(
-        pl.col(nb_flag_col).alias("is_nb_12")
+        pl.col(f"{nb_prefix}_6").alias("is_nb_6"),
+        pl.col(f"{nb_prefix}_12").alias("is_nb_12"),
+        pl.col(f"{nb_prefix}_24").alias("is_nb_24"),
     )
 
     # Add cross-class BF as explicit feature column
     table = table.with_columns(
         pl.col(cross_bf_col).alias("cross_class_bf")
     )
+
+    # Cross-class strength BF (12mo)
+    cross_bfsp_col = "bfsp_off_12" if class_type == "onpeak" else "bfsp_12"
+    if cross_bfsp_col in table.columns:
+        table = table.with_columns(pl.col(cross_bfsp_col).alias("cross_class_bfsp"))
+
+    # Cross-class windowed SPDA (24mo)
+    cross_spda_col = "spda_off_24" if class_type == "onpeak" else "spda_24"
+    if cross_spda_col in table.columns:
+        table = table.with_columns(pl.col(cross_spda_col).alias("cross_spda_24"))
 
     # ── Class-specific shadow_price_da + da_rank_value ──────────────────
     # The shared history_features computes these from combined_sp.
@@ -154,8 +177,26 @@ def build_class_model_table(
         ),
     )
 
-    # Class-specific total_da_sp_quarter: sum of class-specific realized SP
-    class_total_da_sp = float(table["realized_shadow_price"].sum())
+    # Cross-class da_rank_value and shadow_price_da
+    cross_sp_col = "offpeak_sp" if class_type == "onpeak" else "onpeak_sp"
+    cross_spda_df = _compute_class_shadow_price_da(monthly_binding, branches, cross_sp_col)
+    cross_spda_df = cross_spda_df.rename({
+        "shadow_price_da": "cross_shadow_price_da",
+        "da_rank_value": "cross_da_rank_value",
+    })
+    table = table.join(cross_spda_df, on="branch_name", how="left")
+    table = table.with_columns(
+        pl.col("cross_shadow_price_da").fill_null(0.0),
+        pl.col("cross_da_rank_value").fill_null(float(len(branches) + 1)),
+    )
+
+    # Class-specific total_da_sp_quarter: true cross-universe denominator.
+    # Uses ALL DA SP for this class (including unmapped cids), not just branch-mapped SP.
+    da_sp_key = f"{class_type}_total_da_sp"
+    class_total_da_sp = gt_diag.get(da_sp_key, 0.0)
+    if class_total_da_sp <= 0:
+        class_total_da_sp = float(table["realized_shadow_price"].sum())
+        logger.warning("  %s not in GT diagnostics, falling back to branch sum", da_sp_key)
     table = table.with_columns(
         pl.lit(class_total_da_sp).alias("total_da_sp_quarter")
     )

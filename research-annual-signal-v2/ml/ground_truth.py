@@ -182,6 +182,11 @@ def build_ground_truth(
 
     assert gt["branch_name"].n_unique() == len(gt), "Duplicate branch_names in GT"
 
+    # Per-class total DA SP (cross-universe denominator for Abs_SP@K).
+    # These include ALL DA cids for each class, whether or not they map to branches.
+    onpeak_total_da_sp = float(onpeak_da["realized_sp"].sum()) if len(onpeak_da) > 0 else 0.0
+    offpeak_total_da_sp = float(offpeak_da["realized_sp"].sum()) if len(offpeak_da) > 0 else 0.0
+
     # Diagnostics use explicit naming to avoid confusion about what is counted.
     # "total_da_cids" includes zero-SP cids; "total_da_sp" includes SP from zero-SP cids (=0).
     # "annual_mapped_cids" is count of cids successfully mapped (including zero-SP ones).
@@ -190,7 +195,9 @@ def build_ground_truth(
         "annual_mapped_cids": len(annual_mapped),  # mapped by annual bridge (incl zero-SP)
         "monthly_recovered_cids": monthly_recovered_cids,  # recovered by monthly fallback
         "still_unmapped_cids": still_unmapped_cids,
-        "total_da_sp": total_da_sp,                # sum of ALL DA SP (denominator for Abs_SP@K)
+        "total_da_sp": total_da_sp,                # combined onpeak+offpeak total DA SP
+        "onpeak_total_da_sp": onpeak_total_da_sp,  # onpeak-only total DA SP (cross-universe)
+        "offpeak_total_da_sp": offpeak_total_da_sp, # offpeak-only total DA SP (cross-universe)
         "annual_mapped_sp": annual_mapped_sp,
         "monthly_recovered_sp": monthly_recovered_sp,
         "still_unmapped_sp": still_unmapped_sp,

@@ -293,13 +293,67 @@ The density model says all CIDs have essentially zero probability of binding at 
 
 ## 6. What Specifically Changed in 2025?
 
-The bridge size is roughly constant (~14,100-14,700 CIDs per PY). DA produces a similar number of binding CIDs per month (306-368). What changed is the overlap.
+### CID-level view (initial analysis, overstates the problem)
 
-In earlier years, the ~8-28 DA-only CIDs per month were mostly constraints that got added to the SPICE model in subsequent PYs. For example, 14 of 17 DA-only CIDs in 2022-06 appear in the 2024-06 or 2025-06 bridges.
+The bridge size is roughly constant (~14,100-14,700 CIDs per PY). DA produces a similar number of binding CIDs per month (306-368). 129 DA CIDs in 2025-06 don't match any CID in the SPICE bridge. This was initially reported as 29% of DA SP being "unmapped."
 
-**In 2025-06, 136 DA-only CIDs per month (37%) don't exist in ANY PY's bridge, ever.** Zero of them exist in the density distribution. MISO's DA real-time model in late 2024-2025 is using substantially more constraints that have never been part of any annual SPICE planning model.
+### Branch-level view (corrected analysis)
 
-This is not something the modeling pipeline can fix. The SPICE model's constraint set would need to be expanded to include these DA-only constraints.
+**CID-level matching overstates the problem.** Many DA CIDs with new constraint_ids monitor branches that already exist in the SPICE universe under different CIDs.
+
+DA branch_name format: `STATION SPICE_BRANCH (TYPE/AREA/AREA)`. Extracting the SPICE branch name and matching against the bridge recovers a large fraction.
+
+| PY | DA CIDs | CID-unmapped | CID SP% | Branch recovered | Recovered SP% | Truly unmapped | True SP% |
+|----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 2019-06 | 231 | 7 | 0.1% | 2 | 0.0% | 5 | **0.1%** |
+| 2020-06 | 338 | 9 | 2.3% | 3 | 2.1% | 6 | **0.1%** |
+| 2021-06 | 306 | 8 | 2.1% | 0 | 0.0% | 8 | **2.1%** |
+| 2022-06 | 326 | 17 | 2.7% | 2 | 1.6% | 15 | **1.0%** |
+| 2023-06 | 358 | 28 | 1.7% | 5 | 0.0% | 23 | **1.6%** |
+| 2024-06 | 355 | 19 | 1.8% | 10 | 0.5% | 9 | **1.3%** |
+| **2025-06** | **368** | **129** | **29.2%** | **46** | **18.0%** | **83** | **11.2%** |
+
+**Key finding**: The true 2025-06 coverage gap is ~11% (truly new branches), not 29%. The other 18% is new CIDs on branches we already model.
+
+Even the 11% is partly overstated: transformer-style DA branch names (e.g., `MNTCELO TR6 TR6__2 (XF/NSP/*)`) extract poorly — they yield `TR6 TR6__2` instead of `MNTCELO TR6`. Fixing transformer parsing would recover more.
+
+### Recovered example
+
+DA CID 513025 ($9,248 SP): branch_name = `MAPLE_R MAPLEWINGE23_1 1 (LN/OTP/OTP)`.
+Extract → `MAPLEWINGE23_1 1`. This branch exists in SPICE (CID 426288 maps to it).
+The CID is new, but the physical branch (Maple River–Winger 230kV line) is already modeled.
+
+### Truly unmapped example
+
+DA CID 513621 ($15,045 SP): branch_name = `CLDONIAW CLDONFARGO11_1 1 (LN/WAUE/WAUE)`.
+Extract → `CLDONFARGO11_1 1`. This branch does NOT exist in any SPICE bridge.
+The Caledonia–Fargo 115kV line was never in any SPICE planning model.
+
+### Top 10 truly unrecoverable DA CIDs (2025-06/aq2/offpeak)
+
+| Rank | CID | SP | Extracted Branch | Constraint Name | Category |
+|:---:|:---:|---:|---|---|---|
+| 1 | 511847 | $81,878 | `TR6 TR6__2` | MNTCELO TR6 XF FLO MNTCELO-QUARRYN | XF extraction failure |
+| 2 | 519135 | $18,355 | `WESTWMEI_I11_1 1` | WESTWD2-MEI INT FLO MONTECELLO TR6 | Genuinely new branch |
+| 3 | 513621 | $15,045 | `CLDONFARGO11_1 1` | CLDONIAW-FARGO FLO JAMESTOWN-PICKERT 230 | Genuinely new branch |
+| 4 | 513520 | $8,330 | `AT3 AT3` | HORNLK AT3 FLO GENTRX T1+GENTX-FREPT | XF extraction failure |
+| 5 | 516279 | $7,387 | `RACELA_NVILLE3 A` | NVILLE-RACELA FLO RICHARDSON-ADDIS | Genuinely new branch |
+| 6 | 518353 | $7,289 | `BOXC_EMST_1339 A` | BOXC-EMAINST FLO PANA-AUSTIN | Genuinely new branch |
+| 7 | 475465 | $5,315 | `BUGL_MASN_6564 B` | HNTT-MASN 6564 FLO WARSON-MASON-4 138 | Genuinely new branch |
+| 8 | 508074 | $5,231 | `ROOT_MTGY_5218 A` | ROOT-MTGY FLO CALLAWAY-BLAN | Genuinely new branch |
+| 9 | 516133 | $4,606 | *(empty)* | WISHEKNW WISHNWLINT11_1 1 MDU23010 | DA branch_name is None |
+| 10 | 511647 | $3,916 | `BISMAJAMES23_1 1` | BISMARK2-JAMESTN FLO CENTER2-JMSTNOTP | Genuinely new branch |
+
+Top 10 = $157K = 71% of all truly unmapped SP.
+
+### Corrected decomposition
+
+| Layer | 2019-2024 | 2025-06 | Fix |
+|-------|:---:|:---:|---|
+| CID-level "unmapped" (old metric) | 0.1-2.7% | 29.2% | *(overstates problem)* |
+| Branch-recoverable (new CIDs on known branches) | 0-2.1% | 18.0% | Match DA branch_name → SPICE branch_name |
+| XF extraction failures (known branch, bad parse) | ~0% | ~5% (est.) | Fix transformer parsing |
+| Truly new branches | 0.1-1.6% | ~6% (est.) | Cannot fix — genuinely new transmission elements |
 
 ---
 
@@ -375,11 +429,11 @@ All in `research-annual-signal-v2/scripts/`:
 
 ## 9. Questions for Investigation
 
-1. **Why did MISO's DA model diverge from the SPICE planning model in late 2024?** Is this a one-time batch of new constraints, or an ongoing divergence?
+1. **Branch-level recovery**: Can the GT pipeline be updated to match DA → SPICE by branch_name (not just CID)? This would recover ~18% of the "unmapped" SP for 2025-06 without any upstream data changes.
 
-2. **Are the 136 DA-only CIDs in 2025-06 real transmission constraints, or modeling artifacts** (e.g., RDT/interface constraints, temporary emergency constraints)?
+2. **Transformer name parsing**: CIDs 511847 ($82K) and 513520 ($8K) are on branches that likely exist in SPICE (`MNTCELO TR6`, `HORNLK AT3`) but the DA branch_name format `STATION DEVICE DEVICE__2 (XF/...)` extracts incorrectly. Can we fix the extraction for transformer-type constraints?
 
-3. **Can the SPICE bridge be expanded** to include these DA-only constraints? Or do they fundamentally represent a different constraint formulation that SPICE doesn't model?
+3. **Are the ~83 truly unmapped CIDs real transmission constraints, or modeling artifacts** (e.g., RDT/interface constraints, temporary emergency constraints)?
 
 4. **Is the density threshold (0.000347) too aggressive?** Branch `78L_TNATIO11_1 1` missed by 2× ($15K SP lost). Lowering the threshold would include more branches but increase the universe size and dilute the model.
 

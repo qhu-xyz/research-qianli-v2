@@ -63,15 +63,17 @@ Supplement is more accurate (+33 CIDs), uses structured data (no regex), and cov
 
 **Per-year coverage (aq2/offpeak, sampled month, post-refresh):**
 
-| PY | DA CIDs | CID-unmapped | CID SP% | Recovered | Rec SP% | Truly unmapped | True SP% | No supplement |
-|----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 2019-06 | 231 | 7 | 0.1% | 2 | 0.0% | 4 | **0.1%** | 1 |
-| 2020-06 | 338 | 9 | 2.3% | 1 | 0.2% | 5 | **0.1%** | 3 |
-| 2021-06 | 306 | 8 | 2.1% | 1 | 0.0% | 6 | **2.0%** | 1 |
-| 2022-06 | 326 | 17 | 2.7% | 4 | 1.6% | 12 | **1.0%** | 1 |
-| 2023-06 | 358 | 28 | 1.7% | 7 | 0.2% | 18 | **1.4%** | 3 |
-| 2024-06 | 355 | 19 | 1.8% | 10 | 0.5% | 7 | **1.2%** | 2 |
-| **2025-06** | **368** | **129** | **29.2%** | **86** | **22.4%** | **42** | **6.7%** | **1** |
+| PY | DA CIDs | CID-unmapped | CID SP% | Recovered | Rec SP% | Residual (incl no-supp) | Res SP% |
+|----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 2019-06 | 231 | 7 | 0.1% | 1 | 0.0% | 6 (1 no-supp) | **0.1%** |
+| 2020-06 | 338 | 9 | 2.3% | 1 | 0.2% | 8 (3 no-supp) | **0.1%** |
+| 2021-06 | 306 | 8 | 2.1% | 1 | 0.0% | 7 (1 no-supp) | **2.0%** |
+| 2022-06 | 326 | 17 | 2.7% | 4 | 1.6% | 13 (1 no-supp) | **1.0%** |
+| 2023-06 | 358 | 28 | 1.7% | 7 | 0.2% | 21 (3 no-supp) | **1.4%** |
+| 2024-06 | 355 | 19 | 1.8% | 10 | 0.5% | 9 (2 no-supp) | **1.2%** |
+| **2025-06** | **368** | **129** | **29.2%** | **86** | **22.4%** | **43 (1 no-supp)** | **6.7%** |
+
+Note: "Residual" = CID-unmapped minus Recovered. Includes both CIDs whose constructed branch is not in SPICE AND CIDs with no supplement entry. CID-unmapped = Recovered + Residual always holds.
 
 ### Key findings
 

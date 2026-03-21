@@ -88,14 +88,16 @@ The Abs/VC gap has three sources. The first was initially overstated because CID
 
 **Source B — Density universe coverage (out-of-universe branches)**: Binding branches that map through the bridge but fail the density threshold filter. Stable at 2-14% across all PYs.
 
-| PY | CID-unmapped SP% | Recovered SP% | Truly unmapped SP% | Out-of-Universe SP% |
+| PY | CID-unmapped SP% | Recovered SP% | Residual SP% | Out-of-Universe SP% |
 |----|:---:|:---:|:---:|:---:|
-| 2022-06 | 3-4% | 0-2% | **1.0%** | 4-10% |
-| 2023-06 | 2-5% | 0-0.2% | **1.4%** | 4-14% |
-| 2024-06 | 2-20% | 0.5% | **1.2%** | 2-7% |
-| 2025-06 | 29% | **22%** | **6.7%** | 2-12% |
+| 2022-06 | 3-4% | ~1.6% | **~1.0%** | 4-10% |
+| 2023-06 | 2-5% | ~0.2% | **~1.4%** | 4-14% |
+| 2024-06 | 2-20% | ~0.5% | **~1.2%** | 2-7% |
+| 2025-06 | 29% | **~22%** | **~6.7%** | 2-12% |
 
-**Key insight**: The true 2025-06 gap from unmapped branches is ~6.7%, not 29%. The other 22% is new CIDs on branches we already model — recoverable by implementing supplement key matching in the GT pipeline.
+Note: "Recovered" = DA CIDs matched to SPICE branches via supplement keys. "Residual" = CID-unmapped minus Recovered (includes CIDs with no supplement entry). These figures are from a sampled month (aq2/offpeak), not full-quarter aggregates.
+
+**Key insight**: The true 2025-06 gap from unmapped branches is ~6.7%, not 29%. The other ~22% is new CIDs on branches we already model — recoverable by implementing supplement key matching in the GT pipeline.
 
 **Source C — Ambiguous CIDs**: Dropped by `bridge.py:86`. SP = 0 in all groups checked. Not a material contributor.
 
@@ -263,7 +265,7 @@ Holdout coverage is 8-10 percentage points worse than dev, consistent with the g
 
 ## 7. Open Items
 
-1. **Implement supplement key matching** — Use `MisoDaShadowPriceSupplement` keys (`key1+key3` for XF, `key2+key3` for LN) in the GT pipeline to recover DA CIDs on known SPICE branches. Recovers 86/129 CID-unmapped constraints (22% of DA SP) for 2025-06. See `docs/coverage-analysis-runbook.md` for algorithm and examples.
+1. **Implement supplement key matching** — Use `MisoDaShadowPriceSupplement` keys (`key1+key3` for XF, `key2+key3` for LN) in the GT pipeline to recover DA CIDs on known SPICE branches. Recovers 86/129 CID-unmapped constraints (~22% of DA SP) for 2025-06/aq2/offpeak sampled month. Full-quarter and all-class validation still needed. See `docs/coverage-analysis-runbook.md` for algorithm and examples.
 
 2. **Published artifact validation** — `signal_publisher.py` needs branch-collapsed VC. Without it, anyone evaluating the V7 parquet gets inflated numbers from sibling constraints.
 

@@ -218,16 +218,13 @@ monitored_line:   MNTCELO TR6 XF
 offpeak SP:       $81,878 ($9K in Oct + $73K in Nov 2025)
 ```
 
-Checked against every data source:
-- Annual bridge (2025-06, all quarters): **NOT FOUND**
-- Annual bridge (2023-06, 2024-06): **NOT FOUND**
-- Raw CONSTRAINT_INFO (all partitions): **NOT FOUND**
-- Density distribution: **0 rows**
-- Monthly bridges (2025-06 through 2025-11): **NO BRIDGE FILES EXIST**
+At the CID level, this constraint is not in the SPICE bridge — CID 511847 has no bridge entry.
 
-This constraint exists only in MISO's real-time DA operations. The SPICE planning model has never included it.
+**However, this CID is RECOVERABLE via supplement key matching** (see Section 6). The DA supplement shows `device_type=XF, key1=MNTCELO, key3=TR6__2`, constructing branch `MNTCELO TR6__2` which exists in the SPICE bridge. The physical branch is already modeled — only the CID is new.
 
-**Key finding**: In 2021-2024, DA-only CIDs were mostly constraints that appeared in later PY bridges (timing issue — the bridge evolves year to year). **In 2025, the DA-only CIDs don't exist in ANY PY's bridge, ever.** This is not a bridge refresh problem — it's a SPICE model coverage gap. MISO's DA model uses constraints that the SPICE planning model has never included.
+This is the critical distinction: CID-level matching says "unmapped," but branch-level matching via supplement keys says "recoverable." See Section 6 for the full corrected decomposition.
+
+**Key finding**: The initial CID-level analysis overstated the gap. Many DA CIDs that don't exist in the bridge are new constraint formulations on branches the SPICE model already covers. The supplement key method (Section 6) recovers 86/129 of them for 2025-06.
 
 **Top 10 unmapped CIDs (2025-06/aq2/offpeak)**:
 
@@ -366,21 +363,25 @@ Then normalize whitespace and match against SPICE bridge branch_names.
 
 **Per-year results (supplement method, aq2/offpeak, sampled month):**
 
-| PY | DA CIDs | CID-unmapped | CID SP% | Recovered | Rec SP% | Truly unmapped | True SP% |
+| PY | DA CIDs | CID-unmapped | CID SP% | Recovered | Rec SP% | Residual (incl no-supp) | Res SP% |
 |----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 2019-06 | 231 | 7 | 0.1% | 2 | 0.0% | 4 | **0.1%** |
-| 2020-06 | 338 | 9 | 2.3% | 1 | 0.2% | 5 | **0.1%** |
-| 2021-06 | 306 | 8 | 2.1% | 1 | 0.0% | 6 | **2.0%** |
-| 2022-06 | 326 | 17 | 2.7% | 4 | 1.6% | 12 | **1.0%** |
-| 2023-06 | 358 | 28 | 1.7% | 7 | 0.2% | 18 | **1.4%** |
-| 2024-06 | 355 | 19 | 1.8% | 10 | 0.5% | 7 | **1.2%** |
-| **2025-06** | **368** | **129** | **29.2%** | **86** | **22.4%** | **42** | **6.7%** |
+| 2019-06 | 231 | 7 | 0.1% | 1 | 0.0% | 6 (1 no-supp) | **0.1%** |
+| 2020-06 | 338 | 9 | 2.3% | 1 | 0.2% | 8 (3 no-supp) | **0.1%** |
+| 2021-06 | 306 | 8 | 2.1% | 1 | 0.0% | 7 (1 no-supp) | **2.0%** |
+| 2022-06 | 326 | 17 | 2.7% | 4 | 1.6% | 13 (1 no-supp) | **1.0%** |
+| 2023-06 | 358 | 28 | 1.7% | 7 | 0.2% | 21 (3 no-supp) | **1.4%** |
+| 2024-06 | 355 | 19 | 1.8% | 10 | 0.5% | 9 (2 no-supp) | **1.2%** |
+| **2025-06** | **368** | **129** | **29.2%** | **86** | **22.4%** | **43 (1 no-supp)** | **6.7%** |
+
+Note: CID-unmapped = Recovered + Residual. "Residual" includes CIDs whose constructed branch is not in SPICE AND CIDs with no supplement entry.
 
 | Layer | 2019-2024 | 2025-06 | Fix |
 |-------|:---:|:---:|---|
 | CID-level "unmapped" (old metric) | 0.1-2.7% | 29.2% | *(overstates problem)* |
 | **Recovered via supplement keys** | 0-1.6% | **22.4%** | `key1+key3` (XF) or `key2+key3` (LN) → SPICE branch |
-| **Truly unmapped** | **0.1-2.0%** | **6.7%** | Cannot fix — genuinely new transmission elements |
+| **Residual (branch not in SPICE + no supplement)** | **0.1-2.0%** | **6.7%** | Cannot fix — genuinely new transmission elements or no supplement data |
+
+Note: Residual for 2019-2024 includes a small number of CIDs with no supplement entry (1-3 per PY). These are counted in the residual, not separated.
 
 ---
 
@@ -407,6 +408,8 @@ Example: Branch `13831 A` in 2025-06/aq2/offpeak, $64,588 offpeak SP, 8 SPICE CI
 ## 8. Verification Artifacts
 
 ### Mapping parquets (for spot-checking)
+
+**Caveat**: The saved parquets below use CID-level mapping only (`da_cid_to_branch.parquet` matches DA CIDs to branches via the bridge). They do NOT implement the supplement key method described in Section 6. To verify the supplement-based decomposition, re-run the supplement analysis from `docs/coverage-analysis-runbook.md`.
 
 Saved at `/opt/temp/tmp/qianli/miso_trash/v7_verification/`:
 

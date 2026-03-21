@@ -88,15 +88,15 @@ Pre-loads supplement keys once for all months (avoids per-month parquet scan). A
 
 `load_cid_mapping()` caches the branch↔CID mapping at `data/collapsed/{py}_{aq}_cid_map_*.parquet`. These caches were written by earlier runs and may contain stale entries.
 
-**Symptom**: DA CID `131822` appeared in the CID mapping cache for 2025-06/aq1 with branch `SMITHOMU MITH`. This CID is not in the SPICE density distribution or bridge — it should never be in the cache.
+**Symptom**: DA CID `131822` appeared in the CID mapping cache for all four 2025-06 quarters (aq1 through aq4) with branch `SMITHOMU MITH`. This CID is not in the SPICE density distribution or bridge — it should never be in the cache.
 
 **Impact**: The publisher tried to look up `flow_direction` for CID `131822` in the density signal score → not found → publish failed for all 2025-06 slices.
 
 **Root cause**: The cache was written before the supplement matching changes. It is NOT caused by supplement matching — `load_collapsed()` does not use supplement matching.
 
-**Fix**: Delete all CID mapping caches and let them rebuild from `load_collapsed()`:
+**Fix**: Delete the stale 2025-06 CID mapping caches and let them rebuild from `load_collapsed()`:
 ```bash
-rm data/collapsed/*cid_map*.parquet
+rm data/collapsed/2025-06_*_cid_map*.parquet
 ```
 
 Then republish 2025-06.
@@ -120,7 +120,7 @@ Coverage: 2014-2026, 128/129 CID-unmapped constraints have entries (2025-06)
 
 | device_type | Rule | Example |
 |:-----------:|------|---------|
-| XF | `key1 + " " + key3 | MNTCELO + TR6__2 → `MNTCELO TR6__2` |
+| XF | `key1 + " " + key3` | MNTCELO + TR6__2 → `MNTCELO TR6__2` |
 | LN | `key2 + " " + key3` | MAPLEWINGE23_1 + 1 → `MAPLEWINGE23_1 1` |
 
 ### Flow direction lookup
@@ -176,4 +176,4 @@ The publisher gets `flow_direction` from `MISO_SPICE_DENSITY_SIGNAL_SCORE.parque
 | Supplement data missing for some months | OK | 128/129 CIDs covered for 2025-06 |
 | device_type values beyond XF/LN | OK | Falls through to LN rule. Only XF and LN observed. |
 | Normalization mismatch | OK | Whitespace collapsing verified against bridge |
-| Breaking existing tests | OK | 98/99 pass. 1 pre-existing failure unrelated. |
+| Breaking existing tests | OK | 98/99 pass. 1 failure (`test_bridge_hive_scan_fails`) not caused by this change but not verified as pre-existing from git history. |

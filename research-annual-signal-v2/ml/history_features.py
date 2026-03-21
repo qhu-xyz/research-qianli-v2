@@ -16,7 +16,12 @@ from ml.config import (
     get_bf_cutoff_month,
     BF_FLOOR_MONTH, BF_WINDOWS_ONPEAK, BF_WINDOWS_OFFPEAK, BF_WINDOWS_COMBINED,
 )
-from ml.bridge import map_cids_to_branches
+from ml.bridge import (
+    map_cids_to_branches,
+    load_supplement_keys,
+    supplement_match_unmapped,
+    load_bridge_partition,
+)
 from ml.realized_da import load_month
 
 logger = logging.getLogger(__name__)
@@ -61,6 +66,11 @@ def build_monthly_binding_table(
     assert len(months) > 0, f"No months in range [{floor_month}, {cutoff_month}]"
 
     all_rows: list[pl.DataFrame] = []
+
+    # Pre-load supplement keys for ALL months (avoid per-month parquet scan)
+    supp_all = load_supplement_keys(months)
+    bridge_for_supp = load_bridge_partition("annual", eval_py, aq_quarter)
+    spice_branches_set = set(bridge_for_supp["branch_name"].to_list())
 
     for month in months:
         # Load DA for this month
@@ -107,6 +117,25 @@ def build_monthly_binding_table(
                     ])
             except FileNotFoundError:
                 pass
+
+        # Supplement key fallback for still-unmapped cids
+        mapped_cids_after = set(mapped["constraint_id"].to_list())
+        still_unmapped = all_cids.filter(
+            ~pl.col("constraint_id").is_in(list(mapped_cids_after))
+        )
+        if len(still_unmapped) > 0:
+            recovered_map = supplement_match_unmapped(
+                still_unmapped["constraint_id"].to_list(), supp_all, spice_branches_set,
+            )
+            if recovered_map:
+                supp_frames = [
+                    pl.DataFrame({"constraint_id": [cid], "branch_name": [branch]})
+                    for cid, branch in recovered_map.items()
+                ]
+                mapped = pl.concat([
+                    mapped.select(["constraint_id", "branch_name"]),
+                    pl.concat(supp_frames),
+                ])
 
         cid_to_branch = mapped.select(["constraint_id", "branch_name"])
 
@@ -212,6 +241,86 @@ def compute_history_features(
         bf_features = bf_features.join(branch_counts, on="branch_name", how="left").with_columns(
             (pl.col("_bound_count").fill_null(0).cast(pl.Float64) / window).alias(feature_name)
         ).drop("_bound_count")
+
+    # ── Phase 8: strength BF, windowed SPDA, trend, recency ────────────
+
+    # Strength BF: sum(SP in last 12 months) — magnitude, not frequency
+    # Only 12mo to avoid collinearity with windowed SPDA at 6/24
+    for sp_col, prefix in [("onpeak_sp", "bfsp"), ("offpeak_sp", "bfsp_off")]:
+        window_months_12 = all_calendar_months_desc[:12]
+        feature_name = f"{prefix}_12"
+        if len(window_months_12) == 0:
+            bf_features = bf_features.with_columns(pl.lit(0.0).alias(feature_name))
+            continue
+        window_data = binding_in_universe.filter(pl.col("month").is_in(window_months_12))
+        branch_sp = window_data.group_by("branch_name").agg(
+            pl.col(sp_col).sum().alias("_sp_sum")
+        )
+        bf_features = bf_features.join(branch_sp, on="branch_name", how="left").with_columns(
+            pl.col("_sp_sum").fill_null(0.0).alias(feature_name)
+        ).drop("_sp_sum")
+
+    # Windowed SPDA: cumulative SP over 6/24 months (not all-time)
+    for spda_window in [6, 24]:
+        spda_months = all_calendar_months_desc[:spda_window]
+        if len(spda_months) == 0:
+            for prefix in ["spda", "spda_off"]:
+                bf_features = bf_features.with_columns(pl.lit(0.0).alias(f"{prefix}_{spda_window}"))
+            continue
+        spda_data = binding_in_universe.filter(pl.col("month").is_in(spda_months))
+        for sp_col, prefix in [("onpeak_sp", "spda"), ("offpeak_sp", "spda_off")]:
+            feature_name = f"{prefix}_{spda_window}"
+            branch_sp = spda_data.group_by("branch_name").agg(
+                pl.col(sp_col).sum().alias("_sp_sum")
+            )
+            bf_features = bf_features.join(branch_sp, on="branch_name", how="left").with_columns(
+                pl.col("_sp_sum").fill_null(0.0).alias(feature_name)
+            ).drop("_sp_sum")
+
+    # BF trend: short vs long window
+    for freq_prefix in ["bf", "bfo"]:
+        short_col, long_col = f"{freq_prefix}_6", f"{freq_prefix}_12"
+        if short_col in bf_features.columns and long_col in bf_features.columns:
+            bf_features = bf_features.with_columns(
+                (pl.col(short_col) - pl.col(long_col)).alias(f"{freq_prefix}_trend_6_12"),
+                pl.when(pl.col(long_col) > 0)
+                .then(pl.col(short_col) / pl.col(long_col))
+                .otherwise(pl.when(pl.col(short_col) > 0).then(2.0).otherwise(0.0))
+                .alias(f"{freq_prefix}_accel_6_12"),
+            )
+
+    # Recency: months since last bind (0 = most recent month, higher = older)
+    month_to_recency = {m: i for i, m in enumerate(all_calendar_months_desc)}
+    for bound_col, prefix in [("onpeak_bound", "recency"), ("offpeak_bound", "recency_off")]:
+        last_bind = binding_in_universe.filter(pl.col(bound_col)).group_by("branch_name").agg(
+            pl.col("month").max().alias("_last_month")
+        )
+        bf_features = bf_features.join(last_bind, on="branch_name", how="left")
+        sentinel_recency = float(len(all_calendar_months_desc))
+        bf_features = bf_features.with_columns(
+            pl.col("_last_month")
+            .replace_strict(month_to_recency, default=None)
+            .fill_null(sentinel_recency)
+            .cast(pl.Float64)
+            .alias(f"{prefix}_months_since")
+        ).drop("_last_month")
+
+    # Recent max SP: highest single-month SP in last 12 months
+    window_12 = all_calendar_months_desc[:12]
+    if len(window_12) > 0:
+        window_data_12 = binding_in_universe.filter(pl.col("month").is_in(window_12))
+        for sp_col, prefix in [("onpeak_sp", "recent_max_sp"), ("offpeak_sp", "recent_max_sp_off")]:
+            branch_max = window_data_12.group_by("branch_name").agg(
+                pl.col(sp_col).max().alias("_max_sp")
+            )
+            bf_features = bf_features.join(branch_max, on="branch_name", how="left").with_columns(
+                pl.col("_max_sp").fill_null(0.0).alias(prefix)
+            ).drop("_max_sp")
+    else:
+        bf_features = bf_features.with_columns(
+            pl.lit(0.0).alias("recent_max_sp"),
+            pl.lit(0.0).alias("recent_max_sp_off"),
+        )
 
     # da_rank_value: dense rank descending of cumulative_sp
     cumulative_sp = binding_in_universe.group_by("branch_name").agg(

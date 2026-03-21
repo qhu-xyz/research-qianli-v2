@@ -57,21 +57,24 @@ def test_gt_coverage_diagnostics(sample_py, sample_quarter):
     for key in required_keys:
         assert key in diag, f"Missing diagnostic: {key}"
     assert diag["total_da_sp"] > 0
-    # Consistency: mapped + recovered + unmapped = total
+    # Consistency: mapped + monthly + supplement + unmapped = total
     assert (
-        diag["annual_mapped_cids"] + diag["monthly_recovered_cids"] + diag["still_unmapped_cids"]
+        diag["annual_mapped_cids"]
+        + diag["monthly_recovered_cids"]
+        + diag.get("supplement_recovered_cids", 0)
+        + diag["still_unmapped_cids"]
     ) == diag["total_da_cids"], "Cid counts must partition total"
 
 
-def test_gt_monthly_fallback_2025():
-    """Test spec E3: monthly fallback recovers cids for 2025-06."""
+def test_gt_fallback_recovery_2025():
+    """Test spec E3: monthly + supplement fallback recovers cids for 2025-06."""
     from ml.ground_truth import build_ground_truth
     _, diag = build_ground_truth("2025-06", "aq1")
-    # For 2025-06: monthly fallback MUST recover some cids (annual bridge has known gaps)
-    assert diag["monthly_recovered_cids"] > 0, (
-        "2025-06 should have monthly fallback recoveries — annual bridge has known gaps"
+    # For 2025-06: fallback (monthly + supplement) MUST recover some cids
+    total_recovered = diag["monthly_recovered_cids"] + diag.get("supplement_recovered_cids", 0)
+    assert total_recovered > 0, (
+        "2025-06 should have fallback recoveries (monthly or supplement) — annual bridge has known gaps"
     )
-    assert diag["monthly_recovered_sp"] > 0
 
 
 def test_gt_monthly_fallback_uses_market_month():

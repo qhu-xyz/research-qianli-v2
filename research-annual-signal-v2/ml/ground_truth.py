@@ -11,7 +11,7 @@ import logging
 import polars as pl
 
 from ml.config import get_market_months
-from ml.bridge import map_cids_to_branches
+from ml.bridge import map_cids_to_branches, map_cids_to_branches_with_supplement
 from ml.realized_da import load_quarter_per_ctype
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,47 @@ def build_ground_truth(
         )["total_sp"].sum()
     ) if monthly_mapped_frames else 0.0
 
+    # Step 4b: Supplement key matching for still-unmapped cids
+    supplement_recovered_cids = 0
+    supplement_recovered_sp = 0.0
+    supplement_no_entry = 0
+
+    if len(unmapped) > 0:
+        from ml.bridge import load_supplement_keys, supplement_match_unmapped, load_bridge_partition
+
+        supp = load_supplement_keys(market_months)
+        bridge = load_bridge_partition("annual", planning_year, aq_quarter)
+        spice_branches = set(bridge["branch_name"].to_list())
+        unmapped_cid_list = unmapped["constraint_id"].to_list()
+
+        recovered_map = supplement_match_unmapped(unmapped_cid_list, supp, spice_branches)
+
+        if recovered_map:
+            supp_frames = []
+            for cid, branch in recovered_map.items():
+                supp_frames.append(pl.DataFrame({
+                    "constraint_id": [cid],
+                    "branch_name": [branch],
+                }))
+            supp_mapped = pl.concat(supp_frames)
+            all_cid_branch = pl.concat([all_cid_branch, supp_mapped])
+
+            supplement_recovered_cids = len(recovered_map)
+            supplement_recovered_sp = float(
+                unmapped.filter(
+                    pl.col("constraint_id").is_in(list(recovered_map.keys()))
+                )["total_sp"].sum()
+            )
+            unmapped = unmapped.filter(
+                ~pl.col("constraint_id").is_in(list(recovered_map.keys()))
+            )
+
+        supp_cid_set = set(supp["constraint_id"].to_list())
+        supplement_no_entry = sum(
+            1 for c in unmapped_cid_list
+            if c not in supp_cid_set and c not in recovered_map
+        )
+
     still_unmapped_cids = len(unmapped)
     still_unmapped_sp = float(unmapped["total_sp"].sum()) if len(unmapped) > 0 else 0.0
 
@@ -204,6 +245,9 @@ def build_ground_truth(
         "annual_ambiguous_cids": annual_diag["ambiguous_cids"],
         "annual_ambiguous_sp": annual_diag["ambiguous_sp"],
         "monthly_recovery_detail": monthly_recovery_detail,
+        "supplement_recovered_cids": supplement_recovered_cids,
+        "supplement_recovered_sp": supplement_recovered_sp,
+        "supplement_no_entry": supplement_no_entry,
     }
 
     logger.info(

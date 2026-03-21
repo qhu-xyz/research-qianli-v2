@@ -1,0 +1,19 @@
+{
+  "planning_year": "2024-06",
+  "aq_quarter": "aq1",
+  "class_type": "offpeak",
+  "n_branches": 2339,
+  "n_binders": 297,
+  "n_established": 659,
+  "n_dormant": 1176,
+  "n_zero_history": 504,
+  "total_sp": 517987.4,
+  "total_da_sp_quarter": 517987.4,
+  "shadow_price_da_nonzero": 1575,
+  "da_rank_value_range": [
+    1.0,
+    1570.0
+  ],
+  "cross_class_dormant": 186,
+  "checks_passed": 10
+}

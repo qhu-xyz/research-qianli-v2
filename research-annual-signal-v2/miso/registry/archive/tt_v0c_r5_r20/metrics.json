@@ -1,0 +1,154 @@
+{
+  "per_group": {
+    "2025-06/aq1": {
+      "n_branches": 2218,
+      "n_binding": 306,
+      "VC@50": 0.3949114714471416,
+      "Recall@50": 0.12091503267973856,
+      "Abs_SP@50": 0.33206659624364127,
+      "NB12_Recall@50": 0.0,
+      "NB12_Count@50": 0,
+      "NB12_SP@50": 0.0,
+      "NB6_Recall@50": 0.0,
+      "NB24_Recall@50": 0.0,
+      "NDCG": 0.659711068249589,
+      "Spearman": 0.08973137324414354,
+      "cohort_contribution_50": {
+        "established": {
+          "count_in_top_k": 45,
+          "sp_captured": 545769.17
+        },
+        "history_dormant": {
+          "count_in_top_k": 5,
+          "sp_captured": 0.0
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      },
+      "VC@100": 0.4532746956766778,
+      "Recall@100": 0.20261437908496732,
+      "Abs_SP@100": 0.381142094467806,
+      "NB12_Recall@100": 0.017857142857142856,
+      "NB12_Count@100": 1,
+      "NB12_SP@100": 3.308641035494647e-05,
+      "NB6_Recall@100": 0.018691588785046728,
+      "NB24_Recall@100": 0.0,
+      "cohort_contribution_100": {
+        "established": {
+          "count_in_top_k": 80,
+          "sp_captured": 626423.58
+        },
+        "history_dormant": {
+          "count_in_top_k": 19,
+          "sp_captured": 3.79
+        },
+        "history_zero": {
+          "count_in_top_k": 1,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2025-06/aq2": {
+      "n_branches": 2210,
+      "n_binding": 367,
+      "VC@50": 0.3067666052488688,
+      "Recall@50": 0.09536784741144415,
+      "Abs_SP@50": 0.24463066426729396,
+      "NB12_Recall@50": 0.011904761904761904,
+      "NB12_Count@50": 1,
+      "NB12_SP@50": 4.394146890881821e-08,
+      "NB6_Recall@50": 0.007751937984496124,
+      "NB24_Recall@50": 0.0,
+      "NDCG": 0.6891580327296029,
+      "Spearman": 0.11302769594496444,
+      "cohort_contribution_50": {
+        "established": {
+          "count_in_top_k": 45,
+          "sp_captured": 685129.9700000002
+        },
+        "history_dormant": {
+          "count_in_top_k": 5,
+          "sp_captured": 0.02
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      },
+      "VC@100": 0.3541199915805185,
+      "Recall@100": 0.14986376021798364,
+      "Abs_SP@100": 0.28239256584135713,
+      "NB12_Recall@100": 0.023809523809523808,
+      "NB12_Count@100": 2,
+      "NB12_SP@100": 4.17443954633773e-07,
+      "NB6_Recall@100": 0.023255813953488372,
+      "NB24_Recall@100": 0.0,
+      "cohort_contribution_100": {
+        "established": {
+          "count_in_top_k": 80,
+          "sp_captured": 790888.46
+        },
+        "history_dormant": {
+          "count_in_top_k": 20,
+          "sp_captured": 0.19
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    },
+    "2025-06/aq3": {
+      "n_branches": 1706,
+      "n_binding": 294,
+      "VC@50": 0.3069413508432492,
+      "Recall@50": 0.11564625850340136,
+      "Abs_SP@50": 0.2537636212435066,
+      "NB12_Recall@50": 0.028169014084507043,
+      "NB12_Count@50": 2,
+      "NB12_SP@50": 0.014683902982395032,
+      "NB6_Recall@50": 0.019417475728155338,
+      "NB24_Recall@50": 0.0,
+      "NDCG": 0.6935776416284034,
+      "Spearman": 0.12863713438296517,
+      "cohort_contribution_50": {
+        "established": {
+          "count_in_top_k": 45,
+          "sp_captured": 785452.9
+        },
+        "history_dormant": {
+          "count_in_top_k": 5,
+          "sp_captured": 5351.49
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      },
+      "VC@100": 0.43677427918418293,
+      "Recall@100": 0.19047619047619047,
+      "Abs_SP@100": 0.3611029352913866,
+      "NB12_Recall@100": 0.056338028169014086,
+      "NB12_Count@100": 4,
+      "NB12_SP@100": 0.014701738271143691,
+      "NB6_Recall@100": 0.038834951456310676,
+      "NB24_Recall@100": 0.0,
+      "cohort_contribution_100": {
+        "established": {
+          "count_in_top_k": 80,
+          "sp_captured": 1119948.25
+        },
+        "history_dormant": {
+          "count_in_top_k": 20,
+          "sp_captured": 5357.99
+        },
+        "history_zero": {
+          "count_in_top_k": 0,
+          "sp_captured": 0.0
+        }
+      }
+    }
+  }
+}

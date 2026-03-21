@@ -1,0 +1,47 @@
+{
+  "baseline_version": "v0c",
+  "gates": {
+    "VC@50": {
+      "passed": false,
+      "wins": 1,
+      "n_groups": 3,
+      "candidate_mean": 0.335514100390053,
+      "baseline_mean": 0.35470582397473455
+    },
+    "Recall@50": {
+      "passed": false,
+      "wins": 0,
+      "n_groups": 3,
+      "candidate_mean": 0.10746720728860724,
+      "baseline_mean": 0.12294303128456953
+    },
+    "Abs_SP@50": {
+      "passed": false,
+      "wins": 1,
+      "n_groups": 3,
+      "candidate_mean": 0.27624787291413727,
+      "baseline_mean": 0.29190216921319806
+    },
+    "VC@100": {
+      "passed": false,
+      "wins": 0,
+      "n_groups": 3,
+      "candidate_mean": 0.435866149387693,
+      "baseline_mean": 0.4658480507621141
+    },
+    "Recall@100": {
+      "passed": false,
+      "wins": 0,
+      "n_groups": 3,
+      "candidate_mean": 0.18901959815109814,
+      "baseline_mean": 0.21493120408926514
+    },
+    "Abs_SP@100": {
+      "passed": false,
+      "wins": 0,
+      "n_groups": 3,
+      "candidate_mean": 0.35850039966521047,
+      "baseline_mean": 0.38297206173375403
+    }
+  }
+}

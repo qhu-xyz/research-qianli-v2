@@ -1,0 +1,11 @@
+{
+  "version": "v0b",
+  "formula": "0.60*da_rank_norm + 0.40*right_tail_norm",
+  "features": [
+    "da_rank_value",
+    "bin_80_cid_max",
+    "bin_90_cid_max",
+    "bin_100_cid_max",
+    "bin_110_cid_max"
+  ]
+}

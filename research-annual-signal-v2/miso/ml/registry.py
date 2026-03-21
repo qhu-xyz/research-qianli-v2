@@ -1,0 +1,76 @@
+"""Experiment registry — save config + metrics to disk."""
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+
+from ml.config import REGISTRY_DIR
+
+logger = logging.getLogger(__name__)
+
+
+def save_experiment(
+    version_id: str,
+    config: dict,
+    metrics: dict,
+    gate_results: dict | None = None,
+    baseline_version: str | None = None,
+    nb_gate_results: dict | None = None,
+) -> Path:
+    """Save experiment results to registry/{version_id}/.
+
+    Creates:
+      - registry/{version_id}/config.json
+      - registry/{version_id}/metrics.json
+      - registry/{version_id}/gate_results.json (if gate_results provided)
+      - registry/{version_id}/nb_gate_results.json (if nb_gate_results provided)
+
+    Returns path to version directory.
+    """
+    version_dir = REGISTRY_DIR / version_id
+    version_dir.mkdir(parents=True, exist_ok=True)
+
+    config_path = version_dir / "config.json"
+    metrics_path = version_dir / "metrics.json"
+
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2, default=str)
+
+    with open(metrics_path, "w") as f:
+        json.dump(metrics, f, indent=2, default=str)
+
+    if gate_results is not None:
+        gate_path = version_dir / "gate_results.json"
+        gate_artifact = {
+            "baseline_version": baseline_version,
+            "gates": gate_results,
+        }
+        with open(gate_path, "w") as f:
+            json.dump(gate_artifact, f, indent=2, default=str)
+        logger.info("Gate results saved to %s", gate_path)
+
+    if nb_gate_results is not None:
+        nb_path = version_dir / "nb_gate_results.json"
+        with open(nb_path, "w") as f:
+            json.dump(nb_gate_results, f, indent=2, default=str)
+        logger.info("NB gate results saved to %s", nb_path)
+
+    logger.info("Saved experiment %s to %s", version_id, version_dir)
+    return version_dir
+
+
+def load_metrics(version_id: str) -> dict:
+    """Load metrics for a version."""
+    metrics_path = REGISTRY_DIR / version_id / "metrics.json"
+    assert metrics_path.exists(), f"No metrics for {version_id} at {metrics_path}"
+    with open(metrics_path) as f:
+        return json.load(f)
+
+
+def load_config(version_id: str) -> dict:
+    """Load config for a version."""
+    config_path = REGISTRY_DIR / version_id / "config.json"
+    assert config_path.exists(), f"No config for {version_id} at {config_path}"
+    with open(config_path) as f:
+        return json.load(f)

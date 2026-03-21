@@ -1,0 +1,26 @@
+{
+  "baseline_version": "v0c",
+  "gates": {
+    "VC@50": {
+      "passed": false,
+      "wins": 0,
+      "n_groups": 3,
+      "candidate_mean": 0.330604331257807,
+      "baseline_mean": 0.35470582397473455
+    },
+    "Recall@50": {
+      "passed": false,
+      "wins": 0,
+      "n_groups": 3,
+      "candidate_mean": 0.10220164360021938,
+      "baseline_mean": 0.12294303128456953
+    },
+    "Abs_SP@50": {
+      "passed": false,
+      "wins": 0,
+      "n_groups": 3,
+      "candidate_mean": 0.27216348436645327,
+      "baseline_mean": 0.29190216921319806
+    }
+  }
+}

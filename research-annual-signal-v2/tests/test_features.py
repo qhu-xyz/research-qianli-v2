@@ -6,7 +6,7 @@ import pytest
 def test_model_table_schema():
     """Test spec D1: all expected columns present."""
     from ml.features import build_model_table
-    table = build_model_table("2024-06", "aq1")
+    table = build_model_table("2025-06", "aq1")
     required = [
         "branch_name", "planning_year", "aq_quarter",
         # Density (20)
@@ -37,14 +37,14 @@ def test_model_table_schema():
 def test_model_table_unique_branches():
     """Test spec K8: one row per branch_name."""
     from ml.features import build_model_table
-    table = build_model_table("2024-06", "aq1")
+    table = build_model_table("2025-06", "aq1")
     assert table["branch_name"].n_unique() == len(table)
 
 
 def test_model_table_zero_fill():
     """features.py creates zero-fill: non-binding branches get label_tier=0."""
     from ml.features import build_model_table
-    table = build_model_table("2024-06", "aq1")
+    table = build_model_table("2025-06", "aq1")
     # Majority should be non-binding (label_tier=0) — this is where zeros come from
     n_zero = table.filter(pl.col("label_tier") == 0).height
     n_positive = table.filter(pl.col("label_tier") > 0).height
@@ -57,7 +57,7 @@ def test_model_table_zero_fill():
 def test_cohort_assignment():
     """Test spec G5: mutually exclusive cohorts."""
     from ml.features import build_model_table
-    table = build_model_table("2024-06", "aq1")
+    table = build_model_table("2025-06", "aq1")
     cohorts = table["cohort"].unique().to_list()
     assert set(cohorts).issubset({"established", "history_dormant", "history_zero"})
     # Every branch has exactly 1 cohort
@@ -67,7 +67,7 @@ def test_cohort_assignment():
 def test_cohort_rules():
     """Cohort rules: established > dormant > zero."""
     from ml.features import build_model_table
-    table = build_model_table("2024-06", "aq1")
+    table = build_model_table("2025-06", "aq1")
     # established: bf_combined_12 > 0
     established = table.filter(pl.col("cohort") == "established")
     if len(established) > 0:
@@ -100,7 +100,7 @@ def test_monotone_constraints_order():
 def test_total_da_sp_quarter():
     """total_da_sp_quarter is group-level constant (Abs_SP denominator)."""
     from ml.features import build_model_table
-    table = build_model_table("2024-06", "aq1")
+    table = build_model_table("2025-06", "aq1")
     vals = table["total_da_sp_quarter"].unique()
     assert len(vals) == 1, "total_da_sp_quarter should be constant within group"
     assert vals[0] > 0
@@ -109,6 +109,6 @@ def test_total_da_sp_quarter():
 def test_build_model_table_all():
     """Convenience function builds multiple groups."""
     from ml.features import build_model_table_all
-    table = build_model_table_all(["2024-06/aq1", "2024-06/aq2"])
+    table = build_model_table_all(["2025-06/aq1", "2025-06/aq2"])
     groups = table.select(["planning_year", "aq_quarter"]).unique()
     assert len(groups) == 2

@@ -92,7 +92,7 @@ def test_gt_monthly_fallback_uses_market_month():
 def test_gt_branch_aggregation():
     """Test spec E4: multiple DA cids -> same branch -> SUM (not mean)."""
     from ml.ground_truth import build_ground_truth
-    gt_df, _ = build_ground_truth("2024-06", "aq1")
+    gt_df, _ = build_ground_truth("2025-06", "aq1")
     # All values should be positive (GT only returns positive-binding)
     assert (gt_df["realized_shadow_price"] > 0).all()
     # No duplicate branch_names
@@ -107,10 +107,10 @@ def test_gt_no_cid_fanout():
     from ml.bridge import map_cids_to_branches
 
     # Build GT for a known PY
-    gt_df, diag = build_ground_truth("2024-06", "aq1")
+    gt_df, diag = build_ground_truth("2025-06", "aq1")
 
     # Verify the annual mapping itself has no fan-out
-    market_months = get_market_months("2024-06", "aq1")
+    market_months = get_market_months("2025-06", "aq1")
     onpeak_da, offpeak_da = load_quarter_per_ctype(market_months)
     combined = pl.concat([
         onpeak_da.rename({"realized_sp": "total_sp"}),
@@ -120,7 +120,7 @@ def test_gt_no_cid_fanout():
     mapped, _ = map_cids_to_branches(
         cid_df=combined,
         auction_type="annual",
-        auction_month="2024-06",
+        auction_month="2025-06",
         period_type="aq1",
     )
     # After map_cids_to_branches, each cid should appear at most once

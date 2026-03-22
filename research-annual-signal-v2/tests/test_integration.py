@@ -6,7 +6,7 @@ import pytest
 def test_full_pipeline_one_slice():
     """Test spec I1: end-to-end for one (PY, quarter)."""
     from ml.features import build_model_table
-    table = build_model_table("2024-06", "aq1")
+    table = build_model_table("2025-06", "aq1")
     # Branch count in expected range
     assert 800 <= len(table) <= 3000
     # All features present (34 features)
@@ -22,7 +22,7 @@ def test_no_duplicate_branch_names_across_groups():
     """Within a (PY, quarter) group, branch_names are unique."""
     from ml.features import build_model_table
     for aq in ["aq1", "aq2"]:
-        table = build_model_table("2024-06", aq)
+        table = build_model_table("2025-06", aq)
         assert table["branch_name"].n_unique() == len(table)
 
 
@@ -32,7 +32,7 @@ def test_formula_baseline_beats_random():
     from ml.evaluate import value_capture_at_k
     import numpy as np
 
-    table = build_model_table("2024-06", "aq1")
+    table = build_model_table("2025-06", "aq1")
     actual = table["realized_shadow_price"].to_numpy()
     scores = -table["da_rank_value"].to_numpy()  # v0a formula
     vc50 = value_capture_at_k(actual, scores, k=50)
@@ -44,7 +44,7 @@ def test_density_row_sum_invariant():
     """Trap 22: density bins sum to 20.0 in raw data."""
     from ml.data_loader import load_raw_density
     from ml.config import ALL_BIN_COLUMNS
-    df = load_raw_density("2024-06", "aq1")
+    df = load_raw_density("2025-06", "aq1")
     bin_cols = [c for c in ALL_BIN_COLUMNS if c in df.columns]
     sums = df.select(pl.sum_horizontal([pl.col(b) for b in bin_cols]).alias("s"))
     # Most rows sum to exactly 20.0; a few edge-case rows have sparse bin data (max dev ~5.3)

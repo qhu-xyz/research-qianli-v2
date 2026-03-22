@@ -4,7 +4,7 @@ import pytest
 
 @pytest.fixture
 def sample_py():
-    return "2024-06"
+    return "2025-06"
 
 
 @pytest.fixture

@@ -10,7 +10,7 @@ def _load_test_data():
     from ml.ground_truth import build_ground_truth
     from ml.data_loader import load_collapsed
 
-    py, aq = "2024-06", "aq1"
+    py, aq = "2025-06", "aq1"
     collapsed = load_collapsed(py, aq)
     branches = collapsed["branch_name"].to_list()
     hist_df, monthly_binding = compute_history_features(py, aq, branches)

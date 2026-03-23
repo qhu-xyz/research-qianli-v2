@@ -782,3 +782,23 @@ a. we will include 150 tier0 constraints and 150 tier1. which means we need to l
 b. in this setting, does our NB model help more? for 150, we can include let's say maybe 20, 30, 40 NB predictions. for 300, even more. lot's of areas to try.
 - also we should consider this metric: 
   - the most dangerous branch are the ones with super high realize DA, let's say >50000. which model is the best at finding those? 
+
+## edge case analysis
+now let's reopen the case for a model that is purely forward looking. (or eventually a blend)
+Step 1:
+- find out why our model fails on MONCELO, BENTON, and other branches which will bind heavily but have no history
+- do more research and find all top branches, form a focused study group
+- find out why we fail, if v4.4 can do better and how can we do better by digging into the predictive features
+
+- pick up our research and find a method to rank those branches high 
+  - do we have old cached data to do research for previous years?
+
+  there are two more areas we can dig into:
+  - we can build a model with predictive features only; yes v4.4 is better at predicting the future but we also can find better models even than v4.4., or better features
+  - or we can build a model purely on NB12 branches and predict whether some of them will bind.
+
+  then eventually we can get models in many fashions:
+  1. two model blend: v0c + new bind model
+  2. reserved spots for new bind model (30@200, 100@400 for example)
+  3. divide the branches into two: for NB-12 branches use the new bind model, for non-nB-12 models use v0c.
+  which 

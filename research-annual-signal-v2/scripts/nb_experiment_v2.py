@@ -230,6 +230,7 @@ def main():
                     pl.max_horizontal("bin_80_cid_max", "bin_90_cid_max",
                                       "bin_100_cid_max", "bin_110_cid_max")
                 ).to_series().to_numpy().astype(np.float64)
+                label_tier = ct_table["label_tier"].to_numpy().astype(np.float64)
                 assert ct_table["total_da_sp_quarter"].n_unique() == 1
                 total_da = float(ct_table["total_da_sp_quarter"][0])
                 total_sp = sp.sum()
@@ -310,16 +311,22 @@ def main():
                 for cname, nv200, nn200, nv400, nn400, scorer_key in CONFIGS:
                     for K, nv, nn in [(200, nv200, nn200), (400, nv400, nn400)]:
                         if cname == "pure_v44":
-                            # All K by V4.4
-                            order = np.argsort(v44_scores)[::-1][:K]
-                            selected = set(int(x) for x in order)
-                            # Backfill if V4.4 doesn't cover K branches
+                            # Pick top K by V4.4, only from branches with finite V4.4 score
+                            v44_finite_mask = np.isfinite(v44_scores)
+                            v44_order = np.argsort(v44_scores)[::-1]
+                            selected = set()
+                            for idx in v44_order:
+                                if len(selected) >= K:
+                                    break
+                                if v44_finite_mask[idx]:
+                                    selected.add(int(idx))
+                            nb_filled = len(selected)  # how many V4.4 actually filled
+                            # Backfill with v0c if V4.4 can't fill K
                             if len(selected) < K:
                                 for idx in np.argsort(v0c)[::-1]:
                                     if len(selected) >= K:
                                         break
                                     selected.add(int(idx))
-                            nb_filled = 0
                         elif scorer_key is None:
                             # pure_v0c
                             selected = set(int(x) for x in np.argsort(v0c)[::-1][:K])
@@ -344,9 +351,29 @@ def main():
                         dang20 = sp > 20000
                         dang50 = sp > 50000
 
+                        # NDCG: label_tier as ground truth, position in selected set as ranking
+                        # Use the scorer's scores for the selected branches to compute NDCG
+                        if mask.sum() > 1 and label_tier[mask].max() > 0:
+                            from sklearn.metrics import ndcg_score as _ndcg
+                            # Build predicted scores for selected branches based on config scorer
+                            if cname == "pure_v44":
+                                pred_scores = v44_scores[mask]
+                            elif cname in ("R30_v44", "R50_v44"):
+                                pred_scores = v0c[mask]  # v0c is primary scorer
+                            elif cname in ("R30_nb", "R50_nb"):
+                                pred_scores = v0c[mask]  # v0c is primary scorer
+                            else:  # pure_v0c
+                                pred_scores = v0c[mask]
+                            # Replace -inf with min finite for ndcg_score
+                            finite_min = pred_scores[np.isfinite(pred_scores)].min() if np.isfinite(pred_scores).any() else 0
+                            pred_scores = np.where(np.isfinite(pred_scores), pred_scores, finite_min - 1)
+                            ndcg = float(_ndcg(label_tier[mask].reshape(1, -1), pred_scores.reshape(1, -1)))
+                        else:
+                            ndcg = 0.0
+
                         combo_results.append({
                             "eval_py": eval_py, "aq": aq, "ct": ct,
-                            "config": cname, "K": K,
+                            "config": cname, "K": K, "ndcg": ndcg,
                             "vc": float(sp[mask].sum() / total_sp) if total_sp > 0 else 0,
                             "abs_sp": float(sp[mask].sum() / total_da) if total_da > 0 else 0,
                             "rec": float((sp[mask] > 0).sum() / n_bind),
@@ -428,11 +455,11 @@ def main():
 
     def print_combo_table(df_slice, title):
         print(f"\n  === {title} ===")
-        hdr = (f"    {'Config':<12} {'VC':>6} {'Abs':>6} {'Rec':>6} {'Prec':>5} {'Bind':>5}"
+        hdr = (f"    {'Config':<12} {'VC':>6} {'Abs':>6} {'Rec':>6} {'Prec':>5} {'NDCG':>5} {'Bind':>5}"
                f" {'NB_in':>5} {'NB_b':>4} {'NB_SP':>9} {'NB_VC':>6} {'NB_R':>5}"
                f" {'D20':>7} {'D50':>5} {'Fill':>7}")
         print(hdr)
-        print(f"    {'-'*110}")
+        print(f"    {'-'*115}")
         for c in config_order:
             r = df_slice.filter(pl.col("config") == c)
             if len(r) == 0:
@@ -441,7 +468,7 @@ def main():
             d50 = f"{r['dang50_cap'].mean():.0f}/{r['dang50_tot'].mean():.0f}"
             fill = f"{r['nb_filled'].mean():.0f}/{r['nb_requested'].mean():.0f}" if r['nb_requested'].mean() > 0 else "-"
             print(f"    {c:<12} {r['vc'].mean():>6.3f} {r['abs_sp'].mean():>6.3f} "
-                  f"{r['rec'].mean():>6.3f} {r['prec'].mean():>5.3f} {r['bind'].mean():>5.0f}"
+                  f"{r['rec'].mean():>6.3f} {r['prec'].mean():>5.3f} {r['ndcg'].mean():>5.3f} {r['bind'].mean():>5.0f}"
                   f" {r['nb_in'].mean():>5.0f} {r['nb_bind'].mean():>4.1f} {r['nb_sp'].mean():>9,.0f}"
                   f" {r['nb_vc'].mean():>6.3f} {r['nb_rec'].mean():>5.3f}"
                   f" {d20:>7} {d50:>5} {fill:>7}")
@@ -453,7 +480,7 @@ def main():
         print("=" * 120)
         scorers = ["ML_nb", "V4.4", "v0c"]
         for ct in ["onpeak", "offpeak"]:
-            for eval_py in ["2024-06", "2025-06"]:
+            for eval_py in ["2023-06", "2024-06", "2025-06"]:
                 rows = nb_df.filter((pl.col("ct") == ct) & (pl.col("eval_py") == eval_py))
                 if len(rows) == 0:
                     continue
@@ -549,7 +576,28 @@ def main():
                           f" | {yn('R30_v44@200'):>3} {yn('R30_v44@400'):>3}"
                           f" | {yn('R50_v44@200'):>3} {yn('R50_v44@400'):>3}")
 
-    # ── Phase 6: Registry save ─────────────────────────────────────────
+    # Part 6: Fill-rate analysis
+    print(f"\n{'='*120}")
+    print("PART 6: Fill-rate analysis (genuine NB/V4.4 picks vs v0c backfill)")
+    print("=" * 120)
+    reserved_configs = [c for c in config_order if c not in ("pure_v0c",)]
+    for ct in ["onpeak", "offpeak"]:
+        print(f"\n  {ct}:")
+        print(f"    {'Config':<12} {'K':>4} {'Requested':>10} {'Filled':>8} {'Rate':>6}")
+        print(f"    {'-'*45}")
+        for c in reserved_configs:
+            for K in [200, 400]:
+                r = combo_df.filter(
+                    (pl.col("ct") == ct) & (pl.col("config") == c) & (pl.col("K") == K)
+                )
+                if len(r) == 0:
+                    continue
+                req = r["nb_requested"].mean()
+                filled = r["nb_filled"].mean()
+                rate = filled / req if req > 0 else 0
+                print(f"    {c:<12} {K:>4} {req:>10.0f} {filled:>8.0f} {rate:>6.1%}")
+
+    # ── Phase 7: Registry save ─────────────────────────────────────────
     print("\nSaving registry artifacts...")
     for ct in ["onpeak", "offpeak"]:
         path = f"registry/{ct}/nb_v2"
@@ -563,7 +611,12 @@ def main():
             "features": NB_FEATURES,
             "lgb_params": LGB_PARAMS,
             "eval_configs": {ep: tps for ep, tps in eval_configs},
-            "configs": [(c[0], c[1], c[2], c[3], c[4]) for c in CONFIGS],
+            "configs": [
+                {"name": c[0], "n_v0c_200": c[1], "n_nb_200": c[2],
+                 "n_v0c_400": c[3], "n_nb_400": c[4], "scorer": c[5]}
+                for c in CONFIGS
+            ],
+            "backfill_policy": "v0c backfill when NB/V4.4 cannot fill reserved slots — K always fixed",
         }
         with open(f"{path}/config.json", "w") as f:
             json.dump(config_obj, f, indent=2)

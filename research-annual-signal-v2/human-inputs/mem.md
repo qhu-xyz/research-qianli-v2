@@ -802,3 +802,34 @@ Step 1:
   2. reserved spots for new bind model (30@200, 100@400 for example)
   3. divide the branches into two: for NB-12 branches use the new bind model, for non-nB-12 models use v0c.
   which 
+
+
+
+# consolidating grounds
+
+1. i dont think you are 
+  - following the folder/repo's overall structure in constructing 
+  experiments, updating resigtries, updating docs and indexes
+  - from now on, you need to be much more disciplined
+2. several blunders you must fix:
+  - check if v0c has onpeak/offpeak difference in training and publication
+  - when we do the NB-modeling, are we dividing into onpeak and offpeak?
+    - yes density signals are the same for both ctypes but historical binding would be wildly different
+  - so maybe the nb-modeling won't be different in ctype? because predictive features are not using ctypes?
+  - but if v4.4 is only future looking, why v4.4 has different ctypes?
+3. somehting you did horribly wrong: you compared only onpeak v4.4 against other models right?
+
+Have you fixed those errors?
+ 2. The LambdaRank labels are rebuilt globally across all training quarters instead of
+     using quarter-local labels. For ranking, that is a modeling bug: it mixes quarter-to-
+     quarter scale differences into the relevance labels, while the rest of the pipeline
+     evaluates quarter-relative ranking. The correct per-quarter labels already exist as
+     label_tier, but this script drops them and recomputes a global tiering.
+     scripts/nb_model_yearly.py:41
+     scripts/nb_model_yearly.py:137
+     ml/ground_truth.py:208
+  3. The NB model is only trained and deployed on branches with V4.4 coverage. So the “NB”
+     experiment is really “NB among the V4.4-covered subset,” not the full dormant universe.
+     Any dormant branch without V4.4 is excluded from training and can never be chosen by
+     the reserved NB slots.
+     scripts/nb_model_yearly.py:96

@@ -357,6 +357,18 @@ def main():
 
     print(f"Data build: {time.time()-t0:.0f}s, combined={len(df_combined)}, onpeak={len(df_class['onpeak'])}, offpeak={len(df_class['offpeak'])}")
 
+    # ── Pre-cache eval tables (same for all variants) ────────────────
+    print("Pre-caching eval tables...")
+    eval_tables = {}
+    for eval_py, _ in eval_configs:
+        for aq in aqs:
+            for ct in ["onpeak", "offpeak"]:
+                try:
+                    eval_tables[(eval_py, aq, ct)] = build_class_model_table(eval_py, aq, ct)
+                except Exception as e:
+                    print(f"  eval {eval_py}/{aq}/{ct}: SKIP ({e})")
+    print(f"  Cached {len(eval_tables)} eval tables ({time.time()-t0:.0f}s)")
+
     # ── Run variants ───────────────────────────────────────────────────
     # First pass: rows 0-5 to find best label
     variants = make_variants("tertile")  # initial pass
@@ -405,9 +417,8 @@ def main():
 
                 # Eval per quarter
                 for aq in aqs:
-                    try:
-                        ct_table = build_class_model_table(eval_py, aq, ct)
-                    except Exception:
+                    ct_table = eval_tables.get((eval_py, aq, ct))
+                    if ct_table is None:
                         continue
 
                     bf_col_eval = CLASS_BF_COL[ct]
@@ -542,9 +553,8 @@ def main():
                 model = lgb.train(var.lgb_params, ds, num_boost_round=150)
 
                 for aq in aqs:
-                    try:
-                        ct_table = build_class_model_table(eval_py, aq, ct)
-                    except Exception:
+                    ct_table = eval_tables.get((eval_py, aq, ct))
+                    if ct_table is None:
                         continue
 
                     bf_col_eval = CLASS_BF_COL[ct]

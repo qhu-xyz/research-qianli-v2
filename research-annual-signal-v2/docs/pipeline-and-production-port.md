@@ -81,7 +81,7 @@ source contracts, not V6.1 inheritance.
 | Column | Source (V6.1 overlap) | Source (new constraints) |
 |--------|----------------------|------------------------|
 | constraint_id | Bridge mapping | Bridge mapping |
-| flow_direction | V6.1 | **OPEN GAP** — need MISO_SPICE_CONSTRAINT_INFO. shadow_sign depends on this. |
+| flow_direction | V6.1 | **RESOLVED** — from `MISO_SPICE_DENSITY_SIGNAL_SCORE.parquet`: pick direction (+1/-1) with max score per CID. Confirmed 2026-03-23. |
 | branch_name | V6.1 | Bridge mapping |
 | bus_key | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO |
 | bus_key_group | V6.1 | **OPEN GAP** — not in density; need MISO_SPICE_CONSTRAINT_INFO |

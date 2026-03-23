@@ -65,7 +65,11 @@ def publish_signal(
     # ── Step 3: Join metadata ─────────────────────────────────────────
     logger.info("Step 3: Metadata")
 
-    # 3a. flow_direction — MUST exist for every constraint
+    # 3a. flow_direction from MISO_SPICE_DENSITY_SIGNAL_SCORE.
+    # Each CID has rows for both directions (+1, -1). We pick the direction with
+    # the highest density signal score. This determines shadow_sign (= -flow_direction)
+    # and therefore whether the published constraint is a buy or sell signal.
+    # Confirmed: flow_direction SHOULD come from density_signal_score (teammate verified).
     flow_dir = _load_flow_direction(planning_year)
     constraints = constraints.join(flow_dir, on="constraint_id", how="left")
     n_null_fd = constraints.filter(pl.col("flow_direction").is_null()).height
@@ -253,7 +257,14 @@ def publish_signal(
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def _load_flow_direction(planning_year: str) -> pl.DataFrame:
-    """Load flow_direction from density signal score (max-score direction per CID)."""
+    """Load flow_direction from MISO_SPICE_DENSITY_SIGNAL_SCORE.
+
+    Each CID has rows for both flow directions (+1 and -1). We pick the direction
+    with the highest density signal score per CID. This is the canonical source
+    for flow_direction in the annual signal (confirmed by teammate 2026-03-23).
+
+    The opaque 'score' value is NOT used for ranking — only for direction selection.
+    """
     ds = pl.scan_parquet(DENSITY_SCORE_PATH).filter(
         (pl.col("auction_type") == "annual")
         & (pl.col("auction_month") == planning_year)

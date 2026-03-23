@@ -103,7 +103,7 @@ def assign_scaled_log1p_per_group(sp, groups):
     return labels
 
 
-def compute_tiered_weights(labels):
+def compute_tiered_weights(sp, labels):
     """Sample weights [1, 1, 3, 10] for tiers 0/1/2/3."""
     wt_map = {0: 1.0, 1: 1.0, 2: 3.0, 3: 10.0}
     return np.array([wt_map[int(l)] for l in labels])

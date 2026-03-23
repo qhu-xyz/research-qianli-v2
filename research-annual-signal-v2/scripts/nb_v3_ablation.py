@@ -80,7 +80,12 @@ def assign_tiers_per_group(sp, groups):
 
 
 def assign_scaled_log1p_per_group(sp, groups):
-    """Bounded 0-255 continuous relevance from log1p(SP), per group."""
+    """Bounded 0-30 continuous relevance from log1p(SP), per group.
+
+    LambdaRank max label = 2*num_leaves for label mapping. With num_leaves=15,
+    max safe label = 30. Scale log1p(SP) to 1-30 for binders, 0 for non-binders.
+    """
+    MAX_LABEL = 30
     labels = np.zeros(len(sp), dtype=np.int32)
     offset = 0
     for g in groups:
@@ -90,7 +95,7 @@ def assign_scaled_log1p_per_group(sp, groups):
             log_sp = np.log1p(sp_g[pos])
             max_log = log_sp.max()
             if max_log > 0:
-                scaled = np.minimum(255, np.round(log_sp / max_log * 255)).astype(np.int32)
+                scaled = np.clip(np.round(log_sp / max_log * (MAX_LABEL - 1) + 1), 1, MAX_LABEL).astype(np.int32)
             else:
                 scaled = np.ones(pos.sum(), dtype=np.int32)
             labels[sl][pos] = scaled

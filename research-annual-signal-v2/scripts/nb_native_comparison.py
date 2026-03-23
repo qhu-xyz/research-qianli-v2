@@ -302,7 +302,7 @@ def _compute_v44_metrics(v44_topk, gt_map, branches, is_dormant, is_nb_binder, s
     return {
         "K": K, "universe": v44_universe, "sp": float(v44_sp),
         "binders": v44_binders,
-        "prec": float(v44_binders / labeled) if labeled > 0 else 0,
+        "prec": float(v44_binders / K),  # binders/K for cross-model consistency
         "vc": float(v44_sp / total_sp) if total_sp > 0 else 0,
         "abs_sp": float(v44_sp / total_da) if total_da > 0 else 0,
         "rec": float(v44_binders / n_bind) if n_bind > 0 else 0,

@@ -36,7 +36,7 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 **Champion: tiered_top2 (R30)** — LambdaRank with tiered weights [1,1,3,10] + top2_mean density features, deployed as 170 v0c + 30 NB reserved slots at K=200, 350 + 50 at K=400.
 
 **Native standalone comparison** (each model picks from its own universe):
-- tiered_top2 R30 captures **40-60% more SP** than V4.4 at every K in every (year × ctype)
+- tiered_top2 R30 captures **19-54% more SP** than V4.4 at every K in every (year × ctype)
 - tiered_top2 wins **NB-only VC@50 in all 4 (year × ctype) combos** (0.090-0.272 vs V4.4's 0.013-0.128)
 - V4.4's one edge: slightly more NB_SP at K=400 in 2025 offpeak ($89K vs $65K), at cost of much lower overall SP
 - Fully reproducible — no dependency on opaque V4.4 features
@@ -78,8 +78,12 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/nb_experiment_v2.py` | **NB V2 experiment**: 2 per-ctype models, class-specific v0c, V4.4 benchmark, 6-part report |
-| `scripts/archive/` | Historical scripts (V1 NB experiment, phase 3-5) |
+| `scripts/nb_native_comparison.py` | **Native standalone comparison**: v0c vs tiered_top2 vs V4.4, each in own universe |
+| `scripts/nb_v3_ablation.py` | V3 ablation: 9 variants (+2020, labels, features) |
+| `scripts/nb_experiment_v2.py` | V2 baseline experiment (2 per-ctype models) |
+| `scripts/nb_feature_ablation.py` | Density feature expansion ablation |
+| `scripts/publish_annual_signal.py` | V7.0/V7.0B signal publication |
+| `scripts/archive/` | Historical scripts (V1 NB, phase 3-5, v7 verification) |
 
 ### Documents
 

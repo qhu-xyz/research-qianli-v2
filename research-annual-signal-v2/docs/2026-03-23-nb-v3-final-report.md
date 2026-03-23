@@ -2,7 +2,7 @@
 
 ## Summary
 
-**tiered_top2 (R30)** is the recommended NB policy. It captures 40-60% more SP than V4.4 at every K in every (year × ctype) combo, while adding significant NB dormant branch detection on top of v0c's general ranking quality.
+**tiered_top2 (R30)** is the recommended NB policy. It captures 19-54% more SP than V4.4 at every K in every (year × ctype) combo, while adding significant NB dormant branch detection on top of v0c's general ranking quality. Note: tiered_top2 is a combo of two V3 ablation winners (+tiered_wt labels and +top2_mean features); it was tested in the combo run but is not a separately registered ablation variant.
 
 ## Methodology
 
@@ -89,8 +89,8 @@ V4.4's universe is ~46% the size of ours. 95-97% of V4.4's branches are also in 
 
 ## Findings
 
-### 1. SP Captured: v0c and tiered_top2 dominate V4.4 everywhere
-Both our models capture 40-60% more SP than V4.4 at every K, in every (year × ctype). This is a native standalone comparison — each model picks from its own universe. V4.4's smaller universe (1,200 vs 2,600 branches) is a factor, but even on the overlap V4.4's ranking is weaker.
+### 1. SP Captured: v0c and tiered_top2 capture more SP than V4.4 everywhere
+Both our models capture 19-54% more SP than V4.4 at every K, in every (year × ctype). The weakest case is 2025 offpeak K=400 ($830K vs $700K, +19%). The strongest is 2025 onpeak K=200 ($647K vs $421K, +54%). This is a native standalone comparison — each model picks from its own universe. V4.4's smaller universe (~1,200 vs ~2,600 branches) contributes to the gap alongside ranking quality differences.
 
 ### 2. NB detection: tiered_top2 dominates V4.4 everywhere
 NB-only VC@50: tiered_top2 wins all 4 combos. The gap is massive in 2024 (0.090 vs 0.014 onpeak) where V4.4 collapses. Even in 2025 where V4.4 is stronger, tiered_top2 leads (0.272 vs 0.108 onpeak, 0.204 vs 0.128 offpeak).
@@ -98,8 +98,8 @@ NB-only VC@50: tiered_top2 wins all 4 combos. The gap is massive in 2024 (0.090 
 ### 3. V4.4's one remaining edge: NB_SP at K=400
 V4.4 captures comparable or slightly more NB_SP at K=400 in 2025 (onpeak: $83K vs $79K, offpeak: $89K vs $65K). This is because V4.4 stuffs ~170 dormant branches into its top 400 (vs tiered_top2's ~104) — it sacrifices general ranking quality for NB coverage. This is a tradeoff, not a pure win.
 
-### 4. Precision gap is large
-V4.4's precision (binders/K) is consistently 0.29-0.35, while v0c/tiered_top2 is 0.40-0.58. V4.4 wastes more slots on non-binders.
+### 4. Precision gap
+V4.4 precision is computed as binders/labeled (excluding unlabeled branches outside our GT). Using binders/K for consistency: V4.4 is 0.28-0.34, while v0c/tiered_top2 is 0.40-0.58. The gap partly reflects universe size (V4.4's 1,200 branches include fewer overall binders) and partly ranking quality.
 
 ### 5. Dangerous branch capture
 v0c and tiered_top2 consistently catch more D20 (>$20K) branches. V4.4 misses 2-4 dangerous branches per quarter that our models catch.
@@ -110,10 +110,12 @@ v0c and tiered_top2 consistently catch more D20 (>$20K) branches. V4.4 misses 2-
 ## Recommendation
 
 **Ship tiered_top2 R30** as the production NB policy:
-- At K=400: +$44K SP and +$53K NB_SP vs V4.4 on average (2025 onpeak holdout: $870K vs $703K)
-- At K=200: +$226K SP vs V4.4 on average, with $28K NB_SP (vs V4.4's $24K)
+- At K=400: captures more SP than V4.4 in all 4 (year × ctype) combos (e.g., 2025 onpeak: $870K vs $703K, +24%)
+- At K=200: captures more SP than V4.4 in all 4 combos (e.g., 2025 onpeak: $647K vs $421K, +54%)
+- NB-only VC@50 wins all 4 combos (0.090-0.272 vs V4.4's 0.013-0.128)
+- V4.4's one edge: NB_SP at K=400 offpeak 2025 ($89K vs $65K) — trades general SP for NB coverage
 - Fully reproducible — no dependency on opaque V4.4 features
-- Marginal cost vs pure v0c: -$12K SP at K=200 (2% tradeoff for NB coverage)
+- Marginal cost vs pure v0c at K=200: ~$13-22K SP (2-3% tradeoff for NB coverage)
 
 ## Ablation path (V3 improvements over V2)
 

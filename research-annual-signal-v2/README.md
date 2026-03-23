@@ -29,21 +29,23 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 - Full pipeline: build branch model table → score → map back to SPICE CIDs → publish parquets
 - See `docs/v7.0b-release-report.md` for comparison results
 
-### NB-hist-12 Model Experiment V2 (2026-03-23) — CURRENT
+### NB-hist-12 Model: tiered_top2 Champion (2026-03-23) — CURRENT
 
-**Problem**: v0c is structurally blind to dormant branches. Per-ctype dormant populations differ (onpeak: `bf_12==0`, offpeak: `bfo_12==0`).
+**Problem**: v0c is structurally blind to dormant branches (no binding in 12 months). V4.4 catches some but is opaque and inconsistent.
 
-**Approach (V2)**: Two per-ctype NB LambdaRank models (8 class-agnostic features, no V4.4 features). Evaluation uses `build_class_model_table` for fully class-specific v0c. V4.4 as per-ctype benchmark only. Fixed K via v0c backfill.
+**Champion: tiered_top2 (R30)** — LambdaRank with tiered weights [1,1,3,10] + top2_mean density features, deployed as 170 v0c + 30 NB reserved slots at K=200, 350 + 50 at K=400.
 
-**Key findings**:
-- At K=400 onpeak, R30_nb (+0.4pp VC) and R30_v44 (+0.5pp VC) are a near-free lunch
-- At K=400 offpeak, all reservations cost VC (-0.5pp to -3.2pp)
-- ML_nb dominates V4.4 on onpeak NB-only (VC@50: 0.096 vs 0.013 in 2024)
-- V4.4 is inconsistent — near-zero on 2024 for both ctypes
+**Native standalone comparison** (each model picks from its own universe):
+- tiered_top2 R30 captures **40-60% more SP** than V4.4 at every K in every (year × ctype)
+- tiered_top2 wins **NB-only VC@50 in all 4 (year × ctype) combos** (0.090-0.272 vs V4.4's 0.013-0.128)
+- V4.4's one edge: slightly more NB_SP at K=400 in 2025 offpeak ($89K vs $65K), at cost of much lower overall SP
+- Fully reproducible — no dependency on opaque V4.4 features
 
-**V1 superseded**: V1 had combined v0c (wrong BF + da_rank_value), onpeak-only V4.4, combined NB model. Archived to `scripts/archive/`.
+**Ablation path** (V2→V3): +2020 data, +tiered weights, +top2_mean features. 9 variants tested.
 
-**Full results**: `docs/2026-03-23-nb-v2-experiment-report.md`
+**Full results**: `docs/2026-03-23-nb-v3-final-report.md`
+**Metric contract**: `docs/metric-contract.md`
+**V2 report (superseded)**: `docs/2026-03-23-nb-v2-experiment-report.md`
 
 ## Repo Structure
 
@@ -83,7 +85,9 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 
 | Document | Description |
 |----------|-------------|
-| `docs/2026-03-23-nb-v2-experiment-report.md` | **NB V2 experiment**: per-ctype models, 8 tables + aggregates, case studies |
+| `docs/2026-03-23-nb-v3-final-report.md` | **NB V3 final report**: tiered_top2 champion, native standalone comparison vs V4.4 |
+| `docs/metric-contract.md` | **Metric contract**: cross-model comparison methodology (native/overlap/deployment views) |
+| `docs/2026-03-23-nb-v2-experiment-report.md` | NB V2 experiment (superseded by V3) |
 | `docs/v7.0b-release-report.md` | V7.0B comparison results (supplement matching) |
 | `docs/2026-03-18-data-quality-audit.md` | Coverage gap analysis |
 | `docs/2026-03-19-v7-verification-report.md` | V7.0 verification (loss waterfall, zero-SF) |

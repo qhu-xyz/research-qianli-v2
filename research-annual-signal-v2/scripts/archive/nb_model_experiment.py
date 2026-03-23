@@ -21,8 +21,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
 import polars as pl
-from scipy.stats import spearmanr
-
 from ml.features import build_model_table
 from ml.phase6.scoring import _minmax
 

@@ -24,8 +24,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import lightgbm as lgb
 import numpy as np
 import polars as pl
-from scipy.stats import spearmanr
-
 from ml.features import build_model_table
 from ml.phase6.scoring import _minmax
 
@@ -159,6 +157,7 @@ def main():
             rt_all = eval_q["rt_max"].to_numpy().astype(np.float64)
             br_all = eval_q["branch"].to_list()
             total_sp = sp_all.sum()
+            assert eval_q["total_da_sp"].n_unique() == 1, "total_da_sp varies within quarter"
             total_da = float(eval_q["total_da_sp"][0])
             n_bind = (sp_all > 0).sum()
             nb_mask = bf_all == 0
@@ -182,6 +181,7 @@ def main():
                     if b in nb_branches and nb_mask[i]:
                         nb_scores[i] = nb_pred[j]
                         j += 1
+                assert j == len(nb_pred), f"NB score mapping mismatch: {j} != {len(nb_pred)}"
 
             # V4.4 scores
             v44_rank = eval_q["v44_rank"].to_numpy()

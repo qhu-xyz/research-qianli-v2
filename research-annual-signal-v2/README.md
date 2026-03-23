@@ -29,15 +29,21 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 - Full pipeline: build branch model table → score → map back to SPICE CIDs → publish parquets
 - See `docs/v7.0b-release-report.md` for comparison results
 
-### NB-hist-12 Model Experiment (2026-03-22 to 2026-03-23) — CURRENT
+### NB-hist-12 Model Experiment V2 (2026-03-23) — CURRENT
 
-**Problem**: v0c is structurally blind to dormant branches (NB-hist-12: no binding in 12 months). These are ~66% of branches but include surprise binders worth significant SP. V4.4 (existing SPICE signal) catches some of these via forward-looking deviation features, but is extremely inconsistent across years.
+**Problem**: v0c is structurally blind to dormant branches. Per-ctype dormant populations differ (onpeak: `bf_12==0`, offpeak: `bfo_12==0`).
 
-**Approach**: Train a LambdaRank model specifically on NB-hist-12 branches using density bins + V4.4 deviation features + DA history (14 features). Then combine with v0c via reserved-slot allocation: v0c picks the top N_v0c branches, NB scorer picks the top N_nb from the remaining dormant population.
+**Approach (V2)**: Two per-ctype NB LambdaRank models (8 class-agnostic features, no V4.4 features). Evaluation uses `build_class_model_table` for fully class-specific v0c. V4.4 as per-ctype benchmark only. Fixed K via v0c backfill.
 
-**Key finding**: At K=400, blended reservations (R30 or R50) are a **free lunch** — they improve overall VC while adding $59-112K NB_SP per quarter. At K=200, R30_blend costs only -1.0pp VC for +$68K NB_SP.
+**Key findings**:
+- At K=400 onpeak, R30_nb (+0.4pp VC) and R30_v44 (+0.5pp VC) are a near-free lunch
+- At K=400 offpeak, all reservations cost VC (-0.5pp to -3.2pp)
+- ML_nb dominates V4.4 on onpeak NB-only (VC@50: 0.096 vs 0.013 in 2024)
+- V4.4 is inconsistent — near-zero on 2024 for both ctypes
 
-**Full results**: `docs/2026-03-23-nb-model-experiment-report.md`
+**V1 superseded**: V1 had combined v0c (wrong BF + da_rank_value), onpeak-only V4.4, combined NB model. Archived to `scripts/archive/`.
+
+**Full results**: `docs/2026-03-23-nb-v2-experiment-report.md`
 
 ## Repo Structure
 
@@ -70,15 +76,14 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/nb_model_yearly.py` | **NB-hist-12 experiment**: rolling CV, per-PY breakdown, reserved-slot combos (Part 1 + Part 2 + delta table) |
-| `scripts/nb_model_experiment.py` | Earlier prototype: blended tier experiment (v0c + V4.4 reserved slots, simpler configs) |
-| `scripts/archive/` | Historical phase 3-5 scripts |
+| `scripts/nb_experiment_v2.py` | **NB V2 experiment**: 2 per-ctype models, class-specific v0c, V4.4 benchmark, 6-part report |
+| `scripts/archive/` | Historical scripts (V1 NB experiment, phase 3-5) |
 
 ### Documents
 
 | Document | Description |
 |----------|-------------|
-| `docs/2026-03-23-nb-model-experiment-report.md` | **NB model experiment**: motivation, setup, full results, conclusions |
+| `docs/2026-03-23-nb-v2-experiment-report.md` | **NB V2 experiment**: per-ctype models, 8 tables + aggregates, case studies |
 | `docs/v7.0b-release-report.md` | V7.0B comparison results (supplement matching) |
 | `docs/2026-03-18-data-quality-audit.md` | Coverage gap analysis |
 | `docs/2026-03-19-v7-verification-report.md` | V7.0 verification (loss waterfall, zero-SF) |

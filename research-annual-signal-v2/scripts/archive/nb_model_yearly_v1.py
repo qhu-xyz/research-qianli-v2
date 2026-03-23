@@ -38,13 +38,24 @@ NB_FEATURE_COLS = [
 ]
 
 
-def assign_tiers(sp):
+def assign_tiers_per_group(sp, groups):
+    """Assign 0/1/2/3 tier labels within each LambdaRank group (quarter).
+
+    Labels are relative to each group, not global — so a group with
+    uniformly low SP still gets full 1/2/3 differentiation among its binders.
+    """
     labels = np.zeros(len(sp), dtype=np.int32)
-    pos = sp > 0
-    if pos.sum() > 0:
-        r = sp[pos].argsort().argsort()
-        n = len(r)
-        labels[pos] = np.where(r < n // 3, 1, np.where(r < 2 * n // 3, 2, 3))
+    offset = 0
+    for g in groups:
+        sl = slice(offset, offset + g)
+        sp_g = sp[sl]
+        pos = sp_g > 0
+        if pos.sum() > 0:
+            r = sp_g[pos].argsort().argsort()
+            n = len(r)
+            tier = np.where(r < n // 3, 1, np.where(r < 2 * n // 3, 2, 3))
+            labels[sl][pos] = tier
+        offset += g
     return labels
 
 
@@ -132,10 +143,10 @@ def main():
             print(f"  {eval_py}: only {len(train)} train rows, skipping")
             continue
 
-        # Train NB model
+        # Train NB model (per-group tiering for LambdaRank)
         X_train = train.select(NB_FEATURE_COLS).to_numpy().astype(np.float64)
-        y_train = assign_tiers(train["sp"].to_numpy().astype(np.float64))
         groups_train = train.group_by(["py", "aq"], maintain_order=True).len()["len"].to_numpy()
+        y_train = assign_tiers_per_group(train["sp"].to_numpy().astype(np.float64), groups_train)
 
         ds = lgb.Dataset(X_train, label=y_train, group=groups_train, free_raw_data=False)
         nb_model = lgb.train(
@@ -220,6 +231,7 @@ def main():
             # (config_name, nb_scorer_name, nb_scorer, n_v0c@200, n_nb@200, n_v0c@400, n_nb@400)
             configs = [
                 ("pure_v0c",       "none",     None,         200,   0, 400,   0),
+                ("pure_v44",       "none",     None,           0,   0,   0,   0),  # special: all by v44
                 ("R30_v44",        "v44",      v44_scores,   170,  30, 350,  50),
                 ("R30_blend",      "blend",    blend_scores, 170,  30, 350,  50),
                 ("R50_v44",        "v44",      v44_scores,   150,  50, 300, 100),
@@ -231,32 +243,61 @@ def main():
             for cname, nb_sname, nb_scorer, nv200, nn200, nv400, nn400 in configs:
                 for K, nv, nn in [(200, nv200, nn200), (400, nv400, nn400)]:
                     selected = set()
-                    # v0c picks
-                    for idx in np.argsort(v0c)[::-1]:
-                        if len(selected) >= nv:
-                            break
-                        selected.add(int(idx))
-                    # NB picks from dormant population
-                    if nn > 0 and nb_scorer is not None:
-                        candidates = [(i, nb_scorer[i]) for i in range(len(br_all))
-                                      if nb_mask[i] and i not in selected and nb_scorer[i] > -999]
-                        candidates.sort(key=lambda x: -x[1])
-                        for idx, _ in candidates[:nn]:
-                            selected.add(idx)
+
+                    if cname == "pure_v44":
+                        # Pick top K entirely by V4.4 scores
+                        for idx in np.argsort(v44_scores)[::-1][:K]:
+                            selected.add(int(idx))
+                    else:
+                        # v0c picks
+                        for idx in np.argsort(v0c)[::-1]:
+                            if len(selected) >= nv:
+                                break
+                            selected.add(int(idx))
+                        # NB picks from dormant population
+                        if nn > 0 and nb_scorer is not None:
+                            candidates = [(i, nb_scorer[i]) for i in range(len(br_all))
+                                          if nb_mask[i] and i not in selected and nb_scorer[i] > -999]
+                            candidates.sort(key=lambda x: -x[1])
+                            for idx, _ in candidates[:nn]:
+                                selected.add(idx)
 
                     mask = np.zeros(len(sp_all), dtype=bool)
                     for idx in selected:
                         mask[idx] = True
 
+                    # Core metrics
+                    captured = sp_all[mask].sum()
+                    bind_in = int((sp_all[mask] > 0).sum())
+                    nb_in_k = int((mask & nb_mask).sum())
+                    nb_bind_k = int((mask & nb_bind_mask).sum())
+                    nb_sp_k = float(sp_all[mask & nb_bind_mask].sum())
+                    nb_total_sp = sp_all[nb_bind_mask].sum()
+                    nb_total_bind = int(nb_bind_mask.sum())
+
+                    # Dangerous branches (SP > 20K and > 50K)
+                    dang20 = sp_all > 20000
+                    dang50 = sp_all > 50000
+                    n_dang20 = int(dang20.sum())
+                    n_dang50 = int(dang50.sum())
+
                     combo_results.append({
                         "eval_py": eval_py, "aq": aq, "config": cname, "K": K,
-                        "vc": sp_all[mask].sum() / total_sp if total_sp > 0 else 0,
-                        "abs_sp": sp_all[mask].sum() / total_da if total_da > 0 else 0,
-                        "rec": (sp_all[mask] > 0).sum() / n_bind,
-                        "bind": int((sp_all[mask] > 0).sum()),
-                        "nb_in": int((mask & nb_mask).sum()),
-                        "nb_bind": int((mask & nb_bind_mask).sum()),
-                        "nb_sp": float(sp_all[mask & nb_bind_mask].sum()),
+                        "vc": captured / total_sp if total_sp > 0 else 0,
+                        "abs_sp": captured / total_da if total_da > 0 else 0,
+                        "rec": bind_in / n_bind if n_bind > 0 else 0,
+                        "prec": bind_in / K,
+                        "bind": bind_in,
+                        "sp_cap": float(captured),
+                        "nb_in": nb_in_k,
+                        "nb_bind": nb_bind_k,
+                        "nb_sp": nb_sp_k,
+                        "nb_vc": nb_sp_k / nb_total_sp if nb_total_sp > 0 else 0,
+                        "nb_rec": nb_bind_k / nb_total_bind if nb_total_bind > 0 else 0,
+                        "dang20_cap": int((mask & dang20).sum()),
+                        "dang20_tot": n_dang20,
+                        "dang50_cap": int((mask & dang50).sum()),
+                        "dang50_tot": n_dang50,
                     })
 
     # ==========================================================================
@@ -300,65 +341,46 @@ def main():
             print(f"    {s:<12} {len(r):>4} {r['vc'].mean():>8.4f} {r['rec'].mean():>8.4f} "
                   f"{r['sp_captured'].mean():>10,.0f} {r['bind_captured'].mean():>6.1f}")
 
-    print(f"\n{'='*110}")
-    print("PART 2: Full Universe — Reserved NB Slots")
-    print("=" * 110)
+    print(f"\n{'='*160}")
+    print("PART 2: Full Universe — Expanded Metrics (per year × tier)")
+    print("=" * 160)
 
-    config_order = ["pure_v0c", "R30_v44", "R30_blend", "R50_v44", "R50_blend", "R100_v44", "R100_blend"]
+    config_order = ["pure_v0c", "pure_v44", "R30_v44", "R30_blend", "R50_v44", "R50_blend", "R100_v44", "R100_blend"]
 
-    for eval_py in ["2023-06", "2024-06", "2025-06"]:
-        rows_py = combo_df.filter(pl.col("eval_py") == eval_py)
-        if len(rows_py) == 0:
-            continue
-        print(f"\n  === Eval {eval_py} ===")
-        for K in [200, 400]:
-            print(f"\n    K={K}:")
-            print(f"    {'Config':<16} {'VC':>7} {'Abs':>7} {'Rec':>7} {'Bind':>5} {'NB_in':>6} {'NB_bind':>7} {'NB_SP':>10}")
-            print(f"    {'-'*75}")
-            for c in config_order:
-                r = rows_py.filter((pl.col("config") == c) & (pl.col("K") == K))
-                if len(r) == 0:
-                    continue
-                print(f"    {c:<16} {r['vc'].mean():>7.4f} {r['abs_sp'].mean():>7.4f} "
-                      f"{r['rec'].mean():>7.4f} {r['bind'].mean():>5.0f} "
-                      f"{r['nb_in'].mean():>6.0f} {r['nb_bind'].mean():>7.1f} {r['nb_sp'].mean():>10,.0f}")
-
-    # Aggregate
-    print(f"\n  === AGGREGATE (all eval years) ===")
-    for K in [200, 400]:
-        print(f"\n    K={K}:")
-        print(f"    {'Config':<16} {'Grp':>4} {'VC':>7} {'Abs':>7} {'Rec':>7} {'Bind':>5} {'NB_in':>6} {'NB_bind':>7} {'NB_SP':>10}")
-        print(f"    {'-'*80}")
+    def print_expanded_table(df_slice, title):
+        print(f"\n  === {title} ===")
+        hdr = (f"    {'Config':<16} {'VC':>7} {'Abs':>7} {'Rec':>7} {'Prec':>6} {'Bind':>5} {'SP_cap':>12}"
+               f" {'NB_in':>6} {'NB_b':>5} {'NB_SP':>10} {'NB_VC':>7} {'NB_Rec':>7}"
+               f" {'D20':>5} {'D50':>5}")
+        print(hdr)
+        print(f"    {'-'*len(hdr)}")
         for c in config_order:
-            r = combo_df.filter((pl.col("config") == c) & (pl.col("K") == K))
+            r = df_slice.filter(pl.col("config") == c)
             if len(r) == 0:
                 continue
-            print(f"    {c:<16} {len(r):>4} {r['vc'].mean():>7.4f} {r['abs_sp'].mean():>7.4f} "
-                  f"{r['rec'].mean():>7.4f} {r['bind'].mean():>5.0f} "
-                  f"{r['nb_in'].mean():>6.0f} {r['nb_bind'].mean():>7.1f} {r['nb_sp'].mean():>10,.0f}")
+            d20 = f"{r['dang20_cap'].mean():.1f}/{r['dang20_tot'].mean():.0f}"
+            d50 = f"{r['dang50_cap'].mean():.1f}/{r['dang50_tot'].mean():.0f}"
+            print(f"    {c:<16} {r['vc'].mean():>7.4f} {r['abs_sp'].mean():>7.4f} "
+                  f"{r['rec'].mean():>7.4f} {r['prec'].mean():>6.3f} {r['bind'].mean():>5.0f} "
+                  f"{r['sp_cap'].mean():>12,.0f}"
+                  f" {r['nb_in'].mean():>6.0f} {r['nb_bind'].mean():>5.1f} {r['nb_sp'].mean():>10,.0f}"
+                  f" {r['nb_vc'].mean():>7.4f} {r['nb_rec'].mean():>7.4f}"
+                  f" {d20:>5} {d50:>5}")
 
-    # Delta table: each config vs pure_v0c
-    print(f"\n{'='*110}")
-    print("PART 3: Delta vs pure_v0c (AGGREGATE)")
-    print("=" * 110)
+    # 4 tables: (2024, 2025) × (K=200, K=400)
+    for eval_py in ["2024-06", "2025-06"]:
+        for K in [200, 400]:
+            tier_label = "Tier 0" if K == 200 else "Tier 0+1"
+            df_slice = combo_df.filter((pl.col("eval_py") == eval_py) & (pl.col("K") == K))
+            if len(df_slice) == 0:
+                continue
+            print_expanded_table(df_slice, f"{eval_py} / K={K} ({tier_label}, {len(df_slice) // len(config_order)} quarters)")
 
+    # Aggregate table too
     for K in [200, 400]:
-        base = combo_df.filter((pl.col("config") == "pure_v0c") & (pl.col("K") == K))
-        if len(base) == 0:
-            continue
-        base_vc = base["vc"].mean()
-        base_nb_sp = base["nb_sp"].mean()
-        base_nb_bind = base["nb_bind"].mean()
-        print(f"\n    K={K} (base VC={base_vc:.4f}, base NB_SP=${base_nb_sp:,.0f}, base NB_bind={base_nb_bind:.1f}):")
-        print(f"    {'Config':<16} {'dVC':>8} {'dNB_SP':>10} {'dNB_bind':>9}")
-        print(f"    {'-'*45}")
-        for c in config_order[1:]:
-            r = combo_df.filter((pl.col("config") == c) & (pl.col("K") == K))
-            if len(r) == 0:
-                continue
-            print(f"    {c:<16} {r['vc'].mean() - base_vc:>+8.4f} "
-                  f"${r['nb_sp'].mean() - base_nb_sp:>+9,.0f} "
-                  f"{r['nb_bind'].mean() - base_nb_bind:>+9.1f}")
+        tier_label = "Tier 0" if K == 200 else "Tier 0+1"
+        df_slice = combo_df.filter(pl.col("K") == K)
+        print_expanded_table(df_slice, f"AGGREGATE / K={K} ({tier_label}, {len(df_slice) // len(config_order)} quarter-groups)")
 
     print(f"\nTotal time: {time.time()-t0:.0f}s")
 

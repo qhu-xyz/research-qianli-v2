@@ -139,13 +139,15 @@ def build_class_model_table(
         .alias("cohort")
     )
 
-    # Override is_nb_N with class-specific NB flags
+    # Override is_nb_N with class-specific NB flags (only alias what exists)
     nb_prefix = "nb_onpeak" if class_type == "onpeak" else "nb_offpeak"
-    table = table.with_columns(
-        pl.col(f"{nb_prefix}_6").alias("is_nb_6"),
-        pl.col(f"{nb_prefix}_12").alias("is_nb_12"),
-        pl.col(f"{nb_prefix}_24").alias("is_nb_24"),
-    )
+    nb_aliases = []
+    for window in [6, 12, 24]:
+        src = f"{nb_prefix}_{window}"
+        if src in table.columns:
+            nb_aliases.append(pl.col(src).alias(f"is_nb_{window}"))
+    if nb_aliases:
+        table = table.with_columns(nb_aliases)
 
     # Add cross-class BF as explicit feature column
     table = table.with_columns(

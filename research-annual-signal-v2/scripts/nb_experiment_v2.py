@@ -230,8 +230,6 @@ def main():
                     pl.max_horizontal("bin_80_cid_max", "bin_90_cid_max",
                                       "bin_100_cid_max", "bin_110_cid_max")
                 ).to_series().to_numpy().astype(np.float64)
-                label_tier = ct_table["label_tier"].to_numpy().astype(np.float64)
-
                 assert ct_table["total_da_sp_quarter"].n_unique() == 1
                 total_da = float(ct_table["total_da_sp_quarter"][0])
                 total_sp = sp.sum()
@@ -346,16 +344,6 @@ def main():
                         dang20 = sp > 20000
                         dang50 = sp > 50000
 
-                        # NDCG
-                        from sklearn.metrics import ndcg_score as _ndcg
-                        try:
-                            ndcg = float(_ndcg(
-                                label_tier[mask].reshape(1, -1),
-                                sp[mask].reshape(1, -1),
-                            )) if mask.sum() > 0 else 0.0
-                        except Exception:
-                            ndcg = 0.0
-
                         combo_results.append({
                             "eval_py": eval_py, "aq": aq, "ct": ct,
                             "config": cname, "K": K,
@@ -376,7 +364,6 @@ def main():
                             "dang50_tot": int(dang50.sum()),
                             "nb_filled": nb_filled,
                             "nb_requested": nn,
-                            "ndcg": ndcg,
                         })
 
                 # ── Case studies ───────────────────────────────────────
@@ -399,8 +386,25 @@ def main():
                         for rk, oi in enumerate(order):
                             nb_rank_arr[fi[oi]] = rk + 1
 
+                    # Build per-config selections at K=200 and K=400 for inclusion flags
+                    config_selections = {}
+                    for cname, nv200, nn200, nv400, nn400, scorer_key in CONFIGS:
+                        for K, nv, nn in [(200, nv200, nn200), (400, nv400, nn400)]:
+                            if cname == "pure_v44":
+                                sel = set(int(x) for x in np.argsort(v44_scores)[::-1][:K])
+                                if len(sel) < K:
+                                    for idx in np.argsort(v0c)[::-1]:
+                                        if len(sel) >= K: break
+                                        sel.add(int(idx))
+                            elif scorer_key is None:
+                                sel = set(int(x) for x in np.argsort(v0c)[::-1][:K])
+                            else:
+                                scorer = nb_scores if scorer_key == "nb" else v44_scores
+                                sel, _ = allocate_reserved_slots(v0c, scorer, is_dormant, nv, nn)
+                            config_selections[(cname, K)] = sel
+
                     for i in sorted(dang_idx, key=lambda x: -sp[x]):
-                        case_studies.append({
+                        row = {
                             "eval_py": eval_py, "aq": aq, "ct": ct,
                             "branch": branches[i], "sp": float(sp[i]),
                             "is_dormant": bool(is_dormant[i]),
@@ -408,7 +412,12 @@ def main():
                             "v44_rk": int(v44_rank_arr[i]),
                             "nb_rk": int(nb_rank_arr[i]),
                             "N": N,
-                        })
+                        }
+                        # Per-config inclusion at K=200 and K=400
+                        for cname in ["pure_v0c", "pure_v44", "R30_nb", "R50_nb", "R30_v44", "R50_v44"]:
+                            for K in [200, 400]:
+                                row[f"{cname}@{K}"] = i in config_selections.get((cname, K), set())
+                        case_studies.append(row)
 
     # ── Phase 5: Reporting ─────────────────────────────────────────────
     combo_df = pl.DataFrame(combo_results)
@@ -419,11 +428,11 @@ def main():
 
     def print_combo_table(df_slice, title):
         print(f"\n  === {title} ===")
-        hdr = (f"    {'Config':<12} {'VC':>6} {'Abs':>6} {'Rec':>6} {'Prec':>5} {'Bind':>5} {'NDCG':>6}"
+        hdr = (f"    {'Config':<12} {'VC':>6} {'Abs':>6} {'Rec':>6} {'Prec':>5} {'Bind':>5}"
                f" {'NB_in':>5} {'NB_b':>4} {'NB_SP':>9} {'NB_VC':>6} {'NB_R':>5}"
                f" {'D20':>7} {'D50':>5} {'Fill':>7}")
         print(hdr)
-        print(f"    {'-'*115}")
+        print(f"    {'-'*110}")
         for c in config_order:
             r = df_slice.filter(pl.col("config") == c)
             if len(r) == 0:
@@ -432,8 +441,7 @@ def main():
             d50 = f"{r['dang50_cap'].mean():.0f}/{r['dang50_tot'].mean():.0f}"
             fill = f"{r['nb_filled'].mean():.0f}/{r['nb_requested'].mean():.0f}" if r['nb_requested'].mean() > 0 else "-"
             print(f"    {c:<12} {r['vc'].mean():>6.3f} {r['abs_sp'].mean():>6.3f} "
-                  f"{r['rec'].mean():>6.3f} {r['prec'].mean():>5.3f} {r['bind'].mean():>5.0f} "
-                  f"{r['ndcg'].mean():>6.3f}"
+                  f"{r['rec'].mean():>6.3f} {r['prec'].mean():>5.3f} {r['bind'].mean():>5.0f}"
                   f" {r['nb_in'].mean():>5.0f} {r['nb_bind'].mean():>4.1f} {r['nb_sp'].mean():>9,.0f}"
                   f" {r['nb_vc'].mean():>6.3f} {r['nb_rec'].mean():>5.3f}"
                   f" {d20:>7} {d50:>5} {fill:>7}")
@@ -523,12 +531,23 @@ def main():
                 if len(rows) == 0:
                     continue
                 print(f"\n  {eval_py} / {ct} ({len(rows)} branches):")
-                print(f"  {'Branch':<35} {'SP':>10} {'Dorm':>5} {'v0c':>5} {'v44':>5} {'ML':>5} {'N':>5}")
-                print(f"  {'-'*75}")
-                for r in rows.sort("sp", descending=True).head(20).iter_rows(named=True):
-                    d = "NB" if r["is_dormant"] else ""
-                    print(f"  {r['branch']:<35} ${r['sp']:>9,.0f} {d:>5} "
-                          f"{r['v0c_rk']:>5} {r['v44_rk']:>5} {r['nb_rk']:>5} {r['N']:>5}")
+                print(f"  {'Branch':<30} {'SP':>9} {'NB':>3} {'v0c':>5} {'v44':>5} {'ML':>5}"
+                      f" | {'v0c':>3} {'v0c':>3} | {'v44':>3} {'v44':>3} | {'R30':>3} {'R30':>3} | {'R50':>3} {'R50':>3}"
+                      f" | {'R3v':>3} {'R3v':>3} | {'R5v':>3} {'R5v':>3}")
+                print(f"  {'':30} {'':>9} {'':>3} {'rk':>5} {'rk':>5} {'rk':>5}"
+                      f" | {'@2':>3} {'@4':>3} | {'@2':>3} {'@4':>3} | {'@2':>3} {'@4':>3} | {'@2':>3} {'@4':>3}"
+                      f" | {'@2':>3} {'@4':>3} | {'@2':>3} {'@4':>3}")
+                print(f"  {'-'*140}")
+                for r in rows.sort("sp", descending=True).head(25).iter_rows(named=True):
+                    nb = "NB" if r["is_dormant"] else ""
+                    def yn(key): return "Y" if r.get(key, False) else ""
+                    print(f"  {r['branch']:<30} ${r['sp']:>8,.0f} {nb:>3} {r['v0c_rk']:>5} {r['v44_rk']:>5} {r['nb_rk']:>5}"
+                          f" | {yn('pure_v0c@200'):>3} {yn('pure_v0c@400'):>3}"
+                          f" | {yn('pure_v44@200'):>3} {yn('pure_v44@400'):>3}"
+                          f" | {yn('R30_nb@200'):>3} {yn('R30_nb@400'):>3}"
+                          f" | {yn('R50_nb@200'):>3} {yn('R50_nb@400'):>3}"
+                          f" | {yn('R30_v44@200'):>3} {yn('R30_v44@400'):>3}"
+                          f" | {yn('R50_v44@200'):>3} {yn('R50_v44@400'):>3}")
 
     # ── Phase 6: Registry save ─────────────────────────────────────────
     print("\nSaving registry artifacts...")
@@ -553,7 +572,17 @@ def main():
         with open(f"{path}/metrics.json", "w") as f:
             json.dump(ct_metrics, f, indent=2)
 
-        print(f"  {path}/ saved ({len(ct_metrics)} entries)")
+        if nb_df is not None:
+            ct_nb = nb_df.filter(pl.col("ct") == ct).to_dicts()
+            with open(f"{path}/nb_only_metrics.json", "w") as f:
+                json.dump(ct_nb, f, indent=2)
+
+        if cs_df is not None:
+            ct_cs = cs_df.filter(pl.col("ct") == ct).to_dicts()
+            with open(f"{path}/case_studies.json", "w") as f:
+                json.dump(ct_cs, f, indent=2)
+
+        print(f"  {path}/ saved ({len(ct_metrics)} combo + nb_only + case_studies)")
 
     print(f"\nTotal time: {time.time()-t0:.0f}s")
 

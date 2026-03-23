@@ -1,0 +1,88 @@
+{
+  "version": "nb_v2",
+  "class_type": "offpeak",
+  "dormant_col": "bfo_12",
+  "target_col": "offpeak_sp",
+  "features": [
+    "bin_80_max",
+    "bin_90_max",
+    "bin_100_max",
+    "bin_110_max",
+    "rt_max",
+    "count_active_cids",
+    "shadow_price_da",
+    "da_rank_value"
+  ],
+  "lgb_params": {
+    "objective": "lambdarank",
+    "metric": "ndcg",
+    "num_leaves": 15,
+    "learning_rate": 0.05,
+    "min_child_samples": 5,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "num_threads": 4,
+    "verbose": -1
+  },
+  "eval_configs": {
+    "2023-06": [
+      "2021-06",
+      "2022-06"
+    ],
+    "2024-06": [
+      "2021-06",
+      "2022-06",
+      "2023-06"
+    ],
+    "2025-06": [
+      "2021-06",
+      "2022-06",
+      "2023-06",
+      "2024-06"
+    ]
+  },
+  "configs": [
+    [
+      "pure_v0c",
+      200,
+      0,
+      400,
+      0
+    ],
+    [
+      "pure_v44",
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      "R30_nb",
+      170,
+      30,
+      350,
+      50
+    ],
+    [
+      "R50_nb",
+      150,
+      50,
+      300,
+      100
+    ],
+    [
+      "R30_v44",
+      170,
+      30,
+      350,
+      50
+    ],
+    [
+      "R50_v44",
+      150,
+      50,
+      300,
+      100
+    ]
+  ]
+}

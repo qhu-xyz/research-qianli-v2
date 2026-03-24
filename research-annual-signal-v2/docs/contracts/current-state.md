@@ -14,10 +14,10 @@
 Formula: `0.40 * (1 - minmax(da_rank_value)) + 0.30 * minmax(rt_max) + 0.30 * minmax(bf)`
 
 Published signals:
-- `TEST.Signal.MISO.SPICE_ANNUAL_V7.0.R1` — 9 PYs (2017-06 through 2025-06)
-- `TEST.Signal.MISO.SPICE_ANNUAL_V7.0B.R1` — same + supplement key matching + zero-SF filter
+- `TEST.Signal.MISO.SPICE_ANNUAL_V7.0.R1` — 7 PYs (2019-06 through 2025-06)
+- `TEST.Signal.MISO.SPICE_ANNUAL_V7.0B.R1` — 9 PYs (2017-06 through 2025-06), adds supplement key matching + zero-SF filter
 
-Round status: **R1-only**. V7.0B.R2 and V7.0B.R3 directories exist on NFS but were published by a different pipeline (not this repo).
+Round status: **R1-only**. V7.0B.R2 and V7.0B.R3 directories exist on NFS; their provenance is unverified (may have been published by another pipeline or manually).
 
 ## 2. Candidate model
 
@@ -84,7 +84,7 @@ No entry currently has:
 | CID mapping | `data/collapsed/` | Yes (`_r{round}_` in key) | No |
 | NB model cache | `data/nb_cache/` | **No** (legacy, no round in key) | No |
 
-`data/nb_cache/` is the stale artifact. It was built by the old pipeline with `market_round=1` implicitly. The new `build_class_model_table` writes to `data/collapsed/` with round-aware keys. Scripts that use `data/nb_cache/` (champion_confirmation, nb_bucket_model) read from the old cache directly and are therefore R1-only.
+`data/nb_cache/` is the stale artifact. It was built by the old pipeline with `market_round=1` implicitly. The round-aware on-disk caches are written by `load_collapsed()` and `_cid_mapping_cache_path()` in `ml/data_loader.py`, which include `_r{round}_` in the filename. `build_class_model_table` consumes these round-aware loaders but does not write its own cache. Scripts that use `data/nb_cache/` (champion_confirmation, nb_bucket_model) read from the old cache directly and are therefore R1-only.
 
 ## 7. What is NOT frozen
 

@@ -6,6 +6,36 @@
 
 ---
 
+## Status update
+
+As of 2026-03-24, the migration is partially implemented.
+
+Completed:
+
+- current-state freeze doc
+- universe catalog
+- feature recipe bindings for `v0c`, `Bucket_6_20`, and the current NB specialist
+- registry schema contract
+- non-breaking skeleton packages under:
+  - `ml/core/`
+  - `ml/markets/miso/`
+  - `ml/markets/pjm/`
+  - `ml/products/annual/`
+
+Implemented but not yet fully normalized into the new registry/release surface:
+
+- round-aware `v0c` vs `V4.4` comparison artifact under `registry/miso/annual/comparisons/round_comparison_v1/`
+- daily DA cache manifest and round-aware cutoff plumbing
+
+Still pending:
+
+- normalized `spec.json` / `metrics.json` backfill for existing promoted annual entries
+- release manifests for `7.0b` and `7.1b`
+- research/production script split
+- migration of active production code into the new package layout with compatibility shims
+
+---
+
 ## 1. Why this migration is needed
 
 The current repo shape reflects research history, not the product we are actually shipping.
@@ -744,14 +774,14 @@ The migration is successful when:
 
 ## 16. Recommended first implementation batch
 
-If this starts now, the first batch should be:
+Initial recommended batch and current status:
 
-1. Create contract docs and a universe catalog.
-2. Add cache manifests and rank-direction metadata for current active models/benchmarks.
-3. Add release manifests for `7.0b` and `7.1b`.
-4. Move exploratory NB/bucket scripts into `research/`.
-5. Normalize registry entries for current MISO annual champions/candidates.
-6. Create `ml/core`, `ml/markets/miso`, and empty `ml/markets/pjm`, with compatibility shims if needed.
+1. Create contract docs and a universe catalog. Completed.
+2. Add cache manifests and rank-direction metadata for current active models/benchmarks. Partial.
+3. Add release manifests for `7.0b` and `7.1b`. Not started.
+4. Move exploratory NB/bucket scripts into `research/`. Not started.
+5. Normalize registry entries for current MISO annual champions/candidates. Not started.
+6. Create `ml/core`, `ml/markets/miso`, and empty `ml/markets/pjm`, with compatibility shims if needed. Completed as a non-breaking skeleton pass.
 
 The first normalized annual model entries should explicitly bind feature recipes for:
 

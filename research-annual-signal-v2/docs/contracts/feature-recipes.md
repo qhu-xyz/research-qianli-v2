@@ -30,8 +30,9 @@ score = 0.40 * (1 - minmax(da_rank_value)) + 0.30 * minmax(rt_max) + 0.30 * minm
 
 ### Round behavior
 
-- **v1**: round-insensitive. All published V7.0/V7.0B artifacts use `market_round=1`.
-- **v2** (pending): `da_rank_value` and `bf` will incorporate partial-month data from the daily DA cache up to the round-specific cutoff date. `rt_max` will use the round-specific density partition. Same formula, different feature values.
+- **Published artifact status**: all published `V7.0` / `V7.0B` artifacts use `market_round=1` and are therefore R1-only.
+- **Pipeline status**: round-aware feature generation is now implemented in the active pipeline. `da_rank_value` and `bf` incorporate partial-month data from the daily DA cache up to the round-specific cutoff date, and `rt_max` uses the round-specific density partition.
+- **Registry status**: the round-aware pipeline behavior should be versioned as a distinct future recipe/release artifact once it is registered and published. Current authoritative registry entries for `v0c` are still R1-only.
 
 ### Source code
 
@@ -86,8 +87,9 @@ score = 0.40 * (1 - minmax(da_rank_value)) + 0.30 * minmax(rt_max) + 0.30 * minm
 
 ### Round behavior
 
-- **v1**: round-insensitive. Current cached tables from `data/nb_cache/` built with `market_round=1`.
-- **v2** (pending): `da_rank_value`, `shadow_price_da`, `bf` will use round-specific cutoff. `bin_*_max`, `count_active_cids` will use round-specific density. `top2_bin_*` will need round-aware caching.
+- **Current authoritative artifact**: round-insensitive. Current cached tables from `data/nb_cache/` were built with `market_round=1`.
+- **Round-aware pipeline support**: `da_rank_value`, `shadow_price_da`, `bf`, `bin_*_max`, and `count_active_cids` can now be built from round-aware loaders and cutoff logic.
+- **Blocking gap**: `top2_bin_*` still depends on `data/nb_cache/`, which remains legacy R1-only. Until that cache is rebuilt from the round-aware path or those columns are removed, `Bucket_6_20` remains operationally R1-only.
 
 ### Source code
 
@@ -131,7 +133,7 @@ score = 0.40 * (1 - minmax(da_rank_value)) + 0.30 * minmax(rt_max) + 0.30 * minm
 
 ### Round behavior
 
-Same as `miso_annual_bucket_features_v1` — currently R1-only.
+Same as `miso_annual_bucket_features_v1`: most upstream columns can now be built round-aware, but the recipe remains operationally R1-only until `top2_bin_*` is rebuilt from the round-aware path or removed.
 
 ### Source code
 

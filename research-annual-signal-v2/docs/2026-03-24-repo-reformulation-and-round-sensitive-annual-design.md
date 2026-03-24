@@ -26,32 +26,60 @@ The result is that:
 
 This design addresses both issues in one plan.
 
+### 1.1 Implementation status update
+
+The design is now partially implemented.
+
+Implemented:
+
+- round calendar / cutoff helpers
+- explicit `market_round` plumbing in core loader and builder APIs
+- round-aware cache keys for collapsed density and CID mapping
+- daily DA cache with manifest
+- partial-month history inclusion in BF / SPDA / recency / NB logic
+- round-aware bridge threading in history
+- required `--market-round` in annual publish CLI
+- round-aware `v0c` vs `V4.4` comparison artifact for `R1/R2/R3`
+- non-breaking package skeletons under `ml/core`, `ml/markets/{miso,pjm}`, and `ml/products/annual`
+
+Not yet implemented or not yet productized:
+
+- round-aware `Bucket_6_20` evaluation and registry artifact
+- standardized `spec.json` / `metrics.json` for the round comparison artifact
+- full `V7.1B` release build/publish across `R1/R2/R3`
+- migration of active production code into the new package layout
+
 ---
 
 ## 2. Current-state facts
 
 ### 2.1 What is currently round-insensitive
 
-Annual auction-side loaders use `market_round=1` today:
+Legacy published artifacts and legacy cached evaluation paths are still round-insensitive:
 
-- density distribution
-- constraint limits
-- SF matrices
-- pbase branch metadata used by publishing
+- published `7.0` / `7.0B` signals are R1-only
+- `data/nb_cache/` is still legacy R1-only
+- `scripts/champion_confirmation.py` is still R1-only
 
-History uses month-level DA cache:
+The new core pipeline, however, now supports round-aware loaders and day-level history cutoff.
+
+Legacy history used month-level DA cache only:
 
 - one monthly parquet per `YYYY-MM` and ctype
 - each file contains one `realized_sp` per `constraint_id` for the whole month
 
 ### 2.2 What this means operationally
 
-Current annual features can differ by planning year, quarter, and ctype, but not by round.
+There are now two states in the repo:
 
-They are insensitive to:
+- legacy published / cached artifacts that can differ by planning year, quarter, and ctype, but not by round
+- new core pipeline paths that can differ by planning year, quarter, ctype, and round
 
-- different annual round partitions
-- partial-month DA history between R1, R2, and R3
+This is why the remaining productization work matters:
+
+- release artifacts are still mostly R1-only
+- some comparison scripts still read legacy R1-only caches
+- round-aware infrastructure exists, but not every model has been re-evaluated on top of it
 
 ### 2.3 What can change if redesigned
 
@@ -491,6 +519,10 @@ Deliverables:
 - annual round calendar extractor from pbase
 - documented rule for exact cutoff handling
 
+Status:
+
+- implemented
+
 ### Phase 1: Daily DA cache
 
 Deliverables:
@@ -505,6 +537,10 @@ Rules:
 - source of truth is daily cache
 - monthly cache becomes derived
 
+Status:
+
+- implemented
+
 ### Phase 2: Round-aware history builder
 
 Deliverables:
@@ -516,6 +552,10 @@ Deliverables:
 Design rule:
 
 - exact inclusion boundary must be testable and auditable
+
+Status:
+
+- implemented at day-level cutoff granularity
 
 ### Phase 3: Round-aware auction-side loaders
 
@@ -531,6 +571,10 @@ Hard rule:
 
 - no silent fallback to `market_round=1`
 
+Status:
+
+- implemented for the core loader path
+
 ### Phase 4: Round-aware model table
 
 Deliverables:
@@ -538,6 +582,10 @@ Deliverables:
 - `build_class_model_table(..., market_round=...)`
 - updated cache keys including round
 - updated spec/registry keys including round
+
+Status:
+
+- partially implemented: model-table build path is round-aware, but normalized spec/registry keys are not yet fully backfilled
 
 ### Phase 5: Round-aware scoring and publish
 
@@ -548,6 +596,10 @@ Deliverables:
 - round-aware release/publish runner
 - hard failure if any published constraint is missing SF
 
+Status:
+
+- partially implemented: round-aware `v0c` comparison and publish CLI exist, but `Bucket_6_20` is not yet round-aware evaluated and no full `V7.1B` publish run is frozen
+
 ### Phase 6: Repo reformulation execution
 
 Deliverables:
@@ -556,6 +608,10 @@ Deliverables:
 - research split from production surface
 - MISO/PJM market boundary
 - release manifests
+
+Status:
+
+- partially implemented: contracts and package skeletons exist, but registry backfill, script split, and release manifests are still pending
 
 ---
 
@@ -582,7 +638,7 @@ If round cutoffs are implemented loosely, it becomes easy to accidentally includ
 
 Mitigation:
 
-- exact timestamp cutoff contract
+- explicit day-level cutoff contract in v1
 - explicit daily-cache inclusion tests
 
 ### 11.2 Cache coverage risk

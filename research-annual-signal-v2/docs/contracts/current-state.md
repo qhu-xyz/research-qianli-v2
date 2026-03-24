@@ -41,7 +41,7 @@ Round status: **R1-only**. V7.0B.R2 and V7.0B.R3 directories exist on NFS; their
 **Universe**: ~1,200 branches (external, not reproducible)
 **Rank direction**: lower rank = better (ascending sort)
 
-Current benchmark loading is R1-only (`scripts/champion_confirmation.py:28`). V4.4 R2/R3 exist on NFS but are not loaded.
+Authoritative champion-confirmation loading is still R1-only (`scripts/champion_confirmation.py:28`). A separate round-aware comparison runner now loads matched `V4.4.R1/R2/R3`, but that result has not yet been normalized into the standard registry/release surface.
 
 ## 4. Round-sensitive core status
 
@@ -56,8 +56,8 @@ Current benchmark loading is R1-only (`scripts/champion_confirmation.py:28`). V4
 | No-default enforcement | Done | All core APIs raise TypeError without `market_round` |
 | Tests | Done | 53 tests passing |
 | Publication CLI | Done | `--market-round` required in `publish_annual_signal.py` |
-| Benchmark loading R2/R3 | Not done | `champion_confirmation.py` still hardcodes V4.4.R1 |
-| Round-aware scoring comparison | Not done | No R1 vs R2 vs R3 feature delta evaluation yet |
+| Benchmark loading R2/R3 | Partial | `champion_confirmation.py` is still R1-only, but `scripts/round_comparison.py` loads matched `V4.4.R1/R2/R3` |
+| Round-aware scoring comparison | Partial | `scripts/round_comparison.py` compares `v0c` vs `V4.4` across `R1/R2/R3`; `Bucket_6_20` is not yet re-evaluated round-aware |
 
 ## 5. Registry entries
 
@@ -66,6 +66,7 @@ Current benchmark loading is R1-only (`scripts/champion_confirmation.py:28`). V4
 | `registry/onpeak/bucket_6_20/` | Bucket_6_20 onpeak | config.json + metrics.json (R1-only) |
 | `registry/offpeak/bucket_6_20/` | Bucket_6_20 offpeak | config.json + metrics.json (R1-only) |
 | `registry/champion_confirmation/` | 3-way comparison | all_results.json + config.json (R1-only) |
+| `registry/miso/annual/comparisons/round_comparison_v1/` | `v0c` vs `V4.4` round-aware comparison | config.json + all_results.json (`R1/R2/R3`, raw results only) |
 | `registry/archive/` | Phase 3-5 combined-ctype | 31 entries (legacy, not production) |
 
 No entry currently has:
@@ -90,7 +91,7 @@ No entry currently has:
 
 - `scripts/archive/` — legacy research scripts, will raise TypeError if run without updating
 - `data/nb_cache/` — stale R1-only model tables, not authoritative
-- Round-aware evaluation results — no R1/R2/R3 comparison has been run yet
+- Round-aware evaluation results for `Bucket_6_20` — only `v0c` vs `V4.4` has been run across `R1/R2/R3`
 - PJM annual — no code, no data, no models
 
 ## 8. Promotion rules (not yet enforced)

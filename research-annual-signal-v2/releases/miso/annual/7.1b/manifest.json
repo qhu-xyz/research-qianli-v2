@@ -1,0 +1,48 @@
+{
+  "release_name": "miso_annual_7_1b",
+  "signal_prefix": "TEST.Signal.MISO.SPICE_ANNUAL_V7.1B",
+  "signal_paths": {
+    "R1": "TEST.Signal.MISO.SPICE_ANNUAL_V7.1B.R1",
+    "R2": "TEST.Signal.MISO.SPICE_ANNUAL_V7.1B.R2",
+    "R3": "TEST.Signal.MISO.SPICE_ANNUAL_V7.1B.R3"
+  },
+  "model_id": "miso_annual_v0c_formula_v1",
+  "feature_recipe_id": "miso_annual_v0c_features_v1",
+  "label_recipe_id": null,
+  "universe_id": "miso_annual_branch_active_v1",
+  "supported_rounds": [1, 2, 3],
+  "round_sensitive": true,
+  "cutoff_granularity": "day",
+  "cutoff_source": "ml/config.py:get_round_close_date (pbase MisoApTools hardcoded dates)",
+  "supported_ctypes": ["onpeak", "offpeak"],
+  "supported_planning_years": ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06", "2025-06"],
+  "supported_quarters": ["aq1", "aq2", "aq3"],
+  "tier_sizes": [200, 200, 200, 200, 200],
+  "scoring": {
+    "method": "v0c formula",
+    "formula": "0.40 * (1 - minmax(da_rank_value)) + 0.30 * minmax(rt_max) + 0.30 * minmax(bf)",
+    "per_round_training": false,
+    "per_round_features": true
+  },
+  "cache_provenance": {
+    "density_limits": "MISO_SPICE_DENSITY_DISTRIBUTION.parquet / CONSTRAINT_LIMIT.parquet, round-specific partitions",
+    "bridge": "MISO_SPICE_CONSTRAINT_INFO.parquet, round-specific partitions",
+    "history": "data/realized_da/ (monthly) + /opt/tmp/qianli/realized_da_daily/ (daily, signed sums)",
+    "density_signal_score": "MISO_SPICE_DENSITY_SIGNAL_SCORE.parquet, filtered by market_round",
+    "sf": "MISO_SPICE_SF.parquet, round-specific partitions",
+    "collapsed_cache": "data/collapsed/ with _r{round}_ in key"
+  },
+  "validation_gates": {
+    "no_missing_sf": "signal_publisher.py raises ValueError if any published constraint lacks SF",
+    "no_duplicate_cids": "dedup in grouped walk-and-fill",
+    "branch_cap_enforced": true,
+    "v61_overlap_check": "validate_against_v61 comparison logged"
+  },
+  "known_exclusions": {
+    "aq4": "incomplete GT as of 2026-03, monitored only",
+    "data_nb_cache": "NOT used — round-aware path uses build_class_model_table + load_collapsed"
+  },
+  "code_commit": "628b4b2",
+  "publish_entrypoint": "scripts/publish_annual_signal.py --py {PY} --market-round {R}",
+  "predecessor": "miso_annual_7_0b (V7.0B.R1, R1-only, supplement key matching)"
+}

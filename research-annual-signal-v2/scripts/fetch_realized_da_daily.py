@@ -28,9 +28,11 @@ def main():
     import polars as pl
     from pbase.analysis.tools.all_positions import MisoApTools
 
-    project_root = Path(__file__).resolve().parent.parent
-    cache_dir = project_root / "data" / "realized_da_daily"
+    cache_dir = Path(
+        os.environ.get("ROOT_QH_TMP_PATH", "/opt/tmp/qianli")
+    ) / "realized_da_daily"
     cache_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Cache dir: {cache_dir}")
 
     tools = MisoApTools().tools
 
@@ -89,20 +91,21 @@ def main():
                 pl.date(pl.col("year"), pl.col("month"), pl.col("day")).alias("trade_date")
             )
 
-            # Aggregate per (constraint_id, trade_date): abs(sum(shadow_price))
+            # Aggregate per (constraint_id, trade_date): SIGNED sum(shadow_price)
+            # Store signed so abs(sum(signed_daily)) == abs(sum(monthly)) exactly.
+            # Abs is applied only at the final aggregation level (month or partial-month).
             daily_agg = (
                 da_pl
                 .group_by(["constraint_id", "trade_date"])
-                .agg(pl.col("shadow_price").sum().abs().alias("realized_sp"))
+                .agg(pl.col("shadow_price").sum().alias("signed_sp"))
             )
             daily_agg = daily_agg.with_columns(pl.col("constraint_id").cast(pl.Utf8))
-            assert (daily_agg["realized_sp"] >= 0).all(), "realized_sp must be non-negative"
 
             # Write one file per day
             dates_in_month = daily_agg["trade_date"].unique().sort()
             for d in dates_in_month:
                 day_df = daily_agg.filter(pl.col("trade_date") == d).select(
-                    ["constraint_id", "realized_sp"]
+                    ["constraint_id", "signed_sp"]
                 )
                 date_str = str(d)
                 out_path = cache_dir / f"{date_str}_{peak_type}.parquet"

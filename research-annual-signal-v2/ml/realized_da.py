@@ -18,7 +18,9 @@ import polars as pl
 
 from ml.config import DA_CACHE_DIR
 
-DA_DAILY_CACHE_DIR = DA_CACHE_DIR.parent / "realized_da_daily"
+# Shared NFS path from workspace .env ROOT_QH_TMP_PATH=/opt/tmp/qianli
+_QH_TMP = os.environ.get("ROOT_QH_TMP_PATH", "/opt/tmp/qianli")
+DA_DAILY_CACHE_DIR = Path(_QH_TMP) / "realized_da_daily"
 
 
 def _cache_path(month: str, peak_type: str) -> str:
@@ -103,12 +105,13 @@ def has_daily_cache() -> bool:
 def load_day(trade_date: date, peak_type: str) -> pl.DataFrame:
     """Load cached daily DA for one date+ctype.
 
-    Returns DataFrame with columns: constraint_id (Utf8), realized_sp (Float64).
+    Returns DataFrame with columns: constraint_id (Utf8), signed_sp (Float64).
+    signed_sp = sum(hourly shadow_price) for that day — SIGNED, not abs.
     """
     assert peak_type in _VALID_PEAK_TYPES
     path = _daily_cache_path(trade_date, peak_type)
     if not os.path.exists(path):
-        return pl.DataFrame(schema={"constraint_id": pl.Utf8, "realized_sp": pl.Float64})
+        return pl.DataFrame(schema={"constraint_id": pl.Utf8, "signed_sp": pl.Float64})
     return pl.read_parquet(path)
 
 
@@ -120,7 +123,7 @@ def load_month_daily(
     """Load daily DA for one month+ctype, filtered by cutoff_date.
 
     If cutoff_date is provided, only includes days strictly before cutoff_date.
-    Aggregates daily files into one month-level DataFrame per constraint_id.
+    Aggregates daily signed sums then takes abs — reproduces monthly metric exactly.
 
     Returns: (constraint_id, realized_sp) — same schema as load_month().
     """
@@ -142,9 +145,10 @@ def load_month_daily(
     if not frames:
         return pl.DataFrame(schema={"constraint_id": pl.Utf8, "realized_sp": pl.Float64})
 
+    # Sum signed daily values then abs — matches monthly abs(sum(hourly)) exactly
     combined = pl.concat(frames)
     return combined.group_by("constraint_id").agg(
-        pl.col("realized_sp").sum()
+        pl.col("signed_sp").sum().abs().alias("realized_sp")
     )
 
 

@@ -14,23 +14,19 @@ import pandas as pd
 import polars as pl
 
 from ml.config import get_market_months
-from ml.data_loader import load_cid_mapping
+from ml.data_loader import load_cid_mapping, load_constraint_limits
 from ml.phase6.features import build_class_model_table
 from ml.phase6.scoring import score_v0c
+from ml.products.annual.output_schema import (
+    CONSTRAINT_INDEX_COLUMN,
+    REQUIRED_CONSTRAINT_NON_NULL_COLUMNS,
+    expected_constraint_output_columns,
+)
 
 logger = logging.getLogger(__name__)
 
 DENSITY_SCORE_PATH = "/opt/data/xyz-dataset/spice_data/miso/MISO_SPICE_DENSITY_SIGNAL_SCORE.parquet"
 SF_PATH = "/opt/data/xyz-dataset/spice_data/miso/MISO_SPICE_SF.parquet"
-
-SCHEMA_COLUMNS = [
-    "constraint_id", "flow_direction", "mean_branch_max", "mean_branch_max_fillna",
-    "ori_mean", "branch_name", "bus_key", "bus_key_group", "mix_mean",
-    "shadow_price_da", "density_mix_rank_value", "density_ori_rank_value",
-    "da_rank_value", "rank_ori", "density_mix_rank", "rank", "tier",
-    "shadow_sign", "shadow_price", "equipment",
-]
-
 
 def publish_signal(
     planning_year: str,
@@ -55,12 +51,23 @@ def publish_signal(
     # ── Step 2: Expand branch → constraints ───────────────────────────
     logger.info("Step 2: Expanding to constraints")
     cid_map = load_cid_mapping(planning_year, aq_quarter, market_round=market_round)
+    cid_limits = load_constraint_limits(planning_year, aq_quarter, market_round=market_round)
     branch_scores = model_table.select(
         ["branch_name", "v0c_score", "shadow_price_da", "da_rank_value"]
     ).unique(subset=["branch_name"])
-    constraints = cid_map.join(branch_scores, on="branch_name", how="left")
+    constraints = (
+        cid_map
+        .join(branch_scores, on="branch_name", how="left")
+        .join(cid_limits, on="constraint_id", how="left")
+    )
     n_before = len(constraints)
     constraints = constraints.filter(pl.col("v0c_score").is_not_null())
+    n_null_limit = constraints.filter(pl.col("constraint_limit").is_null()).height
+    if n_null_limit > 0:
+        raise ValueError(
+            f"{n_null_limit} constraints missing constraint_limit. "
+            "Cannot publish without constraint_limit in the output schema."
+        )
     logger.info("  %d constraints (%d dropped)", len(constraints), n_before - len(constraints))
 
     # ── Step 3: Join metadata ─────────────────────────────────────────
@@ -219,10 +226,10 @@ def publish_signal(
     logger.info("Step 7: Validate")
     published = published.with_columns(
         (pl.col("constraint_id") + "|" + pl.col("shadow_sign").cast(pl.Utf8) + "|spice")
-        .alias("__index_level_0__")
+        .alias(CONSTRAINT_INDEX_COLUMN)
     )
 
-    out_cols = SCHEMA_COLUMNS + ["__index_level_0__"]
+    out_cols = expected_constraint_output_columns()
     for col in out_cols:
         if col not in published.columns:
             raise ValueError(f"Missing column: {col}")
@@ -230,7 +237,7 @@ def publish_signal(
     constraints_out = published.select(out_cols).to_pandas()
 
     # No-null check on critical columns
-    for col in ["constraint_id", "branch_name", "flow_direction", "shadow_sign", "tier", "bus_key"]:
+    for col in REQUIRED_CONSTRAINT_NON_NULL_COLUMNS:
         n_null = constraints_out[col].isna().sum()
         if n_null > 0:
             raise ValueError(f"Column {col} has {n_null} nulls")

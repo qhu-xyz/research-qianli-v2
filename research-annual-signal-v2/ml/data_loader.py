@@ -142,6 +142,11 @@ def _load_limits(planning_year: str, aq_quarter: str, market_round: int) -> pl.D
     )
 
 
+def load_constraint_limits(planning_year: str, aq_quarter: str, market_round: int) -> pl.DataFrame:
+    """Public wrapper for CID-level annual constraint limits."""
+    return _load_limits(planning_year, aq_quarter, market_round=market_round)
+
+
 def _limit_level2(cid_limits: pl.DataFrame) -> pl.DataFrame:
     """Level 2 for limits: min/mean/max/std per branch."""
     return cid_limits.group_by("branch_name").agg(

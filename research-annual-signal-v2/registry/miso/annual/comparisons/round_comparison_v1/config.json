@@ -1,0 +1,31 @@
+{
+  "eval_pys": [
+    "2019-06",
+    "2020-06",
+    "2021-06",
+    "2022-06",
+    "2023-06",
+    "2024-06",
+    "2025-06"
+  ],
+  "aqs": [
+    "aq1",
+    "aq2",
+    "aq3"
+  ],
+  "ctypes": [
+    "onpeak",
+    "offpeak"
+  ],
+  "rounds": [
+    1,
+    2,
+    3
+  ],
+  "k_levels": [
+    200,
+    400
+  ],
+  "v44_base": "/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.Signal.MISO.SPICE_ANNUAL_V4.4",
+  "pipeline": "build_class_model_table (round-aware, NOT data/nb_cache)"
+}

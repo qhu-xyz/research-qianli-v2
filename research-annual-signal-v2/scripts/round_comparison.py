@@ -25,8 +25,8 @@ import polars as pl
 
 V44_BASE = "/opt/data/xyz-dataset/signal_data/miso/constraints/TEST.Signal.MISO.SPICE_ANNUAL_V4.4"
 
-# Eval scope: recent PYs only (build_class_model_table is ~60s per slice)
-EVAL_PYS = ["2024-06", "2025-06"]
+# Full eval scope: all PYs with V4.4 coverage
+EVAL_PYS = ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06", "2025-06"]
 AQS = ["aq1", "aq2", "aq3"]
 CTYPES = ["onpeak", "offpeak"]
 ROUNDS = [1, 2, 3]
@@ -246,13 +246,58 @@ def main():
     os.makedirs(reg_path, exist_ok=True)
     with open(f"{reg_path}/all_results.json", "w") as f:
         json.dump(all_results, f, indent=2)
-    with open(f"{reg_path}/config.json", "w") as f:
-        json.dump({
-            "eval_pys": EVAL_PYS, "aqs": AQS, "ctypes": CTYPES,
-            "rounds": ROUNDS, "k_levels": K_LEVELS,
-            "v44_base": V44_BASE,
-            "pipeline": "build_class_model_table (round-aware, NOT data/nb_cache)",
-        }, f, indent=2)
+
+    # Normalized spec.json
+    import subprocess
+    code_commit = subprocess.check_output(["git", "log", "--oneline", "-1", "--format=%h"]).decode().strip()
+    spec = {
+        "spec_type": "comparison",
+        "comparison_id": "round_comparison_v1",
+        "market": "miso",
+        "product": "annual",
+        "models": [
+            {
+                "model_id": "miso_annual_v0c_formula_v1",
+                "universe_id": "miso_annual_branch_active_v1",
+                "feature_recipe_id": "miso_annual_v0c_features_v1",
+                "rank_direction": "descending",
+                "round_sensitivity": "round_aware",
+                "pipeline": "build_class_model_table (round-aware)",
+            },
+            {
+                "benchmark_id": "miso_annual_v44_published_v1",
+                "universe_id": "miso_annual_v44_published_v1",
+                "signal_path_pattern": "TEST.Signal.MISO.SPICE_ANNUAL_V4.4.R{round}",
+                "rank_direction": "ascending",
+                "round_sensitivity": "round_aware",
+            },
+        ],
+        "eval_pys": EVAL_PYS,
+        "eval_quarters": AQS,
+        "eval_ctypes": CTYPES,
+        "eval_rounds": ROUNDS,
+        "k_levels": K_LEVELS,
+        "base_grain": "planning_year/aq_quarter/class_type/market_round",
+        "code_commit": code_commit,
+    }
+    with open(f"{reg_path}/spec.json", "w") as f:
+        json.dump(spec, f, indent=2)
+
+    # Normalized metrics.json
+    cells = []
+    for r in all_results:
+        cells.append({
+            "planning_year": r["eval_py"], "aq_quarter": r["aq"],
+            "class_type": r["ct"], "market_round": r["market_round"],
+            "model": r["model"], "K": r["K"],
+            "sp": r["sp"], "binders": r["binders"],
+            "precision": r["precision"], "vc": r["vc"], "recall": r["recall"],
+            "nb_in": r["nb_in"], "nb_binders": r["nb_binders"], "nb_sp": r["nb_sp"],
+            "d20_hit": r.get("d20_hit"), "d20_total": r.get("d20_total"),
+            "labeled": r.get("labeled"), "unlabeled": r.get("unlabeled"),
+        })
+    with open(f"{reg_path}/metrics.json", "w") as f:
+        json.dump({"base_grain": "planning_year/aq_quarter/class_type/market_round", "cells": cells}, f, indent=2)
 
     import ray
     ray.shutdown()

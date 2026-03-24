@@ -21,6 +21,11 @@
     }
   ],
   "eval_pys": [
+    "2019-06",
+    "2020-06",
+    "2021-06",
+    "2022-06",
+    "2023-06",
     "2024-06",
     "2025-06"
   ],
@@ -43,5 +48,5 @@
     400
   ],
   "base_grain": "planning_year/aq_quarter/class_type/market_round",
-  "code_commit": "f01e912"
+  "code_commit": "b21a875"
 }

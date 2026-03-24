@@ -241,7 +241,10 @@ def publish_signal(
     sf_cid_cols = [c for c in pub_cids if c in sf_pd.columns]
     missing_sf = set(pub_cids) - set(sf_pd.columns)
     if missing_sf:
-        logger.warning("  %d published constraints missing from SF", len(missing_sf))
+        raise ValueError(
+            f"{len(missing_sf)} published constraints missing SF coverage. "
+            f"Cannot publish without SF. First 5: {sorted(missing_sf)[:5]}"
+        )
 
     cid_to_sign = dict(zip(pub_cids, pub_signs))
     sf_out = sf_pd[sf_cid_cols].copy()

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import polars as pl
 
-from ml.config import DA_CACHE_DIR
+from ml.markets.miso.config import DA_CACHE_DIR
 
 # Shared NFS path from workspace .env ROOT_QH_TMP_PATH=/opt/tmp/qianli
 _QH_TMP = os.environ.get("ROOT_QH_TMP_PATH", "/opt/tmp/qianli")

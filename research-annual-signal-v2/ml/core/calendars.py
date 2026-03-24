@@ -59,7 +59,8 @@ def get_history_cutoff_month(planning_year: str, market_round: int, rto: str = "
     """Return the last FULL month whose history is safe for all rounds.
 
     This is the month-level approximation used when daily cache is not available.
-    For MISO: all rounds close in April or May, so the last full month is always March.
+    For MISO R1/R2: last full month is March (close in April).
+    For MISO R3: last full month is April (close May 5).
     This function exists for backward compatibility with the month-level pipeline.
     """
     cutoff = get_history_cutoff_date(planning_year, market_round, rto)

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import polars as pl
 
-from ml.config import BRIDGE_PATH
+from ml.markets.miso.config import BRIDGE_PATH
 
 SUPPLEMENT_PATH = "/opt/data/xyz-dataset/modeling_data/miso/MISO_DA_SHADOW_PRICE_SUPPLEMENT.parquet"
 

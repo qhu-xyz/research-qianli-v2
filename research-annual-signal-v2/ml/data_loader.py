@@ -22,31 +22,31 @@ from ml.bridge import map_cids_to_branches
 logger = logging.getLogger(__name__)
 
 
-def _cid_mapping_cache_path(planning_year: str, aq_quarter: str) -> Path:
+def _cid_mapping_cache_path(planning_year: str, aq_quarter: str, market_round: int = 1) -> Path:
     """Cache path for branch↔CID mapping."""
     threshold_tag = f"{UNIVERSE_THRESHOLD:.6e}".replace(".", "p").replace("+", "")
-    return COLLAPSED_CACHE_DIR / f"{planning_year}_{aq_quarter}_cid_map_t{threshold_tag}.parquet"
+    return COLLAPSED_CACHE_DIR / f"{planning_year}_{aq_quarter}_r{market_round}_cid_map_t{threshold_tag}.parquet"
 
 
-def load_cid_mapping(planning_year: str, aq_quarter: str) -> pl.DataFrame:
-    """Load branch↔CID mapping for one (PY, quarter).
+def load_cid_mapping(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
+    """Load branch↔CID mapping for one (PY, quarter, round).
 
     Returns DataFrame with columns: constraint_id, branch_name, is_active.
     Cached alongside the branch-level cache in COLLAPSED_CACHE_DIR.
     """
-    cache_path = _cid_mapping_cache_path(planning_year, aq_quarter)
+    cache_path = _cid_mapping_cache_path(planning_year, aq_quarter, market_round)
     if cache_path.exists():
         return pl.read_parquet(cache_path)
 
     # Force load_collapsed to run (which caches the CID mapping)
-    load_collapsed(planning_year, aq_quarter)
+    load_collapsed(planning_year, aq_quarter, market_round=market_round)
 
     assert cache_path.exists(), f"CID mapping not cached after load_collapsed: {cache_path}"
     return pl.read_parquet(cache_path)
 
 
-def load_raw_density(planning_year: str, aq_quarter: str) -> pl.DataFrame:
-    """Load raw density distribution for one (PY, quarter).
+def load_raw_density(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
+    """Load raw density distribution for one (PY, quarter, round).
 
     Reads partition-specific paths (NOT hive scan — Trap 21).
     Returns all rows with constraint_id, outage_date, and bin columns.
@@ -56,7 +56,7 @@ def load_raw_density(planning_year: str, aq_quarter: str) -> pl.DataFrame:
     for mm in market_months:
         path = (
             f"{DENSITY_PATH}/spice_version=v6/auction_type=annual"
-            f"/auction_month={planning_year}/market_month={mm}/market_round=1/"
+            f"/auction_month={planning_year}/market_month={mm}/market_round={market_round}/"
         )
         if not Path(path).exists():
             logger.warning("Density partition missing: %s", path)
@@ -68,13 +68,13 @@ def load_raw_density(planning_year: str, aq_quarter: str) -> pl.DataFrame:
     return pl.concat(frames, how="diagonal")
 
 
-def compute_right_tail_max(planning_year: str, aq_quarter: str) -> pl.DataFrame:
+def compute_right_tail_max(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
     """Compute right_tail_max per cid BEFORE any filtering.
 
     right_tail = max(bin_80, bin_90, bin_100, bin_110) per row
     right_tail_max = max(right_tail) across all outage_dates per cid
     """
-    raw = load_raw_density(planning_year, aq_quarter)
+    raw = load_raw_density(planning_year, aq_quarter, market_round=market_round)
 
     # Per row: right_tail
     raw = raw.with_columns(
@@ -111,14 +111,14 @@ def _level2_collapse(
     return cid_df.group_by("branch_name").agg(agg_exprs)
 
 
-def _load_limits(planning_year: str, aq_quarter: str) -> pl.DataFrame:
+def _load_limits(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
     """Load constraint limits, Level 1 aggregate (mean per cid)."""
     market_months = get_market_months(planning_year, aq_quarter)
     frames = []
     for mm in market_months:
         path = (
             f"{LIMIT_PATH}/spice_version=v6/auction_type=annual"
-            f"/auction_month={planning_year}/market_month={mm}/market_round=1/"
+            f"/auction_month={planning_year}/market_month={mm}/market_round={market_round}/"
         )
         if not Path(path).exists():
             continue
@@ -152,7 +152,7 @@ def _limit_level2(cid_limits: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def load_collapsed(planning_year: str, aq_quarter: str) -> pl.DataFrame:
+def load_collapsed(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
     """Full pipeline: density -> universe filter -> Level 1+2 -> branch features.
 
     Universe filter: threshold is applied at CID level (cid is "active" if its
@@ -166,14 +166,14 @@ def load_collapsed(planning_year: str, aq_quarter: str) -> pl.DataFrame:
     - count_cids, count_active_cids
     - branch_name (unique per row)
     """
-    # Check cache — key includes threshold to avoid stale data after recalibration
+    # Check cache — key includes threshold AND round to avoid stale data
     threshold_tag = f"{UNIVERSE_THRESHOLD:.6e}".replace(".", "p").replace("+", "")
-    cache_path = COLLAPSED_CACHE_DIR / f"{planning_year}_{aq_quarter}_t{threshold_tag}.parquet"
+    cache_path = COLLAPSED_CACHE_DIR / f"{planning_year}_{aq_quarter}_r{market_round}_t{threshold_tag}.parquet"
     if cache_path.exists():
         return pl.read_parquet(cache_path)
 
     # Step 1: Load raw density
-    raw = load_raw_density(planning_year, aq_quarter)
+    raw = load_raw_density(planning_year, aq_quarter, market_round=market_round)
 
     # Step 2: Compute right_tail and is_active BEFORE filtering
     raw = raw.with_columns(
@@ -193,6 +193,7 @@ def load_collapsed(planning_year: str, aq_quarter: str) -> pl.DataFrame:
         auction_type="annual",
         auction_month=planning_year,
         period_type=aq_quarter,
+        market_round=market_round,
     )
     if bridge_diag["ambiguous_cids"] > 0:
         logger.info(
@@ -201,7 +202,7 @@ def load_collapsed(planning_year: str, aq_quarter: str) -> pl.DataFrame:
         )
 
     # Cache CID mapping for downstream use (Phase 4b constraint propagation)
-    cid_map_path = _cid_mapping_cache_path(planning_year, aq_quarter)
+    cid_map_path = _cid_mapping_cache_path(planning_year, aq_quarter, market_round)
     if not cid_map_path.exists():
         cid_with_branch.select(
             ["constraint_id", "branch_name", "is_active"]
@@ -230,7 +231,7 @@ def load_collapsed(planning_year: str, aq_quarter: str) -> pl.DataFrame:
     l2 = _level2_collapse(l1_with_branch, SELECTED_BINS)
 
     # Step 9: Limits
-    cid_limits = _load_limits(planning_year, aq_quarter)
+    cid_limits = _load_limits(planning_year, aq_quarter, market_round=market_round)
     if len(cid_limits) > 0:
         cid_limits_with_branch = cid_limits.join(active_cids, on="constraint_id", how="inner")
         limit_l2 = _limit_level2(cid_limits_with_branch)

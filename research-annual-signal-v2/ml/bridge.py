@@ -25,6 +25,7 @@ def load_bridge_partition(
     auction_type: str,
     auction_month: str,
     period_type: str,
+    market_round: int = 1,
 ) -> pl.DataFrame:
     """Load bridge for BOTH class types and UNION them.
 
@@ -38,7 +39,7 @@ def load_bridge_partition(
     for ctype in ["onpeak", "offpeak"]:
         part_path = (
             f"{BRIDGE_PATH}/spice_version=v6/auction_type={auction_type}"
-            f"/auction_month={auction_month}/market_round=1"
+            f"/auction_month={auction_month}/market_round={market_round}"
             f"/period_type={period_type}/class_type={ctype}/"
         )
         if not Path(part_path).exists():
@@ -74,6 +75,7 @@ def map_cids_to_branches(
     auction_type: str,
     auction_month: str,
     period_type: str,
+    market_round: int = 1,
 ) -> tuple[pl.DataFrame, dict]:
     """Map constraint_ids to branch_names via bridge table.
 
@@ -87,7 +89,7 @@ def map_cids_to_branches(
     Returns:
         (mapped_df with branch_name column, diagnostics dict)
     """
-    bridge = load_bridge_partition(auction_type, auction_month, period_type)
+    bridge = load_bridge_partition(auction_type, auction_month, period_type, market_round=market_round)
 
     # Detect ambiguous cids: cids that map to >1 branch_name
     # Scope to input cids only — global bridge ambiguity is irrelevant to the caller.
@@ -216,6 +218,7 @@ def map_cids_to_branches_with_supplement(
     auction_month: str,
     period_type: str,
     market_months: list[str] | None = None,
+    market_round: int = 1,
 ) -> tuple[pl.DataFrame, dict]:
     """Map CIDs to branches: bridge first, then supplement key fallback.
 
@@ -231,7 +234,7 @@ def map_cids_to_branches_with_supplement(
     """
     # Step 1: standard bridge mapping
     mapped, diag = map_cids_to_branches(
-        cid_df, auction_type, auction_month, period_type,
+        cid_df, auction_type, auction_month, period_type, market_round=market_round,
     )
 
     supplement_recovered_cids = 0
@@ -259,7 +262,7 @@ def map_cids_to_branches_with_supplement(
     supp = load_supplement_keys(market_months)
 
     # Step 4: get SPICE branch set from the same bridge
-    bridge = load_bridge_partition(auction_type, auction_month, period_type)
+    bridge = load_bridge_partition(auction_type, auction_month, period_type, market_round=market_round)
     spice_branches = set(bridge["branch_name"].to_list())
 
     # Step 5: match

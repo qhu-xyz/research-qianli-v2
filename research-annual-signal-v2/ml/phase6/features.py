@@ -32,13 +32,15 @@ def build_class_model_table(
     planning_year: str,
     aq_quarter: str,
     class_type: str,
+    market_round: int = 1,
 ) -> pl.DataFrame:
-    """Build a class-specific model table for one (PY, aq, class_type).
+    """Build a class-specific model table for one (PY, aq, class_type, round).
 
     Args:
         planning_year: e.g. "2024-06"
         aq_quarter: e.g. "aq1"
         class_type: "onpeak" or "offpeak"
+        market_round: auction round (1, 2, or 3 for MISO)
 
     Returns:
         Branch-level DataFrame with class-specific target, BF, cohort,
@@ -50,7 +52,7 @@ def build_class_model_table(
     cross_bf_col = CROSS_CLASS_BF_COL[class_type]
 
     # Step 1: Branch universe (density + limits + metadata features)
-    collapsed = load_collapsed(planning_year, aq_quarter)
+    collapsed = load_collapsed(planning_year, aq_quarter, market_round=market_round)
     branches = collapsed["branch_name"].to_list()
 
     # Step 2: Ground truth (combined — we extract class-specific target below)
@@ -304,15 +306,17 @@ def _recompute_class_tiers(table: pl.DataFrame) -> pl.DataFrame:
 def build_class_model_table_all(
     groups: list[str],
     class_type: str,
+    market_round: int = 1,
 ) -> pl.DataFrame:
     """Build class-specific model tables for multiple groups.
 
     Args:
         groups: list of "PY/aq" strings
         class_type: "onpeak" or "offpeak"
+        market_round: auction round (1, 2, or 3 for MISO)
     """
     frames = []
     for group in groups:
         py, aq = group.split("/")
-        frames.append(build_class_model_table(py, aq, class_type))
+        frames.append(build_class_model_table(py, aq, class_type, market_round=market_round))
     return pl.concat(frames, how="diagonal")

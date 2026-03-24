@@ -40,20 +40,21 @@ def publish_signal(
     branch_cap: int = 3,
     chebyshev_threshold: float = 0.05,
     correlation_threshold: float = -0.21,
+    market_round: int = 1,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Build (constraints_df, sf_df) for one (PY, aq, class_type)."""
+    """Build (constraints_df, sf_df) for one (PY, aq, class_type, round)."""
     bf_col = "bf_12" if class_type == "onpeak" else "bfo_12"
     total_target = sum(tier_sizes)
 
     # ── Step 1: Score branches ────────────────────────────────────────
     logger.info("Step 1: Scoring %s/%s/%s", planning_year, aq_quarter, class_type)
-    model_table = build_class_model_table(planning_year, aq_quarter, class_type)
+    model_table = build_class_model_table(planning_year, aq_quarter, class_type, market_round=market_round)
     scores = score_v0c(model_table, bf_col)
     model_table = model_table.with_columns(pl.Series("v0c_score", scores))
 
     # ── Step 2: Expand branch → constraints ───────────────────────────
     logger.info("Step 2: Expanding to constraints")
-    cid_map = load_cid_mapping(planning_year, aq_quarter)
+    cid_map = load_cid_mapping(planning_year, aq_quarter, market_round=market_round)
     branch_scores = model_table.select(
         ["branch_name", "v0c_score", "shadow_price_da", "da_rank_value"]
     ).unique(subset=["branch_name"])
@@ -70,7 +71,7 @@ def publish_signal(
     # the highest density signal score. This determines shadow_sign (= -flow_direction)
     # and therefore whether the published constraint is a buy or sell signal.
     # Confirmed: flow_direction SHOULD come from density_signal_score (teammate verified).
-    flow_dir = _load_flow_direction(planning_year)
+    flow_dir = _load_flow_direction(planning_year, market_round=market_round)
     constraints = constraints.join(flow_dir, on="constraint_id", how="left")
     n_null_fd = constraints.filter(pl.col("flow_direction").is_null()).height
     if n_null_fd > 0:
@@ -80,7 +81,7 @@ def publish_signal(
         )
 
     # 3b. bus_key from pbase branches
-    bus_key_df = _load_bus_key(planning_year, aq_quarter, class_type)
+    bus_key_df = _load_bus_key(planning_year, aq_quarter, class_type, market_round=market_round)
     constraints = constraints.join(bus_key_df, on="branch_name", how="left")
     n_null_bk = constraints.filter(pl.col("bus_key").is_null()).height
     if n_null_bk > 0:
@@ -96,7 +97,7 @@ def publish_signal(
     constraints = _compute_bus_key_group(constraints)
 
     # 3d. Density features (ori_mean, mix_mean, mean_branch_max)
-    density_score = _load_density_score_branch(planning_year, flow_dir, constraints)
+    density_score = _load_density_score_branch(planning_year, flow_dir, constraints, market_round=market_round)
     constraints = constraints.join(density_score, on="branch_name", how="left")
     for col in ["ori_mean", "mix_mean", "mean_branch_max"]:
         n_null = constraints.filter(pl.col(col).is_null()).height
@@ -138,7 +139,7 @@ def publish_signal(
     # ── Step 5: Build SF ──────────────────────────────────────────────
     logger.info("Step 5: SF matrix")
     market_months = get_market_months(planning_year, aq_quarter)
-    sf_raw = _load_sf(planning_year, market_months)
+    sf_raw = _load_sf(planning_year, market_months, market_round=market_round)
     logger.info("  SF raw: %d pnodes × %d constraints", sf_raw.shape[0], sf_raw.shape[1] - 1)
 
     # ── Step 6: Grouped dedup (walk-and-fill within bus_key_group) ────
@@ -256,7 +257,7 @@ def publish_signal(
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
-def _load_flow_direction(planning_year: str) -> pl.DataFrame:
+def _load_flow_direction(planning_year: str, market_round: int = 1) -> pl.DataFrame:
     """Load flow_direction from MISO_SPICE_DENSITY_SIGNAL_SCORE.
 
     Each CID has rows for both flow directions (+1 and -1). We pick the direction
@@ -268,10 +269,11 @@ def _load_flow_direction(planning_year: str) -> pl.DataFrame:
     ds = pl.scan_parquet(DENSITY_SCORE_PATH).filter(
         (pl.col("auction_type") == "annual")
         & (pl.col("auction_month") == planning_year)
+        & (pl.col("market_round") == market_round)
     ).select(["constraint_id", "flow_direction", "score"]).collect()
 
     if len(ds) == 0:
-        raise ValueError(f"No density signal score for {planning_year}")
+        raise ValueError(f"No density signal score for {planning_year} round {market_round}")
 
     return (
         ds.sort("score", descending=True)
@@ -284,11 +286,13 @@ def _load_density_score_branch(
     planning_year: str,
     flow_dir: pl.DataFrame,
     constraints: pl.DataFrame,
+    market_round: int = 1,
 ) -> pl.DataFrame:
     """Load density signal score, pick correct direction, aggregate to branch level."""
     ds = pl.scan_parquet(DENSITY_SCORE_PATH).filter(
         (pl.col("auction_type") == "annual")
         & (pl.col("auction_month") == planning_year)
+        & (pl.col("market_round") == market_round)
     ).select(["constraint_id", "flow_direction", "score"]).collect()
 
     # Match to chosen flow_direction
@@ -312,7 +316,7 @@ def _load_density_score_branch(
     )
 
 
-def _load_bus_key(planning_year: str, aq_quarter: str, class_type: str) -> pl.DataFrame:
+def _load_bus_key(planning_year: str, aq_quarter: str, class_type: str, market_round: int = 1) -> pl.DataFrame:
     """Load bus_key from pbase branches."""
     import sys
     sys.path.insert(0, "/home/xyz/workspace/psignal/src")
@@ -321,7 +325,7 @@ def _load_bus_key(planning_year: str, aq_quarter: str, class_type: str) -> pl.Da
 
     ds = SpiceDataSource(rto="miso", auction_type="annual")
     branches = ds.load_branches(
-        auction_month=planning_year, market_round=1,
+        auction_month=planning_year, market_round=market_round,
         period_type=aq_quarter, class_type=class_type,
     )
     branches = branches.rename(columns={"memo": "branch_name"})
@@ -370,14 +374,14 @@ def _compute_bus_key_group(constraints: pl.DataFrame) -> pl.DataFrame:
     return constraints.with_columns(pl.Series("bus_key_group", groups))
 
 
-def _load_sf(planning_year: str, market_months: list[str]) -> pl.DataFrame:
+def _load_sf(planning_year: str, market_months: list[str], market_round: int = 1) -> pl.DataFrame:
     """Load and aggregate SF from MISO_SPICE_SF.parquet for the given quarter."""
     import glob
 
     frames = []
     for mm in market_months:
         pattern = (f"{SF_PATH}/spice_version=v6/auction_type=annual/"
-                   f"auction_month={planning_year}/market_month={mm}/market_round=1/*/")
+                   f"auction_month={planning_year}/market_month={mm}/market_round={market_round}/*/")
         for pdir in glob.glob(pattern):
             for pf in glob.glob(f"{pdir}*.parquet"):
                 try:

@@ -22,13 +22,13 @@ from ml.bridge import map_cids_to_branches
 logger = logging.getLogger(__name__)
 
 
-def _cid_mapping_cache_path(planning_year: str, aq_quarter: str, market_round: int = 1) -> Path:
+def _cid_mapping_cache_path(planning_year: str, aq_quarter: str, market_round: int) -> Path:
     """Cache path for branch↔CID mapping."""
     threshold_tag = f"{UNIVERSE_THRESHOLD:.6e}".replace(".", "p").replace("+", "")
     return COLLAPSED_CACHE_DIR / f"{planning_year}_{aq_quarter}_r{market_round}_cid_map_t{threshold_tag}.parquet"
 
 
-def load_cid_mapping(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
+def load_cid_mapping(planning_year: str, aq_quarter: str, market_round: int) -> pl.DataFrame:
     """Load branch↔CID mapping for one (PY, quarter, round).
 
     Returns DataFrame with columns: constraint_id, branch_name, is_active.
@@ -45,7 +45,7 @@ def load_cid_mapping(planning_year: str, aq_quarter: str, market_round: int = 1)
     return pl.read_parquet(cache_path)
 
 
-def load_raw_density(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
+def load_raw_density(planning_year: str, aq_quarter: str, market_round: int) -> pl.DataFrame:
     """Load raw density distribution for one (PY, quarter, round).
 
     Reads partition-specific paths (NOT hive scan — Trap 21).
@@ -68,7 +68,7 @@ def load_raw_density(planning_year: str, aq_quarter: str, market_round: int = 1)
     return pl.concat(frames, how="diagonal")
 
 
-def compute_right_tail_max(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
+def compute_right_tail_max(planning_year: str, aq_quarter: str, market_round: int) -> pl.DataFrame:
     """Compute right_tail_max per cid BEFORE any filtering.
 
     right_tail = max(bin_80, bin_90, bin_100, bin_110) per row
@@ -111,7 +111,7 @@ def _level2_collapse(
     return cid_df.group_by("branch_name").agg(agg_exprs)
 
 
-def _load_limits(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
+def _load_limits(planning_year: str, aq_quarter: str, market_round: int) -> pl.DataFrame:
     """Load constraint limits, Level 1 aggregate (mean per cid)."""
     market_months = get_market_months(planning_year, aq_quarter)
     frames = []
@@ -152,7 +152,7 @@ def _limit_level2(cid_limits: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def load_collapsed(planning_year: str, aq_quarter: str, market_round: int = 1) -> pl.DataFrame:
+def load_collapsed(planning_year: str, aq_quarter: str, market_round: int) -> pl.DataFrame:
     """Full pipeline: density -> universe filter -> Level 1+2 -> branch features.
 
     Universe filter: threshold is applied at CID level (cid is "active" if its

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 def _try_monthly_bridge(
     unmapped_cids: pl.DataFrame,
     market_month: str,
+    market_round: int,
 ) -> tuple[pl.DataFrame, int, dict]:
     """Try to map unmapped cids via monthly f0 bridge for one market_month.
 
@@ -32,6 +33,7 @@ def _try_monthly_bridge(
             auction_type="monthly",
             auction_month=market_month,
             period_type="f0",
+            market_round=market_round,
         )
     except FileNotFoundError:
         return pl.DataFrame(schema={"constraint_id": pl.Utf8, "branch_name": pl.Utf8}), 0, {}
@@ -43,6 +45,7 @@ def _try_monthly_bridge(
 def build_ground_truth(
     planning_year: str,
     aq_quarter: str,
+    market_round: int,
 ) -> tuple[pl.DataFrame, dict]:
     """Build branch-level GT for one (PY, quarter).
 
@@ -84,6 +87,7 @@ def build_ground_truth(
         auction_type="annual",
         auction_month=planning_year,
         period_type=aq_quarter,
+        market_round=market_round,
     )
 
     annual_mapped_cids_set = set(annual_mapped["constraint_id"].to_list())
@@ -104,7 +108,7 @@ def build_ground_truth(
         if len(unmapped) == 0:
             break
         recovered, n_recovered, _monthly_diag = _try_monthly_bridge(
-            unmapped.select(["constraint_id"]), mm
+            unmapped.select(["constraint_id"]), mm, market_round=1
         )
         monthly_recovery_detail[mm] = n_recovered
         if n_recovered > 0:
@@ -138,7 +142,7 @@ def build_ground_truth(
         from ml.bridge import load_supplement_keys, supplement_match_unmapped, load_bridge_partition
 
         supp = load_supplement_keys(market_months)
-        bridge = load_bridge_partition("annual", planning_year, aq_quarter)
+        bridge = load_bridge_partition("annual", planning_year, aq_quarter, market_round=market_round)
         spice_branches = set(bridge["branch_name"].to_list())
         unmapped_cid_list = unmapped["constraint_id"].to_list()
 

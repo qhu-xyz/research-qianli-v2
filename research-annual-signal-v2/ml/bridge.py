@@ -25,7 +25,7 @@ def load_bridge_partition(
     auction_type: str,
     auction_month: str,
     period_type: str,
-    market_round: int = 1,
+    market_round: int,
 ) -> pl.DataFrame:
     """Load bridge for BOTH class types and UNION them.
 
@@ -75,7 +75,7 @@ def map_cids_to_branches(
     auction_type: str,
     auction_month: str,
     period_type: str,
-    market_round: int = 1,
+    market_round: int,
 ) -> tuple[pl.DataFrame, dict]:
     """Map constraint_ids to branch_names via bridge table.
 
@@ -217,8 +217,8 @@ def map_cids_to_branches_with_supplement(
     auction_type: str,
     auction_month: str,
     period_type: str,
+    market_round: int,
     market_months: list[str] | None = None,
-    market_round: int = 1,
 ) -> tuple[pl.DataFrame, dict]:
     """Map CIDs to branches: bridge first, then supplement key fallback.
 

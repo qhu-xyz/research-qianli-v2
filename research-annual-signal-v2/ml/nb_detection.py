@@ -21,7 +21,7 @@ def compute_nb_flags(
     aq_quarter: str,
     gt_df: pl.DataFrame,
     monthly_binding_table: pl.DataFrame,
-    market_round: int = 1,
+    market_round: int,
 ) -> pl.DataFrame:
     """Compute NB flags for all universe branches.
 

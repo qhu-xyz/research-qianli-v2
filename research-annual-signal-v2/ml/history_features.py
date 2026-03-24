@@ -48,6 +48,7 @@ def build_monthly_binding_table(
     aq_quarter: str,
     cutoff_month: str,
     floor_month: str,
+    market_round: int,
     cutoff_date: date | None = None,
 ) -> pl.DataFrame:
     """Build monthly branch-binding table for one eval PY and quarter.
@@ -79,7 +80,7 @@ def build_monthly_binding_table(
 
     # Pre-load supplement keys for ALL months (avoid per-month parquet scan)
     supp_all = load_supplement_keys(months)
-    bridge_for_supp = load_bridge_partition("annual", eval_py, aq_quarter)
+    bridge_for_supp = load_bridge_partition("annual", eval_py, aq_quarter, market_round=market_round)
     spice_branches_set = set(bridge_for_supp["branch_name"].to_list())
 
     for month in months:
@@ -118,12 +119,13 @@ def build_monthly_binding_table(
             offpeak_da.select("constraint_id"),
         ]).unique()
 
-        # Map via eval PY's annual bridge for this quarter
+        # Map via eval PY's annual bridge for this quarter and round
         mapped, _ = map_cids_to_branches(
             cid_df=all_cids,
             auction_type="annual",
             auction_month=eval_py,
             period_type=aq_quarter,
+            market_round=market_round,
         )
         mapped_cids_set = set(mapped["constraint_id"].to_list())
 
@@ -138,6 +140,7 @@ def build_monthly_binding_table(
                     auction_type="monthly",
                     auction_month=month,
                     period_type="f0",
+                    market_round=1,  # monthly auctions have 1 round
                 )
                 if len(monthly_mapped) > 0:
                     mapped = pl.concat([
@@ -214,7 +217,7 @@ def compute_history_features(
     eval_py: str,
     aq_quarter: str,
     universe_branches: list[str],
-    market_round: int = 1,
+    market_round: int,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Compute BF features + da_rank_value for branches in universe.
 
@@ -238,6 +241,7 @@ def compute_history_features(
         cutoff_month=binding_table_end,
         floor_month=BF_FLOOR_MONTH,
         cutoff_date=cutoff_date,
+        market_round=market_round,
     )
 
     # Filter binding table to universe branches only

@@ -36,11 +36,11 @@ def publish_signal(
     planning_year: str,
     aq_quarter: str,
     class_type: str,
+    market_round: int,
     tier_sizes: list[int],
     branch_cap: int = 3,
     chebyshev_threshold: float = 0.05,
     correlation_threshold: float = -0.21,
-    market_round: int = 1,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build (constraints_df, sf_df) for one (PY, aq, class_type, round)."""
     bf_col = "bf_12" if class_type == "onpeak" else "bfo_12"
@@ -257,7 +257,7 @@ def publish_signal(
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
-def _load_flow_direction(planning_year: str, market_round: int = 1) -> pl.DataFrame:
+def _load_flow_direction(planning_year: str, market_round: int) -> pl.DataFrame:
     """Load flow_direction from MISO_SPICE_DENSITY_SIGNAL_SCORE.
 
     Each CID has rows for both flow directions (+1 and -1). We pick the direction
@@ -286,7 +286,7 @@ def _load_density_score_branch(
     planning_year: str,
     flow_dir: pl.DataFrame,
     constraints: pl.DataFrame,
-    market_round: int = 1,
+    market_round: int,
 ) -> pl.DataFrame:
     """Load density signal score, pick correct direction, aggregate to branch level."""
     ds = pl.scan_parquet(DENSITY_SCORE_PATH).filter(
@@ -316,7 +316,7 @@ def _load_density_score_branch(
     )
 
 
-def _load_bus_key(planning_year: str, aq_quarter: str, class_type: str, market_round: int = 1) -> pl.DataFrame:
+def _load_bus_key(planning_year: str, aq_quarter: str, class_type: str, market_round: int) -> pl.DataFrame:
     """Load bus_key from pbase branches."""
     import sys
     sys.path.insert(0, "/home/xyz/workspace/psignal/src")
@@ -374,7 +374,7 @@ def _compute_bus_key_group(constraints: pl.DataFrame) -> pl.DataFrame:
     return constraints.with_columns(pl.Series("bus_key_group", groups))
 
 
-def _load_sf(planning_year: str, market_months: list[str], market_round: int = 1) -> pl.DataFrame:
+def _load_sf(planning_year: str, market_months: list[str], market_round: int) -> pl.DataFrame:
     """Load and aggregate SF from MISO_SPICE_SF.parquet for the given quarter."""
     import glob
 

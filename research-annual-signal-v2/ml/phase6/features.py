@@ -32,7 +32,7 @@ def build_class_model_table(
     planning_year: str,
     aq_quarter: str,
     class_type: str,
-    market_round: int = 1,
+    market_round: int,
 ) -> pl.DataFrame:
     """Build a class-specific model table for one (PY, aq, class_type, round).
 
@@ -56,7 +56,7 @@ def build_class_model_table(
     branches = collapsed["branch_name"].to_list()
 
     # Step 2: Ground truth (combined — we extract class-specific target below)
-    gt_df, gt_diag = build_ground_truth(planning_year, aq_quarter)
+    gt_df, gt_diag = build_ground_truth(planning_year, aq_quarter, market_round=market_round)
 
     # Step 3: History features (exposes bf_12, bfo_12, bf_combined_12, da_rank_value)
     hist_df, monthly_binding = compute_history_features(
@@ -308,7 +308,7 @@ def _recompute_class_tiers(table: pl.DataFrame) -> pl.DataFrame:
 def build_class_model_table_all(
     groups: list[str],
     class_type: str,
-    market_round: int = 1,
+    market_round: int,
 ) -> pl.DataFrame:
     """Build class-specific model tables for multiple groups.
 

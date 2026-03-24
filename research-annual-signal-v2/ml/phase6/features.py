@@ -63,6 +63,7 @@ def build_class_model_table(
         eval_py=planning_year,
         aq_quarter=aq_quarter,
         universe_branches=branches,
+        market_round=market_round,
     )
 
     # Step 4: NB flags (exposes nb_onpeak_12, nb_offpeak_12)
@@ -72,6 +73,7 @@ def build_class_model_table(
         aq_quarter=aq_quarter,
         gt_df=gt_df,
         monthly_binding_table=monthly_binding,
+        market_round=market_round,
     )
 
     # Assemble

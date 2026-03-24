@@ -13,7 +13,7 @@ import logging
 import polars as pl
 
 from ml.config import (
-    get_bf_cutoff_month,
+    get_history_cutoff_month,
     BF_FLOOR_MONTH, BF_WINDOWS_ONPEAK, BF_WINDOWS_OFFPEAK, BF_WINDOWS_COMBINED,
 )
 from ml.bridge import (
@@ -185,6 +185,7 @@ def compute_history_features(
     eval_py: str,
     aq_quarter: str,
     universe_branches: list[str],
+    market_round: int = 1,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Compute BF features + da_rank_value for branches in universe.
 
@@ -192,7 +193,7 @@ def compute_history_features(
       - hist_df: one row per universe branch with 8 features + has_hist_da
       - monthly_binding_table: full monthly table (needed by nb_detection)
     """
-    cutoff_month = get_bf_cutoff_month(eval_py)
+    cutoff_month = get_history_cutoff_month(eval_py, market_round=market_round)
     binding_table = build_monthly_binding_table(
         eval_py=eval_py,
         aq_quarter=aq_quarter,

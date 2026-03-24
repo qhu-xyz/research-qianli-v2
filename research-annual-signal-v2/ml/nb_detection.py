@@ -9,7 +9,7 @@ import logging
 
 import polars as pl
 
-from ml.config import get_bf_cutoff_month, BF_FLOOR_MONTH
+from ml.config import get_history_cutoff_month, BF_FLOOR_MONTH
 from ml.history_features import _generate_month_range
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ def compute_nb_flags(
     aq_quarter: str,
     gt_df: pl.DataFrame,
     monthly_binding_table: pl.DataFrame,
+    market_round: int = 1,
 ) -> pl.DataFrame:
     """Compute NB flags for all universe branches.
 
@@ -45,7 +46,7 @@ def compute_nb_flags(
     )
 
     # Use CALENDAR months for NB windows (same fix as history_features)
-    cutoff_month = get_bf_cutoff_month(planning_year)
+    cutoff_month = get_history_cutoff_month(planning_year, market_round=market_round)
     all_calendar_months = _generate_month_range(BF_FLOOR_MONTH, cutoff_month)
     all_calendar_months_desc = list(reversed(all_calendar_months))
 

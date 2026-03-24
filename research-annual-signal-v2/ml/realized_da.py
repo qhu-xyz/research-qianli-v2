@@ -3,14 +3,22 @@
 Cache layout in data/realized_da/:
   {YYYY-MM}.parquet         — onpeak (constraint_id, realized_sp)
   {YYYY-MM}_offpeak.parquet — offpeak
+
+Cache layout in data/realized_da_daily/:
+  {YYYY-MM-DD}_{peak_type}.parquet — daily (constraint_id, realized_sp)
+  .done_{YYYY-MM}_{peak_type}      — sentinel marking month as fetched
 """
 from __future__ import annotations
 
 import os
+from datetime import date
+from pathlib import Path
 
 import polars as pl
 
 from ml.config import DA_CACHE_DIR
+
+DA_DAILY_CACHE_DIR = DA_CACHE_DIR.parent / "realized_da_daily"
 
 
 def _cache_path(month: str, peak_type: str) -> str:
@@ -78,3 +86,107 @@ def load_quarter_per_ctype(
         pl.col("realized_sp").sum()
     )
     return onpeak, offpeak
+
+
+# ── Daily cache ──────────────────────────────────────────────────────────
+
+
+def _daily_cache_path(trade_date: date, peak_type: str) -> str:
+    return str(DA_DAILY_CACHE_DIR / f"{trade_date}_{peak_type}.parquet")
+
+
+def has_daily_cache() -> bool:
+    """Check if any daily cache files exist."""
+    return DA_DAILY_CACHE_DIR.exists() and any(DA_DAILY_CACHE_DIR.glob("*.parquet"))
+
+
+def load_day(trade_date: date, peak_type: str) -> pl.DataFrame:
+    """Load cached daily DA for one date+ctype.
+
+    Returns DataFrame with columns: constraint_id (Utf8), realized_sp (Float64).
+    """
+    assert peak_type in _VALID_PEAK_TYPES
+    path = _daily_cache_path(trade_date, peak_type)
+    if not os.path.exists(path):
+        return pl.DataFrame(schema={"constraint_id": pl.Utf8, "realized_sp": pl.Float64})
+    return pl.read_parquet(path)
+
+
+def load_month_daily(
+    month: str,
+    peak_type: str,
+    cutoff_date: date | None = None,
+) -> pl.DataFrame:
+    """Load daily DA for one month+ctype, filtered by cutoff_date.
+
+    If cutoff_date is provided, only includes days strictly before cutoff_date.
+    Aggregates daily files into one month-level DataFrame per constraint_id.
+
+    Returns: (constraint_id, realized_sp) — same schema as load_month().
+    """
+    assert peak_type in _VALID_PEAK_TYPES
+    year, mon = int(month[:4]), int(month[5:7])
+
+    import calendar
+    n_days = calendar.monthrange(year, mon)[1]
+
+    frames = []
+    for day in range(1, n_days + 1):
+        d = date(year, mon, day)
+        if cutoff_date is not None and d >= cutoff_date:
+            break
+        df = load_day(d, peak_type)
+        if len(df) > 0:
+            frames.append(df)
+
+    if not frames:
+        return pl.DataFrame(schema={"constraint_id": pl.Utf8, "realized_sp": pl.Float64})
+
+    combined = pl.concat(frames)
+    return combined.group_by("constraint_id").agg(
+        pl.col("realized_sp").sum()
+    )
+
+
+def load_months_with_cutoff(
+    months: list[str],
+    peak_type: str,
+    cutoff_date: date | None = None,
+) -> pl.DataFrame:
+    """Load DA for multiple months, respecting cutoff_date.
+
+    For months entirely before cutoff: loads from monthly cache (fast).
+    For the cutoff month: loads from daily cache with date filter.
+    For months after cutoff: skipped.
+
+    Falls back to monthly cache if daily cache is not available.
+    Returns: (constraint_id, realized_sp).
+    """
+    use_daily = has_daily_cache() and cutoff_date is not None
+    frames = []
+
+    for month in months:
+        year, mon = int(month[:4]), int(month[5:7])
+        month_first = date(year, mon, 1)
+
+        if cutoff_date is not None and month_first >= cutoff_date:
+            # Entire month is at or after cutoff — skip
+            continue
+
+        import calendar
+        month_last = date(year, mon, calendar.monthrange(year, mon)[1])
+
+        if cutoff_date is not None and cutoff_date <= month_last and use_daily:
+            # Cutoff falls within this month — use daily cache
+            frames.append(load_month_daily(month, peak_type, cutoff_date=cutoff_date))
+        else:
+            # Entire month is before cutoff — use monthly cache (fast)
+            frames.append(load_month(month, peak_type))
+
+    if not frames:
+        return pl.DataFrame(schema={"constraint_id": pl.Utf8, "realized_sp": pl.Float64})
+
+    combined = pl.concat(frames)
+    return combined.group_by("constraint_id").agg(
+        pl.col("realized_sp").sum()
+    )

@@ -45,9 +45,14 @@ def compute_nb_flags(
         pl.col("branch_name").is_in(universe_branches)
     )
 
-    # Use CALENDAR months for NB windows (same fix as history_features)
+    # Calendar months for NB windows include the partial cutoff month.
+    # A branch binding on April 10 should be non-NB for R2 (cutoff April 21).
+    from ml.config import get_history_cutoff_date
     cutoff_month = get_history_cutoff_month(planning_year, market_round=market_round)
-    all_calendar_months = _generate_month_range(BF_FLOOR_MONTH, cutoff_month)
+    cutoff_date = get_history_cutoff_date(planning_year, market_round=market_round)
+    cutoff_date_month = f"{cutoff_date.year}-{cutoff_date.month:02d}"
+    binding_table_end = max(cutoff_month, cutoff_date_month)
+    all_calendar_months = _generate_month_range(BF_FLOOR_MONTH, binding_table_end)
     all_calendar_months_desc = list(reversed(all_calendar_months))
 
     # Start with universe

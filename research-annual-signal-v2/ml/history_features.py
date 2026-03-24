@@ -245,13 +245,11 @@ def compute_history_features(
         pl.col("branch_name").is_in(universe_branches)
     )
 
-    # BF windows are based on the full-month cutoff (last COMPLETE month),
-    # not the extended range. The partial month is in the binding table
-    # for da_rank_value/shadow_price_da but doesn't count as a full BF month.
-    # Use CALENDAR months for windows, not observed months.
-    # This ensures the window is always exactly N calendar months back from cutoff,
-    # even if some months have no binding data (they count as 0 bindings).
-    all_calendar_months = _generate_month_range(BF_FLOOR_MONTH, cutoff_month_full)
+    # Calendar months for BF/NB/recency windows include the partial cutoff month.
+    # E.g. R1: April (partial, 5 days) counts as 1 month in BF_12.
+    # This is correct: if a branch binds April 5 (before R1 close), that's
+    # observable information and should count in all window features.
+    all_calendar_months = _generate_month_range(BF_FLOOR_MONTH, binding_table_end)
     all_calendar_months_desc = list(reversed(all_calendar_months))
 
     # Start with universe as base

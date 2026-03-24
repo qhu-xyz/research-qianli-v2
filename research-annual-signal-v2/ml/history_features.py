@@ -9,6 +9,7 @@ Monthly fallback for unmapped cids uses month M's f0 bridge.
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 import polars as pl
 
@@ -47,6 +48,7 @@ def build_monthly_binding_table(
     aq_quarter: str,
     cutoff_month: str,
     floor_month: str,
+    cutoff_date: date | None = None,
 ) -> pl.DataFrame:
     """Build monthly branch-binding table for one eval PY and quarter.
 
@@ -56,14 +58,22 @@ def build_monthly_binding_table(
         + monthly fallback
       - Per branch per month: bound flags + SP columns
 
+    If cutoff_date is provided and daily cache is available, the cutoff month
+    is loaded from daily files (both ctypes) with date filtering. Full months
+    before cutoff use the fast monthly cache.
+
     Bridge is quarter-sensitive: aq1/aq2/aq3/aq4 may have different constraint universes.
 
     Returns DataFrame with columns:
       month, branch_name, onpeak_bound, offpeak_bound, combined_bound,
       onpeak_sp, offpeak_sp, combined_sp
     """
+    from ml.realized_da import load_month_daily, has_daily_cache
+
     months = _generate_month_range(floor_month, cutoff_month)
     assert len(months) > 0, f"No months in range [{floor_month}, {cutoff_month}]"
+
+    use_daily = has_daily_cache() and cutoff_date is not None
 
     all_rows: list[pl.DataFrame] = []
 
@@ -73,15 +83,34 @@ def build_monthly_binding_table(
     spice_branches_set = set(bridge_for_supp["branch_name"].to_list())
 
     for month in months:
-        # Load DA for this month
-        try:
-            onpeak_da = load_month(month, "onpeak")
-        except FileNotFoundError:
-            continue
-        try:
-            offpeak_da = load_month(month, "offpeak")
-        except FileNotFoundError:
-            offpeak_da = pl.DataFrame(schema={"constraint_id": pl.Utf8, "realized_sp": pl.Float64})
+        # Determine if this month needs daily cutoff filtering.
+        # A month needs daily filtering if cutoff_date falls within it.
+        is_cutoff_month = False
+        if use_daily and cutoff_date is not None:
+            y, m = int(month[:4]), int(month[5:7])
+            import calendar as _cal
+            month_last_day = _cal.monthrange(y, m)[1]
+            month_first = date(y, m, 1)
+            month_last = date(y, m, month_last_day)
+            is_cutoff_month = month_first <= cutoff_date <= month_last
+
+        # Load DA for this month — both ctypes
+        if is_cutoff_month:
+            # Partial month: load from daily cache with cutoff for BOTH ctypes
+            onpeak_da = load_month_daily(month, "onpeak", cutoff_date=cutoff_date)
+            offpeak_da = load_month_daily(month, "offpeak", cutoff_date=cutoff_date)
+            if len(onpeak_da) == 0 and len(offpeak_da) == 0:
+                continue
+        else:
+            # Full month: use fast monthly cache
+            try:
+                onpeak_da = load_month(month, "onpeak")
+            except FileNotFoundError:
+                continue
+            try:
+                offpeak_da = load_month(month, "offpeak")
+            except FileNotFoundError:
+                offpeak_da = pl.DataFrame(schema={"constraint_id": pl.Utf8, "realized_sp": pl.Float64})
 
         # Combine all cids from both ctypes for bridge mapping
         all_cids = pl.concat([
@@ -193,12 +222,15 @@ def compute_history_features(
       - hist_df: one row per universe branch with 8 features + has_hist_da
       - monthly_binding_table: full monthly table (needed by nb_detection)
     """
+    from ml.config import get_history_cutoff_date
     cutoff_month = get_history_cutoff_month(eval_py, market_round=market_round)
+    cutoff_date = get_history_cutoff_date(eval_py, market_round=market_round)
     binding_table = build_monthly_binding_table(
         eval_py=eval_py,
         aq_quarter=aq_quarter,
         cutoff_month=cutoff_month,
         floor_month=BF_FLOOR_MONTH,
+        cutoff_date=cutoff_date,
     )
 
     # Filter binding table to universe branches only

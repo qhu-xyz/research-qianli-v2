@@ -1,4 +1,4 @@
-"""Build realized DA cache for all months 2017-04 through 2026-02.
+"""Build realized DA cache for all months 2016-04 through 2026-02.
 
 Usage:
   cd /home/xyz/workspace/pmodel && source .venv/bin/activate
@@ -30,12 +30,12 @@ def main():
 
     tools = MisoApTools().tools
 
-    # Generate all months from 2017-04 through 2026-02
+    # Generate all months from 2016-04 through 2026-02
     months = []
-    for year in range(2017, 2027):
+    for year in range(2016, 2027):
         for month in range(1, 13):
             m = f"{year:04d}-{month:02d}"
-            if m < "2017-04" or m > "2026-02":
+            if m < "2016-04" or m > "2026-02":
                 continue
             months.append(m)
 

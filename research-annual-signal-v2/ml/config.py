@@ -49,7 +49,7 @@ PLANNING_YEARS: list[str] = [
 AQ_QUARTERS: list[str] = ["aq1", "aq2", "aq3", "aq4"]
 
 # ─── BF ───────────────────────────────────────────────────────────────────
-BF_FLOOR_MONTH: str = "2017-04"  # backfill start (v16 champion insight)
+BF_FLOOR_MONTH: str = "2016-04"  # lowered from 2017-04 to enable PY 2017-06 publication
 BF_WINDOWS_ONPEAK: list[int] = [6, 12, 15]
 BF_WINDOWS_OFFPEAK: list[int] = [6, 12]
 BF_WINDOWS_COMBINED: list[int] = [6, 12]

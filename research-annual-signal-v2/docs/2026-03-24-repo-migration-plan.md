@@ -776,12 +776,12 @@ The migration is successful when:
 
 Initial recommended batch and current status:
 
-1. Create contract docs and a universe catalog. Completed.
-2. Add cache manifests and rank-direction metadata for current active models/benchmarks. Partial.
-3. Add release manifests for `7.0b` and `7.1b`. Not started.
+1. Create contract docs and a universe catalog. **Completed.**
+2. Add cache manifests and rank-direction metadata for current active models/benchmarks. **Partial** (daily DA manifest exists; model caches not yet manifested).
+3. Add release manifests for `7.0b` and `7.1b`. **7.1b completed** (`releases/miso/annual/7.1b/manifest.json` + `smoke_test.json`). 7.0b not done.
 4. Move exploratory NB/bucket scripts into `research/`. Not started.
-5. Normalize registry entries for current MISO annual champions/candidates. Not started.
-6. Create `ml/core`, `ml/markets/miso`, and empty `ml/markets/pjm`, with compatibility shims if needed. Completed as a non-breaking skeleton pass.
+5. Normalize registry entries for current MISO annual champions/candidates. **Partial** (round comparison normalized to `spec.json`/`metrics.json`; champion_confirmation and bucket_6_20 still ad hoc).
+6. Create `ml/core`, `ml/markets/miso`, and empty `ml/markets/pjm`, with compatibility shims if needed. **Completed** as a non-breaking skeleton pass.
 
 The first normalized annual model entries should explicitly bind feature recipes for:
 

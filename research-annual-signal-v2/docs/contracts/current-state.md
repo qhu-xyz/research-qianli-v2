@@ -58,6 +58,9 @@ Authoritative champion-confirmation loading is still R1-only (`scripts/champion_
 | Publication CLI | Done | `--market-round` required in `publish_annual_signal.py` |
 | Benchmark loading R2/R3 | Partial | `champion_confirmation.py` is still R1-only, but `scripts/round_comparison.py` loads matched `V4.4.R1/R2/R3` |
 | Round-aware scoring comparison | Partial | `scripts/round_comparison.py` compares `v0c` vs `V4.4` across `R1/R2/R3`; `Bucket_6_20` is not yet re-evaluated round-aware |
+| Publish smoke test | Done | R1/R2/R3 × onpeak/offpeak dry-run, zero missing-SF errors (`releases/miso/annual/7.1b/smoke_test.json`) |
+| Release manifest | Done | `releases/miso/annual/7.1b/manifest.json` |
+| Round comparison registry | Done | `registry/miso/annual/comparisons/round_comparison_v1/` normalized to `spec.json` + `metrics.json` |
 
 ## 5. Registry entries
 
@@ -66,7 +69,7 @@ Authoritative champion-confirmation loading is still R1-only (`scripts/champion_
 | `registry/onpeak/bucket_6_20/` | Bucket_6_20 onpeak | config.json + metrics.json (R1-only) |
 | `registry/offpeak/bucket_6_20/` | Bucket_6_20 offpeak | config.json + metrics.json (R1-only) |
 | `registry/champion_confirmation/` | 3-way comparison | all_results.json + config.json (R1-only) |
-| `registry/miso/annual/comparisons/round_comparison_v1/` | `v0c` vs `V4.4` round-aware comparison | config.json + all_results.json (`R1/R2/R3`, raw results only) |
+| `registry/miso/annual/comparisons/round_comparison_v1/` | `v0c` vs `V4.4` round-aware comparison | **spec.json + metrics.json** (144 cells at base grain) + analysis.json |
 | `registry/archive/` | Phase 3-5 combined-ctype | 31 entries (legacy, not production) |
 
 No entry currently has:

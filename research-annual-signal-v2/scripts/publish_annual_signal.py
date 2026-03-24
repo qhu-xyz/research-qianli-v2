@@ -1,12 +1,13 @@
-"""Publish V7.0 annual signal for a planning year.
+"""Publish annual signal for a planning year and round.
 
 Generates constraints + SF parquets for all (aq, class_type) combinations.
 Validates against V6.1 for overlapping constraints.
+Signal name includes round: TEST.Signal.MISO.SPICE_ANNUAL_V7.1B.R{round}
 
 Usage:
-    PYTHONPATH=. uv run python scripts/publish_annual_signal.py --py 2025-06
-    PYTHONPATH=. uv run python scripts/publish_annual_signal.py --py 2025-06 --aq aq1 --class-type onpeak
-    PYTHONPATH=. uv run python scripts/publish_annual_signal.py --py 2024-06 --validate-only
+    PYTHONPATH=. uv run python scripts/publish_annual_signal.py --py 2025-06 --market-round 1
+    PYTHONPATH=. uv run python scripts/publish_annual_signal.py --py 2025-06 --market-round 2 --aq aq1
+    PYTHONPATH=. uv run python scripts/publish_annual_signal.py --py 2024-06 --market-round 1 --validate-only
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ from ml.signal_publisher import publish_signal
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_SIGNAL_NAME = "TEST.Signal.MISO.SPICE_ANNUAL_V7.0.R1"
+DEFAULT_SIGNAL_PREFIX = "TEST.Signal.MISO.SPICE_ANNUAL_V7.1B"
 V61_CONSTRAINTS_PATH = "/opt/data/xyz-dataset/signal_data/miso/constraints/Signal.MISO.SPICE_ANNUAL_V6.1"
 V61_SF_PATH = "/opt/data/xyz-dataset/signal_data/miso/sf/Signal.MISO.SPICE_ANNUAL_V6.1"
 
@@ -101,7 +102,7 @@ def save_signal(
     planning_year: str,
     aq_quarter: str,
     class_type: str,
-    signal_name: str = DEFAULT_SIGNAL_NAME,
+    signal_name: str,
     dry_run: bool = False,
 ) -> None:
     """Save constraints + SF parquets to the output path."""
@@ -129,7 +130,7 @@ def save_signal(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Publish V7.0 annual signal")
+    parser = argparse.ArgumentParser(description="Publish annual signal (V7.1B)")
     parser.add_argument("--py", required=True, help="Planning year (e.g., 2025-06)")
     parser.add_argument("--aq", default=None, help="Single quarter (e.g., aq1)")
     parser.add_argument("--class-type", default=None, choices=CLASS_TYPES)
@@ -137,7 +138,7 @@ def main():
     parser.add_argument("--validate-only", action="store_true", help="Validate without saving")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be saved")
     parser.add_argument("--tier-sizes", default=None, help="Comma-separated tier sizes (default: 200,200,200,200,200)")
-    parser.add_argument("--signal-name", default=DEFAULT_SIGNAL_NAME, help="Signal name for output path")
+    parser.add_argument("--signal-name", default=None, help="Signal name override (default: V7.1B.R{round})")
     args = parser.parse_args()
 
     # Init Ray
@@ -146,12 +147,14 @@ def main():
     init_ray(extra_modules=[pmodel])
 
     planning_year = args.py
+    market_round = args.market_round
+    signal_name = args.signal_name or f"{DEFAULT_SIGNAL_PREFIX}.R{market_round}"
     quarters = [args.aq] if args.aq else AQ_QUARTERS
     class_types = [args.class_type] if args.class_type else CLASS_TYPES
     tier_sizes = [int(x) for x in args.tier_sizes.split(",")] if args.tier_sizes else DEFAULT_TIER_SIZES
 
-    logger.info("Publishing V7.0 signal for %s", planning_year)
-    logger.info("Round: %s, Quarters: %s, Classes: %s, Tiers: %s", args.market_round, quarters, class_types, tier_sizes)
+    logger.info("Publishing %s for %s", signal_name, planning_year)
+    logger.info("Round: R%s, Quarters: %s, Classes: %s, Tiers: %s", market_round, quarters, class_types, tier_sizes)
 
     t0 = time.time()
     all_results = []
@@ -177,7 +180,7 @@ def main():
                 # Save
                 if not args.validate_only:
                     save_signal(constraints_df, sf_df, planning_year, aq, ct,
-                                signal_name=args.signal_name, dry_run=args.dry_run)
+                                signal_name=signal_name, dry_run=args.dry_run)
 
                 all_results.append({
                     "quarter": aq, "class": ct,
@@ -195,7 +198,7 @@ def main():
 
     # Summary
     print(f"\n{'=' * 80}")
-    print(f"  V7.0 Publication Summary — {planning_year}")
+    print(f"  {signal_name} Publication Summary — {planning_year} R{market_round}")
     print(f"{'=' * 80}")
     for r in all_results:
         if "error" in r:

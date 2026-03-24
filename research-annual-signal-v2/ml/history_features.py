@@ -223,12 +223,19 @@ def compute_history_features(
       - monthly_binding_table: full monthly table (needed by nb_detection)
     """
     from ml.config import get_history_cutoff_date
-    cutoff_month = get_history_cutoff_month(eval_py, market_round=market_round)
+    cutoff_month_full = get_history_cutoff_month(eval_py, market_round=market_round)
     cutoff_date = get_history_cutoff_date(eval_py, market_round=market_round)
+
+    # The binding table range must include the cutoff_date's month so that
+    # daily cache can load partial-month data. E.g. R1 cutoff_date=April 7:
+    # cutoff_month_full="2025-03" but we need April in the range for daily loading.
+    cutoff_date_month = f"{cutoff_date.year}-{cutoff_date.month:02d}"
+    binding_table_end = max(cutoff_month_full, cutoff_date_month)
+
     binding_table = build_monthly_binding_table(
         eval_py=eval_py,
         aq_quarter=aq_quarter,
-        cutoff_month=cutoff_month,
+        cutoff_month=binding_table_end,
         floor_month=BF_FLOOR_MONTH,
         cutoff_date=cutoff_date,
     )
@@ -238,10 +245,13 @@ def compute_history_features(
         pl.col("branch_name").is_in(universe_branches)
     )
 
+    # BF windows are based on the full-month cutoff (last COMPLETE month),
+    # not the extended range. The partial month is in the binding table
+    # for da_rank_value/shadow_price_da but doesn't count as a full BF month.
     # Use CALENDAR months for windows, not observed months.
     # This ensures the window is always exactly N calendar months back from cutoff,
     # even if some months have no binding data (they count as 0 bindings).
-    all_calendar_months = _generate_month_range(BF_FLOOR_MONTH, cutoff_month)
+    all_calendar_months = _generate_month_range(BF_FLOOR_MONTH, cutoff_month_full)
     all_calendar_months_desc = list(reversed(all_calendar_months))
 
     # Start with universe as base

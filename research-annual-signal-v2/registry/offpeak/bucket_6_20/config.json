@@ -40,15 +40,7 @@
     "num_threads": 4,
     "verbose": -1
   },
-  "training_pys": [
-    "2018-06",
-    "2019-06",
-    "2020-06",
-    "2021-06",
-    "2022-06",
-    "2023-06",
-    "2024-06",
-    "2025-06"
-  ],
-  "description": "5-tier danger-aware LambdaRank on all branches. Tier 4 (SP>20K) gets 20x weight."
+  "training_pys": "expanding window: eval 2022 trains on 2018-2021, eval 2025 trains on 2018-2024",
+  "description": "5-tier danger-aware LambdaRank on all branches. Tier 4 (SP>20K) gets 20x weight.",
+  "note": "Each eval year uses a different training set (expanding window). The registry metrics reflect per-eval-year models."
 }

@@ -2,7 +2,7 @@
 
 MISO annual constraint ranking signal: branch-level scoring for annual FTR auctions (R1) with NB (new binder) detection for dormant constraint discovery.
 
-## Current Status (2026-03-23)
+## Current Status (2026-03-24)
 
 **Champion**: v0c formula (`0.40×da_rank + 0.30×rt_max + 0.30×bf`) — established in Phase 5-10.
 
@@ -29,15 +29,18 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 - Full pipeline: build branch model table → score → map back to SPICE CIDs → publish parquets
 - See `docs/v7.0b-release-report.md` for comparison results
 
-### Bucket_6_20: Danger-Aware Unified Model (2026-03-24) — CURRENT
+### Bucket_6_20: Danger-Aware Unified Model (2026-03-24) — CANDIDATE
 
-**Champion: Bucket_6_20** — Single unified LambdaRank model on ALL branches with 5-tier severity labels [0/1/2/3/4] weighted [1/1/2/6/20]. 13 features (history + density + top2_mean), trained on 2018-2025.
+**Candidate: Bucket_6_20** — Single unified LambdaRank model on ALL branches with 5-tier severity labels [0/1/2/3/4] weighted [1/1/2/6/20]. 13 features (history + density + top2_mean), trained on 2018-2025.
 
-**Key results** (2022-2025, native standalone):
+**Key results** (2022-2025, native standalone vs V4.4):
 - Beats V4.4 on total SP in **all 16 (year × ctype × K) cells** (+$14K to +$270K)
 - At K=200: also wins NB_SP in 5/8 cells (all 2024-2025)
 - At K=400: V4.4 wins NB_SP in 7/8 cells by packing more dormant branches at cost of overall SP
 - Fully reproducible — no V4.4 dependency
+- **Caveat**: V4.4 SP numbers are conservative — V4.4 picks outside our universe get zero credit (5-10 branches per quarter unlabeled). Not yet compared side-by-side with v0c or Opt3 in the same script.
+
+**Status**: Beats V4.4 benchmark. Not yet confirmed as overall champion vs v0c/Opt3. Needs deployment-style eval (R30/R50).
 
 **Reports**: `docs/2026-03-24-bucket-model-report.md` | `docs/metric-contract.md`
 **Evolution**: v0c → Opt3 → feature ablation → top-tail variants → Bucket_6_20

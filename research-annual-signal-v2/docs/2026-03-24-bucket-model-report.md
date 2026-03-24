@@ -58,7 +58,9 @@ Each model picks its own top-K from its own universe. SP and NB_SP are realized 
 **Bucket_6_20 wins total SP in all 8 cells** (+$14K to +$235K).
 **V4.4 wins NB_SP in 7/8 cells** at K=400 (exception: 2023 onpeak +$32K). V4.4 packs ~20 dormant branches into its top-400 vs Bucket_6_20's ~12, sacrificing $14-235K of overall SP.
 
-## Feature Importance
+## Feature Importance (offpeak, 2025 eval window only)
+
+These numbers are from the last trained model (offpeak, 2025 holdout window). Onpeak and other eval windows may differ.
 
 | Feature | Weight |
 |---------|---:|
@@ -69,7 +71,7 @@ Each model picks its own top-K from its own universe. SP and NB_SP are realized 
 | count_active_cids | 2.2% |
 | rt_max | 1.3% |
 
-History dominates (81%), density contributes modestly (15%). The model succeeds by learning to rank established binders AND giving dangerous dormant branches a boost via the tier-4 weight.
+History dominates (81%) in this window. Density contributes modestly (15%).
 
 ## How Bucket_6_20 evolved
 
@@ -97,9 +99,20 @@ See `docs/metric-contract.md` for the full naming convention.
 3. **2022-2023 NB_SP gap at K=200**: V4.4 captures more NB_SP in older years. Unclear why — possibly V4.4's deviation features were more predictive historically.
 4. **Bucket boundaries are not tuned per ctype** — onpeak and offpeak have different SP distributions.
 
-## Recommendation
+## Status: Candidate (not yet champion)
 
-**Ship Bucket_6_20 as the production signal model.** It beats V4.4 on the primary metric (total SP captured) in all 16 (year × ctype × K) cells while being fully reproducible. The NB_SP gap at K=400 is a known tradeoff — V4.4 achieves it by sacrificing $14-235K of overall SP, which is not worth matching.
+Bucket_6_20 beats V4.4 on total SP in all 16 cells. However:
+
+1. **Not yet compared side-by-side with v0c or Opt3** in the same script. Earlier V3 reports suggest v0c may win some K=200 cells on total SP. A direct 3-way comparison (v0c vs Bucket_6_20 vs V4.4) is needed before declaring champion.
+
+2. **V4.4 numbers are conservative**: V4.4 picks outside our universe (~5-10 per quarter) get zero credit because we can't resolve their GT. V4.4's true native SP could be slightly higher. Label coverage should be reported per cell.
+
+3. **No deployment-style evaluation yet** (R30/R50 reserved slots, production shortlist logic).
+
+**Next steps to confirm**:
+- Run v0c + Bucket_6_20 + V4.4 in one comparison script
+- Add V4.4 label coverage per cell
+- Run R30/R50 deployment eval
 
 ## Artifacts
 

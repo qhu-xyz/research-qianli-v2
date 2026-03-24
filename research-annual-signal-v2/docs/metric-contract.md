@@ -19,6 +19,20 @@ Two types of rank exist. They are NOT interchangeable. Every table, report, and 
 
 **Forbidden**: Presenting `rank_overlap` numbers as if they are `rank_native`. Presenting `rank_native` from different-sized universes as directly comparable without noting the universe sizes.
 
+## CRITICAL: Rank Direction Conventions
+
+Different signals use **opposite** rank directions. Getting this wrong silently inverts the entire comparison.
+
+| Signal | Convention | Top branch has | Sort order for top-K |
+|--------|-----------|---------------|---------------------|
+| **V4.4** | Lower rank = better | `rank ≈ 0.001` | **ascending** |
+| **V7.0B (v0c)** | Higher rank = better | `rank ≈ 0.79` | **descending** |
+| **V6.1** | Lower rank_ori = better | `rank_ori ≈ 0.001` | **ascending** |
+
+**Before sorting ANY signal by rank, verify the direction.** Check: does the top-ranked branch have high or low `shadow_price_da`? If high historical DA → that branch should be near the top → that tells you the direction.
+
+**Past mistake (2026-03-24)**: V7.0B was sorted ascending (like V4.4), which selected the WORST 200 branches. Result: V7.0B showed $13K SP vs V4.4's $421K — a 30x underperformance that was actually a sort bug, not a model failure. Correct sort (descending) shows V7.0B at $619-710K, beating V4.4.
+
 **Example of the confusion this prevents**:
 - MNTCELO 2025 onpeak: `rank_native` Bucket_6_20 = 874/2705, V4.4 = 377/1483
 - MNTCELO 2025 onpeak: `rank_overlap` Bucket_6_20 = 236/811, V4.4 = 145/811

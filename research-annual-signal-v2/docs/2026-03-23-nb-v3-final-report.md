@@ -104,6 +104,14 @@ V4.4 precision is computed as binders/labeled (excluding unlabeled branches outs
 ### 5. Dangerous branch capture
 v0c and tiered_top2 consistently catch more D20 (>$20K) branches. V4.4 misses 2-4 dangerous branches per quarter that our models catch.
 
+### 6. Overlap-only reranking (2026-03-24 update)
+When both models are reranked on the EXACT SAME shared dormant branch set (controlling for universe size):
+- **Opt3 wins 9/12 quarters** on avg rank of top-5 shared NB binders
+- **Opt3 has 2-3x the hit rate** at K=50 and K=100
+- **Opt3 captures 2-3x more NB SP** in its dormant top-100
+- The earlier "V4.4 wins on absolute rank" was a universe-size artifact (V4.4's 1,200 vs our 2,700 branches mechanically compressed absolute ranks)
+- V4.4 still wins 3/12 quarters (2025 aq2 on/off, aq3 off) — driven by specific branches like MNTCELO and AUST_TAYS
+
 ## V4.4 label coverage caveat
 5-10 of V4.4's top-200 branches (and 15-20 at K=400) are outside our GT mapping. These are marked as unlabeled, not zero. Even if all unlabeled branches were binders, V4.4's SP gap vs our models would not close.
 

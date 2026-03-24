@@ -29,23 +29,20 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 - Full pipeline: build branch model table → score → map back to SPICE CIDs → publish parquets
 - See `docs/v7.0b-release-report.md` for comparison results
 
-### NB-hist-12 Model: tiered_top2 Champion (2026-03-23) — CURRENT
+### NB-hist-12 Model: Opt3 Unified + Top-tail (2026-03-24) — CURRENT
 
-**Problem**: v0c is structurally blind to dormant branches (no binding in 12 months). V4.4 catches some but is opaque and inconsistent.
+**Problem**: v0c is structurally blind to dormant branches. V4.4 catches some but is opaque.
 
-**Champion: tiered_top2 (R30)** — LambdaRank with tiered weights [1,1,3,10] + top2_mean density features, deployed as 170 v0c + 30 NB reserved slots at K=200, 350 + 50 at K=400.
+**Current best: Opt3** — Single unified LambdaRank model on ALL branches (not just dormant), with tiered weights [1,1,3,10], 13 features (history + density + top2_mean), trained on 2018-2025.
 
-**Native standalone comparison** (each model picks from its own universe):
-- tiered_top2 R30 captures **19-54% more SP** than V4.4 at every K in every (year × ctype)
-- tiered_top2 wins **NB-only VC@50 in all 4 (year × ctype) combos** (0.090-0.272 vs V4.4's 0.013-0.128)
-- V4.4's one edge: slightly more NB_SP at K=400 in 2025 offpeak ($89K vs $65K), at cost of much lower overall SP
-- Fully reproducible — no dependency on opaque V4.4 features
+**Key results** (2024-2025 eval):
+- Opt3 captures **19-54% more SP** than V4.4 at every K in every (year × ctype)
+- **Overlap-only reranking** (same branches, absolute rank): Opt3 wins 9/12 quarters on top-5 NB avg rank, 2-3x hit rate at K=50/100
+- **Miss taxonomy**: 50% of top-20 NB SP is in "no_history" branches that have density signal — modeling opportunity for top-tail emphasis
 
-**Ablation path** (V2→V3): +2020 data, +tiered weights, +top2_mean features. 9 variants tested.
+**Next step**: Top-tail emphasis experiments (extreme weights, dangerous-NB binary, two-stage). See `docs/2026-03-24-nb-next-step-plan.md`.
 
-**Full results**: `docs/2026-03-23-nb-v3-final-report.md`
-**Metric contract**: `docs/metric-contract.md`
-**V2 report (superseded)**: `docs/2026-03-23-nb-v2-experiment-report.md`
+**Reports**: `docs/2026-03-23-nb-v3-final-report.md` | `docs/metric-contract.md` | `docs/2026-03-24-nb-next-step-plan.md`
 
 ## Repo Structure
 

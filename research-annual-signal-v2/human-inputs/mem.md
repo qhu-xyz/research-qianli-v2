@@ -833,3 +833,15 @@ Have you fixed those errors?
      Any dormant branch without V4.4 is excluded from training and can never be chosen by
      the reserved NB slots.
      scripts/nb_model_yearly.py:96
+
+
+## case study between v4.4 and tiered_top2
+do case study between v4.4 and tiered_top2 for the heavily binders
+
+  - check the overall heavily binders top-5  in 2023, 2024, 2025 and which rank they are
+  assigned to in each model, in onpeak, offpeak
+  - check the nb-12 heaviest binders top-5 in 3 years, also in onpeak offpeak
+
+  think about this task, design the table well
+────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)

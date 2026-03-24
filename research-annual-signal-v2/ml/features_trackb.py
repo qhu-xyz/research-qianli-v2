@@ -29,6 +29,7 @@ def compute_constraint_propagation(
     monthly_binding: pl.DataFrame,
     dormant_branches: list[str],
     cutoff_month: str,
+    market_round: int,
 ) -> pl.DataFrame:
     """Compute constraint propagation features for dormant branches.
 
@@ -48,7 +49,7 @@ def compute_constraint_propagation(
         sum_cid_sp_other, max_cid_sp_other, n_active_cids_other, active_cid_ratio_other
     """
     # Load branch↔CID mapping
-    cid_map = load_cid_mapping(planning_year, aq_quarter)
+    cid_map = load_cid_mapping(planning_year, aq_quarter, market_round=market_round)
 
     # Get CIDs for dormant branches
     dormant_cids = cid_map.filter(pl.col("branch_name").is_in(dormant_branches))

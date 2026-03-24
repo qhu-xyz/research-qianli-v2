@@ -260,7 +260,7 @@ def main():
     for py in all_pys_full:
         for aq in aqs:
             try:
-                t = build_model_table(py, aq)
+                t = build_model_table(py, aq, market_round=1)
             except Exception as e:
                 print(f"  {py}/{aq} combined: SKIP ({e})")
                 continue
@@ -289,7 +289,7 @@ def main():
         for aq in aqs:
             for ct in ["onpeak", "offpeak"]:
                 try:
-                    ct_t = build_class_model_table(py, aq, ct)
+                    ct_t = build_class_model_table(py, aq, ct, market_round=1)
                 except Exception as e:
                     print(f"  {py}/{aq}/{ct}: SKIP ({e})")
                     continue
@@ -364,7 +364,7 @@ def main():
         for aq in aqs:
             for ct in ["onpeak", "offpeak"]:
                 try:
-                    eval_tables[(eval_py, aq, ct)] = build_class_model_table(eval_py, aq, ct)
+                    eval_tables[(eval_py, aq, ct)] = build_class_model_table(eval_py, aq, ct, market_round=1)
                 except Exception as e:
                     print(f"  eval {eval_py}/{aq}/{ct}: SKIP ({e})")
     print(f"  Cached {len(eval_tables)} eval tables ({time.time()-t0:.0f}s)")

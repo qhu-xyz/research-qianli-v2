@@ -133,6 +133,7 @@ def main():
     parser.add_argument("--py", required=True, help="Planning year (e.g., 2025-06)")
     parser.add_argument("--aq", default=None, help="Single quarter (e.g., aq1)")
     parser.add_argument("--class-type", default=None, choices=CLASS_TYPES)
+    parser.add_argument("--market-round", type=int, required=True, help="Auction round (explicit; no default)")
     parser.add_argument("--validate-only", action="store_true", help="Validate without saving")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be saved")
     parser.add_argument("--tier-sizes", default=None, help="Comma-separated tier sizes (default: 200,200,200,200,200)")
@@ -150,7 +151,7 @@ def main():
     tier_sizes = [int(x) for x in args.tier_sizes.split(",")] if args.tier_sizes else DEFAULT_TIER_SIZES
 
     logger.info("Publishing V7.0 signal for %s", planning_year)
-    logger.info("Quarters: %s, Classes: %s, Tiers: %s", quarters, class_types, tier_sizes)
+    logger.info("Round: %s, Quarters: %s, Classes: %s, Tiers: %s", args.market_round, quarters, class_types, tier_sizes)
 
     t0 = time.time()
     all_results = []
@@ -166,6 +167,7 @@ def main():
                     aq_quarter=aq,
                     class_type=ct,
                     tier_sizes=tier_sizes,
+                    market_round=args.market_round,
                 )
 
                 # Validate

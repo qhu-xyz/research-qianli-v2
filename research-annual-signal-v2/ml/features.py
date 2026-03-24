@@ -22,7 +22,7 @@ from ml.nb_detection import compute_nb_flags
 logger = logging.getLogger(__name__)
 
 
-def build_model_table(planning_year: str, aq_quarter: str) -> pl.DataFrame:
+def build_model_table(planning_year: str, aq_quarter: str, market_round: int) -> pl.DataFrame:
     """Build the full model table for one (PY, quarter).
 
     Pipeline:
@@ -35,17 +35,18 @@ def build_model_table(planning_year: str, aq_quarter: str) -> pl.DataFrame:
       7. Add planning_year and aq_quarter columns
     """
     # Step 1: Branch universe (density + limits + metadata features)
-    collapsed = load_collapsed(planning_year, aq_quarter)
+    collapsed = load_collapsed(planning_year, aq_quarter, market_round=market_round)
     branches = collapsed["branch_name"].to_list()
 
     # Step 2: Ground truth
-    gt_df, gt_diag = build_ground_truth(planning_year, aq_quarter)
+    gt_df, gt_diag = build_ground_truth(planning_year, aq_quarter, market_round=market_round)
 
     # Step 3: History features
     hist_df, monthly_binding = compute_history_features(
         eval_py=planning_year,
         aq_quarter=aq_quarter,
         universe_branches=branches,
+        market_round=market_round,
     )
 
     # Step 4: NB flags
@@ -55,6 +56,7 @@ def build_model_table(planning_year: str, aq_quarter: str) -> pl.DataFrame:
         aq_quarter=aq_quarter,
         gt_df=gt_df,
         monthly_binding_table=monthly_binding,
+        market_round=market_round,
     )
 
     # Assemble: start with collapsed (density + limits + metadata)
@@ -134,7 +136,7 @@ def build_model_table(planning_year: str, aq_quarter: str) -> pl.DataFrame:
     return table
 
 
-def build_model_table_all(groups: list[str]) -> pl.DataFrame:
+def build_model_table_all(groups: list[str], market_round: int) -> pl.DataFrame:
     """Build model tables for multiple groups and concatenate.
 
     Args:
@@ -143,5 +145,5 @@ def build_model_table_all(groups: list[str]) -> pl.DataFrame:
     frames = []
     for group in groups:
         py, aq = group.split("/")
-        frames.append(build_model_table(py, aq))
+        frames.append(build_model_table(py, aq, market_round=market_round))
     return pl.concat(frames, how="diagonal")

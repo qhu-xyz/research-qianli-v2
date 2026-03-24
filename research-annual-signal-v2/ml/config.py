@@ -130,7 +130,7 @@ def get_history_cutoff_date(planning_year: str, market_round: int, rto: str = "m
     return close - timedelta(days=1)
 
 
-def get_history_cutoff_month(planning_year: str, market_round: int = 1, rto: str = "miso") -> str:
+def get_history_cutoff_month(planning_year: str, market_round: int, rto: str = "miso") -> str:
     """Return the last FULL month whose history is safe for all rounds.
 
     This is the month-level approximation used when daily cache is not available.

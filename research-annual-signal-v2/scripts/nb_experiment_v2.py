@@ -137,7 +137,7 @@ def main():
     for py in all_pys:
         for aq in aqs:
             try:
-                table = build_model_table(py, aq)
+                table = build_model_table(py, aq, market_round=1)
             except Exception as e:
                 print(f"  {py}/{aq}: SKIP ({e})")
                 continue
@@ -213,7 +213,7 @@ def main():
             for ct in ["onpeak", "offpeak"]:
                 # Build class-specific table
                 try:
-                    ct_table = build_class_model_table(eval_py, aq, ct)
+                    ct_table = build_class_model_table(eval_py, aq, ct, market_round=1)
                 except Exception as e:
                     print(f"  {eval_py}/{aq}/{ct}: SKIP ({e})")
                     continue

@@ -138,22 +138,26 @@ See `docs/metric-contract.md` for the full naming convention.
 3. **2022-2023 NB_SP gap at K=200**: V4.4 captures more NB_SP in older years. Unclear why — possibly V4.4's deviation features were more predictive historically.
 4. **Bucket boundaries are not tuned per ctype** — onpeak and offpeak have different SP distributions.
 
-## Status: Candidate (not yet champion)
+## Status: Candidate (R1-only, not yet round-aware)
 
-Bucket_6_20 beats V4.4 on total SP in all 16 cells. However:
+**3-way comparison completed** (`scripts/champion_confirmation.py`, `registry/champion_confirmation/`):
+- v0c wins SP in 10/16 cells (dominates K=200)
+- Bucket_6_20 wins SP in 6/16 cells (dominates K=400)
+- V4.4 wins 0/16 on SP, 10/16 on NB_SP
+- R30 deployment (170 v0c + 30 Bucket dormant) is the best tradeoff
+- V4.4 label coverage: ~4% unlabeled per cell
 
-1. **Not yet compared side-by-side with v0c or Opt3** in the same script. Earlier V3 reports suggest v0c may win some K=200 cells on total SP. A direct 3-way comparison (v0c vs Bucket_6_20 vs V4.4) is needed before declaring champion.
+**Remaining caveats**:
 
-2. **V4.4 numbers are conservative**: V4.4 picks outside our universe (~5-10 per quarter) get zero credit because we can't resolve their GT. V4.4's true native SP could be slightly higher. Label coverage should be reported per cell.
+1. **All evaluation is R1-only**. The champion confirmation script uses `data/nb_cache/` which was built from `market_round=1` density/limits/bridge. Round-sensitive re-evaluation is pending.
 
-3. **No deployment-style evaluation yet** (R30/R50 reserved slots, production shortlist logic).
+2. **V4.4 numbers are conservative**: V4.4 picks outside our universe (~5-10 per quarter) get zero credit because we can't resolve their GT.
 
-4. **Feature recipe is now explicitly bound**: future comparisons and promotions should refer to `miso_annual_bucket_features_v1`, not just the informal column list.
+3. **Feature recipe is now explicitly bound**: promotions should refer to `miso_annual_bucket_features_v1`.
 
-**Next steps to confirm**:
-- Run v0c + Bucket_6_20 + V4.4 in one comparison script
-- Add V4.4 label coverage per cell
-- Run R30/R50 deployment eval
+**Next steps**:
+- Re-evaluate with round-aware features (R1/R2/R3 comparison)
+- Formal champion promotion with round-aware registry entry
 
 ## Artifacts
 

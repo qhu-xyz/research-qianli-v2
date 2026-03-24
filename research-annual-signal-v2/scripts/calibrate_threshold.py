@@ -37,7 +37,7 @@ from ml.realized_da import load_quarter
 
 
 def compute_right_tail_max(planning_year: str, aq_quarter: str) -> pl.DataFrame:
-    """Compute right_tail_max per cid for one (PY, quarter)."""
+    """Compute right_tail_max per cid for one (PY, quarter). Uses market_round=1 (calibration)."""
     market_months = get_market_months(planning_year, aq_quarter)
     frames = []
     for mm in market_months:

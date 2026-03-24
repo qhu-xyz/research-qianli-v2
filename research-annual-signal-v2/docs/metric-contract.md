@@ -45,6 +45,27 @@ All comparisons at **branch_name** level.
 - A branch appears only once in a model's top-K list.
 - Ground truth = branch-level realized DA SP for the eval slice.
 
+## Annual Base Grain
+
+For annual products, the canonical build/evaluation grain is:
+
+- `planning_year`
+- `aq_quarter`
+- `ctype`
+- `market_round`
+
+So every annual result must first be computed at:
+
+- `(planning_year, aq_quarter, ctype, market_round)`
+
+and only then optionally aggregated upward.
+
+Required rules:
+
+- `onpeak` and `offpeak` must remain separate at base grain
+- `R1`, `R2`, and `R3` must remain separate at base grain
+- any aggregate across quarters, ctypes, or rounds must explicitly state the aggregation rule
+
 ## Ground Truth Contract
 
 For every selected branch:
@@ -69,6 +90,7 @@ For every selected branch:
 - **Universe**: model's native candidate set (our density universe for Bucket_6_20, V4.4's own universe for V4.4)
 - **Selection**: model's native top-K
 - **Rank type**: `rank_native`
+- **Base grain**: annual results are first computed at `(planning_year, aq_quarter, ctype, market_round)`
 - **Metrics**:
   - `Branch_SP@K_native`: total realized SP of top-K branches
   - `Binders@K_native`: count of top-K branches with SP > 0
@@ -84,6 +106,7 @@ For every selected branch:
 - **Universe**: intersection of branches scorable by all compared models
 - **Selection**: each model's scores restricted to that overlap, **reranked within the overlap set**
 - **Rank type**: `rank_overlap`
+- **Base grain**: annual results are first computed at `(planning_year, aq_quarter, ctype, market_round)`
 - **Metrics**:
   - `Branch_SP@K_overlap`
   - `Binders@K_overlap`
@@ -100,6 +123,7 @@ For every selected branch:
 - **Universe**: our current branch universe
 - **Selection**: projected shortlist used by deployment logic
 - **Rank type**: `rank_native` (our universe)
+- **Base grain**: annual results are first computed at `(planning_year, aq_quarter, ctype, market_round)`
 - **Metrics**:
   - `VC@K`: SP captured / total SP in our universe
   - `Abs_SP@K`: SP captured / total DA SP (cross-universe denominator)
@@ -119,6 +143,10 @@ When showing individual branch ranks across models:
 ## Coverage Metrics
 
 Because V4.4 and our models have different universes, coverage must be reported separately from ranking quality.
+
+Coverage for annual comparisons must also be recorded at:
+
+- `(planning_year, aq_quarter, ctype, market_round)`
 
 **For every model**:
 - `Candidate_Branches`: number of branches the model can score
@@ -166,3 +194,22 @@ NB-only models must also be evaluated on the NB task directly:
 - **General models**: primary = `Branch_SP@200_native`, then `Branch_SP@400_native`
 - **NB specialists**: primary = `NB_only_VC@50/100` and `NB_SP@200_native`
 - **Shipping decisions**: primary = deployment metrics, not standalone metrics
+
+## Annual Aggregate Reporting
+
+If a report shows an annual aggregate such as:
+
+- year × ctype
+- year only
+- all-years average
+
+it must explicitly state how it was aggregated from the base grain.
+
+Examples:
+
+- "average of `aq1-3`, `R1` only"
+- "average of `aq1-3` and `R1-3`"
+
+Forbidden:
+
+- presenting an annual result without saying whether rounds were kept separate or pooled

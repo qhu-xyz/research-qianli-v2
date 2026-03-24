@@ -120,6 +120,33 @@ def main():
     elapsed = time.time() - t0
     print(f"\nDone. {total_files} new files, {skipped} months skipped. {elapsed:.0f}s")
 
+    # Write manifest
+    import json
+    from datetime import datetime
+
+    all_parquets = sorted(f.name for f in cache_dir.glob("*.parquet"))
+    dates_on = sorted(set(f.replace("_onpeak.parquet", "") for f in all_parquets if "_onpeak" in f))
+    dates_off = sorted(set(f.replace("_offpeak.parquet", "") for f in all_parquets if "_offpeak" in f))
+    manifest = {
+        "cache_name": "realized_da_daily",
+        "cache_dir": str(cache_dir),
+        "build_timestamp": datetime.now().isoformat(),
+        "source_command": f"python {Path(__file__).name}",
+        "source_api": "MisoApTools.tools.get_da_shadow_by_peaktype",
+        "aggregation": "signed sum(shadow_price) per (constraint_id, trade_date, peak_type)",
+        "schema": {"constraint_id": "Utf8", "signed_sp": "Float64"},
+        "ctypes": ["onpeak", "offpeak"],
+        "onpeak_dates": {"count": len(dates_on), "first": dates_on[0] if dates_on else None, "last": dates_on[-1] if dates_on else None},
+        "offpeak_dates": {"count": len(dates_off), "first": dates_off[0] if dates_off else None, "last": dates_off[-1] if dates_off else None},
+        "total_files": len(all_parquets),
+    }
+    manifest_path = cache_dir / "manifest.json"
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    print(f"Manifest: {manifest_path}")
+    print(f"  onpeak: {manifest['onpeak_dates']}")
+    print(f"  offpeak: {manifest['offpeak_dates']}")
+
 
 if __name__ == "__main__":
     main()

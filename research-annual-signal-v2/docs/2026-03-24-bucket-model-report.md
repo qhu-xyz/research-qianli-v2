@@ -4,6 +4,8 @@
 
 A single unified LambdaRank model trained on ALL branches with 5-tier severity labels and aggressive weighting on dangerous binders.
 
+**Bound feature recipe**: `miso_annual_bucket_features_v1`
+
 | Tier | Condition | Weight | Meaning |
 |------|-----------|--------|---------|
 | 0 | SP = 0 | 1 | Non-binder |
@@ -13,6 +15,43 @@ A single unified LambdaRank model trained on ALL branches with 5-tier severity l
 | 4 | SP > $20K | 20 | Dangerous binder |
 
 **Features** (13): da_rank_value, shadow_price_da, bf (class-specific), count_active_cids, bin_80/90/100/110_cid_max, rt_max, top2_bin_80/90/100/110.
+
+### Bound Feature Recipe: `miso_annual_bucket_features_v1`
+
+This model is only well-defined together with the following feature recipe.
+
+**Universe scope**:
+- full annual branch universe
+- separate training/eval per `class_type` (`onpeak`, `offpeak`)
+
+**Feature columns**:
+- `da_rank_value`
+- `shadow_price_da`
+- `bf` (class-specific alias from `bf_12` or `bfo_12`)
+- `count_active_cids`
+- `bin_80_max`
+- `bin_90_max`
+- `bin_100_max`
+- `bin_110_max`
+- `rt_max`
+- `top2_bin_80`
+- `top2_bin_90`
+- `top2_bin_100`
+- `top2_bin_110`
+
+**Transforms / derivations**:
+- `bf` is aliased from the class-specific BF column
+- `bin_80/90/100/110_max` are aliases of `bin_*_cid_max`
+- `rt_max = max(bin_80_max, bin_90_max, bin_100_max, bin_110_max)`
+- `top2_bin_*` are joined from the cached top2 feature tables
+
+**Fill rules**:
+- `top2_bin_*` nulls are filled with `0.0`
+- all features are loaded from cached class-specific tables and must remain ex-ante valid
+
+**Current round behavior**:
+- v1 is round-insensitive because current cached annual model tables are built from `market_round=1`
+- a future `miso_annual_bucket_features_v2` should represent the round-aware version
 
 **Training**: Class-specific tables from `build_class_model_table`, 2018-2025 expanding window, all branches (not just dormant).
 
@@ -108,6 +147,8 @@ Bucket_6_20 beats V4.4 on total SP in all 16 cells. However:
 2. **V4.4 numbers are conservative**: V4.4 picks outside our universe (~5-10 per quarter) get zero credit because we can't resolve their GT. V4.4's true native SP could be slightly higher. Label coverage should be reported per cell.
 
 3. **No deployment-style evaluation yet** (R30/R50 reserved slots, production shortlist logic).
+
+4. **Feature recipe is now explicitly bound**: future comparisons and promotions should refer to `miso_annual_bucket_features_v1`, not just the informal column list.
 
 **Next steps to confirm**:
 - Run v0c + Bucket_6_20 + V4.4 in one comparison script

@@ -29,20 +29,18 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 - Full pipeline: build branch model table → score → map back to SPICE CIDs → publish parquets
 - See `docs/v7.0b-release-report.md` for comparison results
 
-### NB-hist-12 Model: Opt3 Unified + Top-tail (2026-03-24) — CURRENT
+### Bucket_6_20: Danger-Aware Unified Model (2026-03-24) — CURRENT
 
-**Problem**: v0c is structurally blind to dormant branches. V4.4 catches some but is opaque.
+**Champion: Bucket_6_20** — Single unified LambdaRank model on ALL branches with 5-tier severity labels [0/1/2/3/4] weighted [1/1/2/6/20]. 13 features (history + density + top2_mean), trained on 2018-2025.
 
-**Current best: Opt3** — Single unified LambdaRank model on ALL branches (not just dormant), with tiered weights [1,1,3,10], 13 features (history + density + top2_mean), trained on 2018-2025.
+**Key results** (2022-2025, native standalone):
+- Beats V4.4 on total SP in **all 16 (year × ctype × K) cells** (+$14K to +$270K)
+- At K=200: also wins NB_SP in 5/8 cells (all 2024-2025)
+- At K=400: V4.4 wins NB_SP in 7/8 cells by packing more dormant branches at cost of overall SP
+- Fully reproducible — no V4.4 dependency
 
-**Key results** (2024-2025 eval):
-- Opt3 captures **19-54% more SP** than V4.4 at every K in every (year × ctype)
-- **Overlap-only reranking** (same branches, absolute rank): Opt3 wins 9/12 quarters on top-5 NB avg rank, 2-3x hit rate at K=50/100
-- **Miss taxonomy**: 50% of top-20 NB SP is in "no_history" branches that have density signal — modeling opportunity for top-tail emphasis
-
-**Next step**: Top-tail emphasis experiments (extreme weights, dangerous-NB binary, two-stage). See `docs/2026-03-24-nb-next-step-plan.md`.
-
-**Reports**: `docs/2026-03-23-nb-v3-final-report.md` | `docs/metric-contract.md` | `docs/2026-03-24-nb-next-step-plan.md`
+**Reports**: `docs/2026-03-24-bucket-model-report.md` | `docs/metric-contract.md`
+**Evolution**: v0c → Opt3 → feature ablation → top-tail variants → Bucket_6_20
 
 ## Repo Structure
 
@@ -75,9 +73,10 @@ Multiple rounds of ML models, blends, cross-class features, two-population appro
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/nb_native_comparison.py` | **Native standalone comparison**: v0c vs tiered_top2 vs V4.4, each in own universe |
+| `scripts/nb_bucket_model.py` | **Bucket_6_20 champion**: train + eval + registry save |
+| `scripts/nb_native_comparison.py` | Native standalone comparison (multi-model) |
 | `scripts/nb_v3_ablation.py` | V3 ablation: 9 variants (+2020, labels, features) |
-| `scripts/nb_experiment_v2.py` | V2 baseline experiment (2 per-ctype models) |
+| `scripts/nb_experiment_v2.py` | V2 baseline experiment |
 | `scripts/nb_feature_ablation.py` | Density feature expansion ablation |
 | `scripts/publish_annual_signal.py` | V7.0/V7.0B signal publication |
 | `scripts/archive/` | Historical scripts (V1 NB, phase 3-5, v7 verification) |

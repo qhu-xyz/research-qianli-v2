@@ -1,0 +1,54 @@
+{
+  "model": "bucket_6_20",
+  "class_type": "onpeak",
+  "features": [
+    "da_rank_value",
+    "shadow_price_da",
+    "bf",
+    "count_active_cids",
+    "bin_80_max",
+    "bin_90_max",
+    "bin_100_max",
+    "bin_110_max",
+    "rt_max",
+    "top2_bin_80",
+    "top2_bin_90",
+    "top2_bin_100",
+    "top2_bin_110"
+  ],
+  "bucket_bounds": [
+    0,
+    200,
+    5000,
+    20000
+  ],
+  "bucket_weights": {
+    "0": 1,
+    "1": 1,
+    "2": 2,
+    "3": 6,
+    "4": 20
+  },
+  "lgb_params": {
+    "objective": "lambdarank",
+    "metric": "ndcg",
+    "num_leaves": 15,
+    "learning_rate": 0.05,
+    "min_child_samples": 5,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "num_threads": 4,
+    "verbose": -1
+  },
+  "training_pys": [
+    "2018-06",
+    "2019-06",
+    "2020-06",
+    "2021-06",
+    "2022-06",
+    "2023-06",
+    "2024-06",
+    "2025-06"
+  ],
+  "description": "5-tier danger-aware LambdaRank on all branches. Tier 4 (SP>20K) gets 20x weight."
+}

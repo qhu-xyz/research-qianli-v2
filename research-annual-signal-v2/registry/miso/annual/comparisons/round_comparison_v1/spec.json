@@ -1,0 +1,47 @@
+{
+  "spec_type": "comparison",
+  "comparison_id": "round_comparison_v1",
+  "market": "miso",
+  "product": "annual",
+  "models": [
+    {
+      "model_id": "miso_annual_v0c_formula_v1",
+      "universe_id": "miso_annual_branch_active_v1",
+      "feature_recipe_id": "miso_annual_v0c_features_v1",
+      "rank_direction": "descending",
+      "round_sensitivity": "round_aware",
+      "pipeline": "build_class_model_table (round-aware)"
+    },
+    {
+      "benchmark_id": "miso_annual_v44_published_v1",
+      "universe_id": "miso_annual_v44_published_v1",
+      "signal_path_pattern": "TEST.Signal.MISO.SPICE_ANNUAL_V4.4.R{round}",
+      "rank_direction": "ascending",
+      "round_sensitivity": "round_aware"
+    }
+  ],
+  "eval_pys": [
+    "2024-06",
+    "2025-06"
+  ],
+  "eval_quarters": [
+    "aq1",
+    "aq2",
+    "aq3"
+  ],
+  "eval_ctypes": [
+    "onpeak",
+    "offpeak"
+  ],
+  "eval_rounds": [
+    1,
+    2,
+    3
+  ],
+  "k_levels": [
+    200,
+    400
+  ],
+  "base_grain": "planning_year/aq_quarter/class_type/market_round",
+  "code_commit": "f01e912"
+}

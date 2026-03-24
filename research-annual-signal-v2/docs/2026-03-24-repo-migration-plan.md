@@ -16,6 +16,7 @@ Completed:
 - universe catalog
 - feature recipe bindings for `v0c`, `Bucket_6_20`, and the current NB specialist
 - registry schema contract
+- published output schema contract
 - non-breaking skeleton packages under:
   - `ml/core/`
   - `ml/markets/miso/`
@@ -26,11 +27,12 @@ Implemented but not yet fully normalized into the new registry/release surface:
 
 - round-aware `v0c` vs `V4.4` comparison artifact under `registry/miso/annual/comparisons/round_comparison_v1/`
 - daily DA cache manifest and round-aware cutoff plumbing
+- `7.1b` release manifest and smoke-test artifact
 
 Still pending:
 
 - normalized `spec.json` / `metrics.json` backfill for existing promoted annual entries
-- release manifests for `7.0b` and `7.1b`
+- retrospective release manifest for `7.0b`
 - research/production script split
 - migration of active production code into the new package layout with compatibility shims
 

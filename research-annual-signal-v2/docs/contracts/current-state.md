@@ -60,7 +60,8 @@ Authoritative champion-confirmation loading is still R1-only (`scripts/champion_
 | Round-aware scoring comparison | Partial | `scripts/round_comparison.py` compares `v0c` vs `V4.4` across `R1/R2/R3`; `Bucket_6_20` is not yet re-evaluated round-aware |
 | Publish smoke test | Done | R1/R2/R3 × onpeak/offpeak dry-run, zero missing-SF errors (`releases/miso/annual/7.1b/smoke_test.json`) |
 | Release manifest | Done | `releases/miso/annual/7.1b/manifest.json` |
-| Round comparison registry | Done | `registry/miso/annual/comparisons/round_comparison_v1/` normalized to `spec.json` + `metrics.json` |
+| Round comparison registry | Done | `registry/miso/annual/comparisons/round_comparison_v1/` normalized to `spec.json` + `metrics.json` (504 raw cells, 84 aggregated head-to-head cells) |
+| Published output contract | Done | `docs/contracts/output-schema.md` + `ml/products/annual/output_schema.py` |
 
 ## 5. Registry entries
 
@@ -69,10 +70,10 @@ Authoritative champion-confirmation loading is still R1-only (`scripts/champion_
 | `registry/onpeak/bucket_6_20/` | Bucket_6_20 onpeak | config.json + metrics.json (R1-only) |
 | `registry/offpeak/bucket_6_20/` | Bucket_6_20 offpeak | config.json + metrics.json (R1-only) |
 | `registry/champion_confirmation/` | 3-way comparison | all_results.json + config.json (R1-only) |
-| `registry/miso/annual/comparisons/round_comparison_v1/` | `v0c` vs `V4.4` round-aware comparison | **spec.json + metrics.json** (144 cells at base grain) + analysis.json |
+| `registry/miso/annual/comparisons/round_comparison_v1/` | `v0c` vs `V4.4` round-aware comparison | **spec.json + metrics.json** (504 cells at base grain) + analysis.json |
 | `registry/archive/` | Phase 3-5 combined-ctype | 31 entries (legacy, not production) |
 
-No entry currently has:
+Some legacy entries still do not have:
 - explicit `universe_id`
 - explicit `feature_recipe_id`
 - explicit `market_round` in spec
@@ -95,6 +96,7 @@ No entry currently has:
 - `scripts/archive/` — legacy research scripts, will raise TypeError if run without updating
 - `data/nb_cache/` — stale R1-only model tables, not authoritative
 - Round-aware evaluation results for `Bucket_6_20` — only `v0c` vs `V4.4` has been run across `R1/R2/R3`
+- `7.1b` smoke test after the `constraint_limit` output-schema fix — should be rerun once before final publish freeze
 - PJM annual — no code, no data, no models
 
 ## 8. Promotion rules (not yet enforced)

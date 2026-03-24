@@ -1,0 +1,52 @@
+{
+  "test_date": "2026-03-24",
+  "test_type": "dry_run",
+  "planning_year": "2025-06",
+  "quarters_tested": ["aq1"],
+  "ctypes_tested": ["onpeak", "offpeak"],
+  "rounds_tested": [1, 2, 3],
+  "publish_entrypoint": "scripts/publish_annual_signal.py --py 2025-06 --market-round {R} --aq aq1 --dry-run",
+  "results": [
+    {
+      "round": 1, "ctype": "onpeak",
+      "constraints": 1000, "sf_pnodes": 2427, "sf_constraints": 1000,
+      "branches_in_universe": 2785, "binding": 308, "established": 858, "dormant": 1532, "zero_history": 395,
+      "v61_overlap_pct": 19, "missing_sf_errors": 0, "time_s": 77.8
+    },
+    {
+      "round": 1, "ctype": "offpeak",
+      "constraints": 1000, "sf_pnodes": 2427, "sf_constraints": 1000,
+      "branches_in_universe": 2785, "binding": 273, "established": 751, "dormant": 1639, "zero_history": 395,
+      "v61_overlap_pct": 21, "missing_sf_errors": 0, "time_s": 17.9
+    },
+    {
+      "round": 2, "ctype": "onpeak",
+      "constraints": 1000, "sf_pnodes": 2427, "sf_constraints": 1000,
+      "branches_in_universe": 2849, "binding": 314, "established": 889, "dormant": 1552, "zero_history": 408,
+      "v61_overlap_pct": 20, "missing_sf_errors": 0, "time_s": 80.2
+    },
+    {
+      "round": 2, "ctype": "offpeak",
+      "constraints": 1000, "sf_pnodes": 2427, "sf_constraints": 1000,
+      "branches_in_universe": 2849, "binding": 276, "established": 765, "dormant": 1676, "zero_history": 408,
+      "v61_overlap_pct": 22, "missing_sf_errors": 0, "time_s": 17.2
+    },
+    {
+      "round": 3, "ctype": "onpeak",
+      "constraints": 1000, "sf_pnodes": 2427, "sf_constraints": 1000,
+      "branches_in_universe": 2839, "binding": 315, "established": 867, "dormant": 1573, "zero_history": 399,
+      "v61_overlap_pct": 18, "missing_sf_errors": 0, "time_s": 79.0
+    },
+    {
+      "round": 3, "ctype": "offpeak",
+      "constraints": 1000, "sf_pnodes": 2427, "sf_constraints": 1000,
+      "branches_in_universe": 2839, "binding": 277, "established": 743, "dormant": 1697, "zero_history": 399,
+      "v61_overlap_pct": 19, "missing_sf_errors": 0, "time_s": 17.5
+    }
+  ],
+  "observations": {
+    "universe_differs_by_round": "R1=2785, R2=2849, R3=2839 branches (density/bridge partitions differ)",
+    "all_sf_present": "1000/1000 constraints have SF coverage in all 6 cells",
+    "no_errors": "all 6 cells completed successfully"
+  }
+}

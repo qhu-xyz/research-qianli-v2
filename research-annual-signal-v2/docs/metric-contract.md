@@ -1,4 +1,4 @@
-# Metric Contract: Cross-Model Comparison (2026-03-23)
+# Metric Contract: Cross-Model Comparison (2026-03-24, revised)
 
 ## Purpose
 
@@ -7,6 +7,22 @@ This metric suite answers three different questions without conflating them:
 1. **Which model captures the most real realized DA SP if used standalone?** (Native Standalone View)
 2. **Which model is best at finding NB-hist-12 branches?** (NB-Specialist View)
 3. **How much of the observed difference is ranking quality vs universe coverage?** (Coverage + Overlap Views)
+
+## CRITICAL: Rank Type Naming
+
+Two types of rank exist. They are NOT interchangeable. Every table, report, and code comment MUST specify which one is being used.
+
+| Name | Definition | Use for |
+|------|-----------|---------|
+| **`rank_native`** | Model's rank of this branch within its **own full universe**. Bucket_6_20: out of ~2,700. V4.4: out of ~1,200. These are the ranks that determine top-K selection in production. | Deployment decisions, top-K hit rates, "does this branch get selected?" |
+| **`rank_overlap`** | Model's rank of this branch after **reranking on the shared overlap set only** (branches both models can score). Smaller denominator. | Pure ranking quality comparison, controlling for universe size. Diagnostic only — does NOT reflect deployment behavior. |
+
+**Forbidden**: Presenting `rank_overlap` numbers as if they are `rank_native`. Presenting `rank_native` from different-sized universes as directly comparable without noting the universe sizes.
+
+**Example of the confusion this prevents**:
+- MNTCELO 2025 onpeak: `rank_native` Bucket_6_20 = 874/2705, V4.4 = 377/1483
+- MNTCELO 2025 onpeak: `rank_overlap` Bucket_6_20 = 236/811, V4.4 = 145/811
+- Both are "absolute rank" but they answer different questions
 
 ## Evaluation Unit
 
@@ -26,8 +42,8 @@ For every selected branch:
 
 | Tag | Examples | Notes |
 |-----|---------|-------|
-| `general_ranker` | v0c, V4.4 standalone | Full branch ranking |
-| `nb_specialist` | NB-hist-12 ML models | Trained on dormant only |
+| `general_ranker` | v0c, Bucket_6_20, V4.4 standalone | Full branch ranking |
+| `nb_specialist` | NB-hist-12-only models | Trained on dormant only |
 | `deployment_combo` | R30_nb, R50_nb | v0c + reserved NB slots |
 
 ## Mandatory Metric Views
@@ -36,34 +52,40 @@ For every selected branch:
 
 **Question**: If I take this model's own top-K from its own universe, how much real value do I capture?
 
-- **Universe**: model's native candidate set (our density universe for v0c/ML, V4.4's own universe for V4.4)
+- **Universe**: model's native candidate set (our density universe for Bucket_6_20, V4.4's own universe for V4.4)
 - **Selection**: model's native top-K
+- **Rank type**: `rank_native`
 - **Metrics**:
   - `Branch_SP@K_native`: total realized SP of top-K branches
   - `Binders@K_native`: count of top-K branches with SP > 0
   - `Precision@K_native`: Binders / K
   - `NB_SP@K_native`: realized SP from NB-hist-12 branches in top-K
   - `NB_Binders@K_native`: count of NB binders in top-K
-  - `Label_Coverage@K_native`: fraction of top-K branches with GT labels (SP resolved vs unlabeled)
+  - `Label_Coverage@K_native`: fraction of top-K branches with GT labels
 
 ### B. Overlap-Only View
 
 **Question**: Where both models can score the same branches, whose ranking is better?
 
 - **Universe**: intersection of branches scorable by all compared models
-- **Selection**: each model's scores restricted to that overlap
+- **Selection**: each model's scores restricted to that overlap, **reranked within the overlap set**
+- **Rank type**: `rank_overlap`
 - **Metrics**:
   - `Branch_SP@K_overlap`
   - `Binders@K_overlap`
   - `NB_SP@K_overlap`
   - `NB_Binders@K_overlap`
+  - `avg_rank_overlap` of top-N binders (reranked on shared set)
+
+**Important**: `rank_overlap` numbers are smaller than `rank_native` because the denominator is smaller. Do NOT compare `rank_overlap` against `rank_native` from a different table.
 
 ### C. Deployment View
 
 **Question**: How does the model behave inside our actual production shortlist setup?
 
 - **Universe**: our current branch universe
-- **Selection**: projected shortlist used by deployment logic (e.g., R30 reserved slots)
+- **Selection**: projected shortlist used by deployment logic
+- **Rank type**: `rank_native` (our universe)
 - **Metrics**:
   - `VC@K`: SP captured / total SP in our universe
   - `Abs_SP@K`: SP captured / total DA SP (cross-universe denominator)
@@ -72,20 +94,25 @@ For every selected branch:
   - `NB_Binders@K`
   - `Fill_Rate@K`: if reserved-slot/backfill logic applies
 
+## Case Study Tables
+
+When showing individual branch ranks across models:
+- **Always state the rank type** in the table header
+- **Always include the denominator** (e.g., `874/2705` not just `874`)
+- If comparing `rank_native` across models with different universe sizes, note this explicitly
+- Never present `rank_overlap` results as contradicting `rank_native` results — they measure different things
+
 ## Coverage Metrics
 
 Because V4.4 and our models have different universes, coverage must be reported separately from ranking quality.
 
 **For every model**:
 - `Candidate_Branches`: number of branches the model can score
-- `Candidate_Label_Coverage`: fraction of candidate branches with GT labels
-- `Universe_SP_Coverage`: total realized DA SP on labeled candidate branches / total DA SP in slice
-- `Universe_NB_SP_Coverage`: same restricted to NB-hist-12 branches
+- `Universe_SP_Coverage`: total realized DA SP on candidate branches / total DA SP in slice
 
 **For V4.4 specifically**:
-- `Outside_Our_Universe_Count`: V4.4 branches not in our density universe
-- `Outside_Our_Universe_SP`: realized SP from those branches
-- `Outside_Our_Universe_NB_SP`: NB SP from those branches
+- `Outside_Our_Universe_Count`
+- `Outside_Our_Universe_SP`
 
 ## NB-Specialist Contract
 
@@ -108,32 +135,17 @@ NB-only models must also be evaluated on the NB task directly:
 - Compare branch models to constraint models without branch collapse
 - Report only projected-to-our-universe results as if they were native standalone results
 - Use NDCG as primary cross-model metric when shortlist logic is not pure score order
+- **Present `rank_overlap` as `rank_native` or vice versa**
+- **Compare absolute rank numbers across different-sized universes without noting the sizes**
 
 ## Interpretation Rules
 
 | View | Answers |
 |------|---------|
-| Native Standalone | Real-world selector quality |
-| Overlap-Only | Pure ranking quality (controls for universe) |
+| Native Standalone | Real-world selector quality — "what does this model actually capture?" |
+| Overlap-Only | Pure ranking quality diagnostic — "on the same branches, who ranks better?" |
 | Coverage Metrics | Universe mismatch explanation |
 | Deployment | Shipping usefulness |
-| NB-specialist can lose on overall SP and still win the NB task |
-
-## Minimum Report Table Set
-
-Every comparison report must contain:
-
-### Table 1: Standalone Native Top-K
-`model, Branch_SP@200_native, Binders@200, NB_SP@200, NB_Binders@200, Label_Coverage@200`
-
-### Table 2: Coverage
-`model, Candidate_Branches, Universe_SP_Coverage, Universe_NB_SP_Coverage, Outside_Our_Universe_SP (V4.4)`
-
-### Table 3: NB-Only
-`model, NB_only_VC@50, NB_only_Recall@50, NB_only_VC@100, NB_only_Recall@100`
-
-### Table 4: Deployment
-`config, VC@200, Abs_SP@200, NB_SP@200, VC@400, Abs_SP@400, NB_SP@400`
 
 ## Decision Rule
 

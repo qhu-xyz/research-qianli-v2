@@ -82,6 +82,14 @@ History dominates (81%), density contributes modestly (15%). The model succeeds 
 | Top-tail variants | A_extreme, B_dang, C_log1p | Heavier NB emphasis | B_dang best NB but costs SP |
 | **Bucket_6_20** | **Danger-aware buckets** | **5-tier [1,1,2,6,20] on all branches** | **Best SP + improved NB** |
 
+## Rank Type Clarification
+
+All SP capture tables in this report use **`rank_native`** — each model's rank within its own full universe. Bucket_6_20 ranks out of ~2,700 branches, V4.4 out of ~1,200. These are the ranks that determine production top-K selection.
+
+Earlier overlap-only analyses (reranking both models on the same shared branch set) showed Bucket_6_20 winning on `rank_overlap`. Those results are valid as a ranking-quality diagnostic but use a different denominator and should not be compared against the `rank_native` numbers in this report.
+
+See `docs/metric-contract.md` for the full naming convention.
+
 ## Limitations
 
 1. **V4.4 wins NB_SP at K=400** in most years — it packs 20+ dormant branches into top-400 by sacrificing overall SP.

@@ -59,8 +59,9 @@ def load_raw_density(planning_year: str, aq_quarter: str, market_round: int) -> 
             f"/auction_month={planning_year}/market_month={mm}/market_round={market_round}/"
         )
         if not Path(path).exists():
-            logger.warning("Density partition missing: %s", path)
-            continue
+            raise FileNotFoundError(
+                f"Density partition missing for {planning_year}/{aq_quarter}/R{market_round}/{mm}: {path}"
+            )
         df = pl.read_parquet(path)
         frames.append(df)
 
@@ -121,7 +122,9 @@ def _load_limits(planning_year: str, aq_quarter: str, market_round: int) -> pl.D
             f"/auction_month={planning_year}/market_month={mm}/market_round={market_round}/"
         )
         if not Path(path).exists():
-            continue
+            raise FileNotFoundError(
+                f"Limit partition missing for {planning_year}/{aq_quarter}/R{market_round}/{mm}: {path}"
+            )
         df = pl.read_parquet(path)
         if "constraint_limit" in df.columns:
             frames.append(df.select(["constraint_id", "constraint_limit"]))

@@ -33,22 +33,11 @@ ROUNDS = [1, 2, 3]
 K_LEVELS = [200, 400]
 
 
-def _minmax(arr):
-    mn, mx = arr.min(), arr.max()
-    return np.full_like(arr, 0.5) if mx == mn else (arr - mn) / (mx - mn)
-
-
-def score_v0c(table):
-    da = table["da_rank_value"].to_numpy().astype(np.float64)
+def score_v0c_from_table(table):
+    """Score v0c from a class-specific model table. Uses production scorer."""
+    from ml.markets.miso.scoring import score_v0c
     bf_col = "bf_12" if table["class_type"][0] == "onpeak" else "bfo_12"
-    bf = table[bf_col].to_numpy().astype(np.float64)
-    rt = np.max(np.column_stack([
-        table["bin_80_cid_max"].to_numpy(),
-        table["bin_90_cid_max"].to_numpy(),
-        table["bin_100_cid_max"].to_numpy(),
-        table["bin_110_cid_max"].to_numpy(),
-    ]), axis=1).astype(np.float64)
-    return 0.40 * (1.0 - _minmax(da)) + 0.30 * _minmax(rt) + 0.30 * _minmax(bf)
+    return score_v0c(table, bf_col)
 
 
 def load_v44(eval_py, aq, ct, market_round):
@@ -102,7 +91,7 @@ def compute_v44_metrics(v44_topk, branches, sp, is_dormant, is_nb, K):
         "K": K, "actual_k": int(mask.sum()), "universe": -1,
         "sp": float(sp[mask].sum()),
         "binders": int((sp[mask] > 0).sum()),
-        "precision": float((sp[mask] > 0).sum() / K) if K > 0 else 0.0,
+        "precision": float((sp[mask] > 0).sum() / K) if K > 0 else 0.0,  # denominator=K not labeled — conservative: unlabeled picks count against V4.4
         "vc": float(sp[mask].sum() / total_sp) if total_sp > 0 else 0.0,
         "recall": float((sp[mask] > 0).sum() / n_bind) if n_bind > 0 else 0.0,
         "nb_in": int((mask & is_dormant).sum()),
@@ -144,7 +133,7 @@ def main():
                 bf_col = "bf_12" if ct == "onpeak" else "bfo_12"
 
                 # Score v0c
-                scores = score_v0c(table)
+                scores = score_v0c_from_table(table)
 
                 print(f"  Built {N} branches in {build_time:.0f}s")
 
@@ -161,7 +150,7 @@ def main():
                     branches = aq_table["branch_name"].to_list()
                     is_dormant = bf == 0
                     is_nb = is_dormant & (sp > 0)
-                    aq_scores = score_v0c(aq_table)
+                    aq_scores = score_v0c_from_table(aq_table)
                     aq_N = len(aq_table)
 
                     # V4.4 for matched round

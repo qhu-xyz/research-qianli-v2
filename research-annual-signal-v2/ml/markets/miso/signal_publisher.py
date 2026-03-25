@@ -394,10 +394,7 @@ def _load_sf(planning_year: str, market_months: list[str], market_round: int) ->
                    f"auction_month={planning_year}/market_month={mm}/market_round={market_round}/*/")
         for pdir in glob.glob(pattern):
             for pf in glob.glob(f"{pdir}*.parquet"):
-                try:
-                    frames.append(pl.read_parquet(pf))
-                except Exception:
-                    continue
+                frames.append(pl.read_parquet(pf))
 
     if not frames:
         raise ValueError(f"No SF data for {planning_year} {market_months}")

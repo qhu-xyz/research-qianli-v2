@@ -125,10 +125,21 @@ def load_month_daily(
     If cutoff_date is provided, only includes days strictly before cutoff_date.
     Aggregates daily signed sums then takes abs — reproduces monthly metric exactly.
 
+    Raises if the daily cache sentinel for this month is missing — prevents
+    silently undercounting history from an incomplete cache.
+
     Returns: (constraint_id, realized_sp) — same schema as load_month().
     """
     assert peak_type in _VALID_PEAK_TYPES
     year, mon = int(month[:4]), int(month[5:7])
+
+    # Check sentinel: fetch_realized_da_daily.py writes .done_{month}_{peak_type}
+    sentinel = DA_DAILY_CACHE_DIR / f".done_{month}_{peak_type}"
+    if not sentinel.exists():
+        raise FileNotFoundError(
+            f"Daily DA cache incomplete for {month}/{peak_type}: "
+            f"sentinel {sentinel} missing. Run fetch_realized_da_daily.py first."
+        )
 
     import calendar
     n_days = calendar.monthrange(year, mon)[1]

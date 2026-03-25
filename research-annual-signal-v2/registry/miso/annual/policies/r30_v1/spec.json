@@ -1,0 +1,22 @@
+{
+  "spec_type": "policy",
+  "policy_id": "miso_annual_r30_v1",
+  "market": "miso",
+  "product": "annual",
+  "class_type": null,
+  "market_round": 1,
+  "primary_model_id": "miso_annual_v0c_formula_v1",
+  "secondary_model_id": "miso_annual_bucket_6_20_v1",
+  "allocation": {
+    "K_200": {
+      "primary": 170,
+      "secondary_dormant": 30
+    },
+    "K_400": {
+      "primary": 350,
+      "secondary_dormant": 50
+    }
+  },
+  "dormant_definition": "class-specific BF_12 == 0",
+  "round_sensitivity": "r1_only"
+}

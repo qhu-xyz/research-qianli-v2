@@ -1,0 +1,39 @@
+{
+  "spec_type": "model",
+  "model_id": "miso_annual_bucket_6_20_v1",
+  "market": "miso",
+  "product": "annual",
+  "class_type": "offpeak",
+  "market_round": 1,
+  "universe_id": "miso_annual_branch_active_v1",
+  "feature_recipe_id": "miso_annual_bucket_features_v1",
+  "label_recipe_id": "miso_annual_bucket_5tier_v1",
+  "objective": "lambdarank_ndcg",
+  "train_window": {
+    "type": "expanding",
+    "train_pys": [
+      "2018-06",
+      "2019-06",
+      "2020-06",
+      "2021-06",
+      "2022-06",
+      "2023-06",
+      "2024-06"
+    ],
+    "eval_pys": [
+      "2025-06"
+    ]
+  },
+  "eval_quarters": [
+    "aq1",
+    "aq2",
+    "aq3"
+  ],
+  "round_sensitivity": "r1_only",
+  "code_commit": "b384703",
+  "cache_provenance": {
+    "density_limits": "data/nb_cache/ (legacy R1-only)",
+    "history": "data/nb_cache/ (legacy R1-only)",
+    "model_tables": "data/nb_cache/ (legacy R1-only)"
+  }
+}

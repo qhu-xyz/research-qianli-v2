@@ -1,0 +1,37 @@
+{
+  "spec_type": "model",
+  "model_id": "miso_annual_v0c_formula_v1",
+  "market": "miso",
+  "product": "annual",
+  "class_type": "onpeak",
+  "market_round": 1,
+  "universe_id": "miso_annual_branch_active_v1",
+  "feature_recipe_id": "miso_annual_v0c_features_v1",
+  "label_recipe_id": null,
+  "objective": "formula",
+  "train_window": {
+    "type": "none",
+    "train_pys": [],
+    "eval_pys": [
+      "2019-06",
+      "2020-06",
+      "2021-06",
+      "2022-06",
+      "2023-06",
+      "2024-06",
+      "2025-06"
+    ]
+  },
+  "eval_quarters": [
+    "aq1",
+    "aq2",
+    "aq3"
+  ],
+  "round_sensitivity": "round_aware",
+  "code_commit": "b384703",
+  "cache_provenance": {
+    "density_limits": "data/collapsed/_r{round}_ via load_collapsed",
+    "history": "data/realized_da/ + /opt/tmp/qianli/realized_da_daily/",
+    "model_tables": "built live via build_class_model_table (not cached)"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "spec_type": "benchmark",
+  "benchmark_id": "miso_annual_v44_published_v1",
+  "market": "miso",
+  "product": "annual",
+  "class_type": "onpeak",
+  "market_round": 1,
+  "universe_id": "miso_annual_v44_published_v1",
+  "signal_path": "TEST.Signal.MISO.SPICE_ANNUAL_V4.4.R{round}",
+  "rank_direction": "ascending",
+  "round_sensitivity": "round_aware",
+  "eval_quarters": [
+    "aq1",
+    "aq2",
+    "aq3"
+  ]
+}

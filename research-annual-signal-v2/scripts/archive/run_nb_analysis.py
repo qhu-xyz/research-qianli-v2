@@ -143,7 +143,7 @@ def main():
     all_needed.discard("2025-06/aq4")
 
     logger.info("Building model tables for %d groups...", len(all_needed))
-    model_table = build_model_table_all(sorted(all_needed))
+    model_table = build_model_table_all(sorted(all_needed), market_round=1)
 
     # 3.1.1: NB populations
     logger.info("=== Phase 3.1.1: NB Population Analysis ===")

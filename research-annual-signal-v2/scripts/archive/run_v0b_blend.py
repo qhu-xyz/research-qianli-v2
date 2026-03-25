@@ -61,7 +61,7 @@ def main():
 
     print("Building model tables...")
     all_groups = DEV_GROUPS + HOLDOUT_GROUPS
-    model_table = build_model_table_all(all_groups)
+    model_table = build_model_table_all(all_groups, market_round=1)
 
     # Score per group (normalization is group-local)
     scored_groups = []

@@ -272,7 +272,7 @@ def main():
             for aq in AQ_QUARTERS:
                 all_needed.add(f"{py}/{aq}")
     all_needed.discard("2025-06/aq4")
-    model_table = build_model_table_all(sorted(all_needed))
+    model_table = build_model_table_all(sorted(all_needed), market_round=1)
 
     # Enrich with Phase 4b features
     logger.info("Enriching with Phase 4b features...")

@@ -65,7 +65,7 @@ def build_all_data(pys, aqs):
     for py in pys:
         for aq in aqs:
             try:
-                table = build_model_table(py, aq)
+                table = build_model_table(py, aq, market_round=1)
             except Exception as e:
                 print(f"  {py}/{aq}: SKIP ({e})")
                 continue

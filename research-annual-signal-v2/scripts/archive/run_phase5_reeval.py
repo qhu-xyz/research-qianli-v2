@@ -223,7 +223,7 @@ def main():
             for aq in AQ_QUARTERS:
                 all_needed.add(f"{py}/{aq}")
     all_needed.discard("2025-06/aq4")
-    mt = build_model_table_all(sorted(all_needed))
+    mt = build_model_table_all(sorted(all_needed), market_round=1)
 
     # Enrich
     enriched_parts = []

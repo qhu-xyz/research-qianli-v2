@@ -391,7 +391,7 @@ def main():
             for aq in AQ_QUARTERS:
                 all_needed.add(f"{py}/{aq}")
     all_needed.discard("2025-06/aq4")
-    model_table = build_model_table_all(sorted(all_needed))
+    model_table = build_model_table_all(sorted(all_needed), market_round=1)
 
     eval_groups = HOLDOUT_GROUPS if args.holdout else DEV_GROUPS
     r50_values = [args.r50] if args.r50 is not None else R_VALUES_50

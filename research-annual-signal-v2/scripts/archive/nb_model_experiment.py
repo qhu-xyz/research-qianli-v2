@@ -74,7 +74,7 @@ def main():
     print("Building model tables and V4.4 features...")
 
     for aq in ["aq1", "aq2", "aq3"]:
-        table = build_model_table(py, aq)
+        table = build_model_table(py, aq, market_round=1)
         v44_data = load_v44_branches(py, aq)
 
         sp = table["realized_shadow_price"].to_numpy().astype(np.float64)

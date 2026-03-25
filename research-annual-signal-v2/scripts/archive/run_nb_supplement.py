@@ -76,7 +76,7 @@ def main():
 
     eval_groups = DEV_GROUPS + HOLDOUT_GROUPS
     logger.info("Building model tables for %d eval groups...", len(eval_groups))
-    model_table = build_model_table_all(eval_groups)
+    model_table = build_model_table_all(eval_groups, market_round=1)
 
     if args.version == "v0c":
         scored = compute_v0c_scores(model_table)
@@ -100,7 +100,7 @@ def main():
                     continue
                 all_groups.append(key)
 
-        full_table = build_model_table_all(all_groups)
+        full_table = build_model_table_all(all_groups, market_round=1)
 
         scored_frames = []
         for eval_key, split_info in EVAL_SPLITS.items():

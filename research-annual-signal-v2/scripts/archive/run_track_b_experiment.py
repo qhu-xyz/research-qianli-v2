@@ -123,7 +123,7 @@ def main():
                 all_needed.add(f"{py}/{aq}")
     all_needed.discard("2025-06/aq4")
 
-    model_table = build_model_table_all(sorted(all_needed))
+    model_table = build_model_table_all(sorted(all_needed), market_round=1)
 
     # Filter to Track B only
     track_b_all = model_table.filter(

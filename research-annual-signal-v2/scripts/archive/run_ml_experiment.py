@@ -188,7 +188,7 @@ def main() -> None:
     t0 = time.time()
     all_groups = collect_all_needed_groups()
     logger.info("Building model tables for %d groups...", len(all_groups))
-    model_table = build_model_table_all(all_groups)
+    model_table = build_model_table_all(all_groups, market_round=1)
     logger.info("Model table built: %d rows, %.1fs", len(model_table), time.time() - t0)
 
     # Verify requested features exist

@@ -16,7 +16,8 @@
   "cutoff_source": "ml/config.py:get_round_close_date (pbase MisoApTools hardcoded dates)",
   "supported_ctypes": ["onpeak", "offpeak"],
   "supported_planning_years": ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06", "2025-06"],
-  "supported_quarters": ["aq1", "aq2", "aq3"],
+  "supported_quarters": ["aq1", "aq2", "aq3", "aq4"],
+  "aq4_note": "aq4 supported for PYs where all 3 settlement months have DA data. 2025-06/aq4 excluded (2026-03 DA not yet available).",
   "tier_sizes": [200, 200, 200, 200, 200],
   "scoring": {
     "method": "v0c formula",
@@ -39,7 +40,7 @@
     "v61_overlap_check": "validate_against_v61 comparison logged"
   },
   "known_exclusions": {
-    "aq4": "incomplete GT as of 2026-03, monitored only",
+    "aq4_2025": "2025-06/aq4 excluded — 2026-03 DA not yet available",
     "data_nb_cache": "NOT used — round-aware path uses build_class_model_table + load_collapsed"
   },
   "code_commit": "628b4b2",

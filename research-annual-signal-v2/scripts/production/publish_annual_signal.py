@@ -149,10 +149,10 @@ def main():
     planning_year = args.py
     market_round = args.market_round
     signal_name = args.signal_name or f"{DEFAULT_SIGNAL_PREFIX}.R{market_round}"
-    SUPPORTED_QUARTERS = ["aq1", "aq2", "aq3"]  # aq4 excluded — incomplete GT
-    quarters = [args.aq] if args.aq else SUPPORTED_QUARTERS
-    if args.aq and args.aq not in SUPPORTED_QUARTERS:
-        raise ValueError(f"Quarter {args.aq} is not supported for 7.1b. Supported: {SUPPORTED_QUARTERS}")
+    # aq4 is supported for all PYs except those with incomplete GT.
+    # GT requires realized DA for all 3 settlement months in the quarter.
+    # aq4 settlement = Mar/Apr/May of PY+1. If any month is missing, skip aq4.
+    quarters = [args.aq] if args.aq else AQ_QUARTERS
     class_types = [args.class_type] if args.class_type else CLASS_TYPES
     tier_sizes = [int(x) for x in args.tier_sizes.split(",")] if args.tier_sizes else DEFAULT_TIER_SIZES
 

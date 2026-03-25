@@ -12,3 +12,43 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 DA_CACHE_DIR = PROJECT_ROOT / "data" / "realized_da"
 COLLAPSED_CACHE_DIR = PROJECT_ROOT / "data" / "collapsed"
 REGISTRY_DIR = PROJECT_ROOT / "registry"
+
+# ─── Planning years & quarters ────────────────────────────────────────
+PLANNING_YEARS: list[str] = [
+    "2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06", "2025-06",
+]
+AQ_QUARTERS: list[str] = ["aq1", "aq2", "aq3", "aq4"]
+
+# ─── BF ───────────────────────────────────────────────────────────────
+BF_FLOOR_MONTH: str = "2016-04"
+BF_WINDOWS_ONPEAK: list[int] = [6, 12, 15]
+BF_WINDOWS_OFFPEAK: list[int] = [6, 12]
+BF_WINDOWS_COMBINED: list[int] = [6, 12]
+
+# ─── Class types ──────────────────────────────────────────────────────
+CLASS_TYPES: list[str] = ["onpeak", "offpeak"]
+CLASS_BF_COL: dict[str, str] = {"onpeak": "bf_12", "offpeak": "bfo_12"}
+CLASS_TARGET_COL: dict[str, str] = {"onpeak": "onpeak_sp", "offpeak": "offpeak_sp"}
+CLASS_NB_FLAG_COL: dict[str, str] = {"onpeak": "nb_onpeak_12", "offpeak": "nb_offpeak_12"}
+CROSS_CLASS_BF_COL: dict[str, str] = {"onpeak": "bfo_12", "offpeak": "bf_12"}
+
+
+def get_market_months(planning_year: str, aq_quarter: str) -> list[str]:
+    """Derive 3 market months from (PY, quarter)."""
+    py_year = int(planning_year[:4])
+    py_month = int(planning_year[5:7])  # always 6
+    offsets = {"aq1": [0, 1, 2], "aq2": [3, 4, 5], "aq3": [6, 7, 8], "aq4": [9, 10, 11]}
+    assert aq_quarter in offsets, f"Invalid quarter: {aq_quarter}"
+    months = []
+    for offset in offsets[aq_quarter]:
+        total_month = py_month + offset
+        year = py_year + (total_month - 1) // 12
+        month = ((total_month - 1) % 12) + 1
+        months.append(f"{year:04d}-{month:02d}")
+    return months
+
+
+def get_bf_cutoff_month(planning_year: str) -> str:
+    """Legacy BF cutoff = March of submission year. Use get_history_cutoff_month instead."""
+    py_year = int(planning_year[:4])
+    return f"{py_year}-03"

@@ -13,8 +13,8 @@ from datetime import date
 
 import polars as pl
 
-from ml.config import (
-    get_history_cutoff_month,
+from ml.core.calendars import get_history_cutoff_month
+from ml.markets.miso.config import (
     BF_FLOOR_MONTH, BF_WINDOWS_ONPEAK, BF_WINDOWS_OFFPEAK, BF_WINDOWS_COMBINED,
 )
 from ml.markets.miso.bridge import (
@@ -225,7 +225,7 @@ def compute_history_features(
       - hist_df: one row per universe branch with 8 features + has_hist_da
       - monthly_binding_table: full monthly table (needed by nb_detection)
     """
-    from ml.config import get_history_cutoff_date
+    from ml.core.calendars import get_history_cutoff_date
     cutoff_month_full = get_history_cutoff_month(eval_py, market_round=market_round)
     cutoff_date = get_history_cutoff_date(eval_py, market_round=market_round)
 

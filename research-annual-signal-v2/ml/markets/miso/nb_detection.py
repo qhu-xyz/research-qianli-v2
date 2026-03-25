@@ -9,7 +9,8 @@ import logging
 
 import polars as pl
 
-from ml.config import get_history_cutoff_month, BF_FLOOR_MONTH
+from ml.core.calendars import get_history_cutoff_month
+from ml.markets.miso.config import BF_FLOOR_MONTH
 from ml.markets.miso.history_features import _generate_month_range
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ def compute_nb_flags(
 
     # Calendar months for NB windows include the partial cutoff month.
     # A branch binding on April 10 should be non-NB for R2 (cutoff April 21).
-    from ml.config import get_history_cutoff_date
+    from ml.core.calendars import get_history_cutoff_date
     cutoff_month = get_history_cutoff_month(planning_year, market_round=market_round)
     cutoff_date = get_history_cutoff_date(planning_year, market_round=market_round)
     cutoff_date_month = f"{cutoff_date.year}-{cutoff_date.month:02d}"

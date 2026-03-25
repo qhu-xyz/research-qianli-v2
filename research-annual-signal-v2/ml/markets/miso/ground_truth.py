@@ -10,7 +10,7 @@ import logging
 
 import polars as pl
 
-from ml.config import get_market_months
+from ml.markets.miso.config import get_market_months
 from ml.markets.miso.bridge import map_cids_to_branches, map_cids_to_branches_with_supplement
 from ml.markets.miso.realized_da import load_quarter_per_ctype
 

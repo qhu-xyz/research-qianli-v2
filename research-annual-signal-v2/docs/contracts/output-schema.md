@@ -83,12 +83,30 @@ If any of these are missing, publish must fail.
 
 The published annual SF parquet must:
 
-- contain `pnode_id` as the first identifier column
+- use `pnode_id` as the row identifier in the same style as `TEST.Signal.MISO.DA_ANNUAL_2YR.V3.R1`
+- preserve real SPICE/DA node ids such as `AEC`, `AECI.ALTW`, etc. as the node key
+- not expose a positional `RangeIndex` (`0,1,2,...`) as the effective node index
+- serialize `pnode_id` as the parquet row index (`pandas` metadata `index_columns = ["pnode_id"]`)
+- not duplicate `pnode_id` as a regular data column when writing the parquet
 - contain one column per published constraint
 - use the pipe key format:
   - `{constraint_id}|{shadow_sign}|spice`
 
 Every published constraint must have a corresponding SF column.
+
+### Verified presentation vs DA annual reference
+
+Verified against:
+
+- `/opt/data/xyz-dataset/signal_data/miso/sf/TEST.Signal.MISO.DA_ANNUAL_2YR.V3.R1/2025-06/aq1/onpeak/7102553ce81044558697ca1faa196d25-0.parquet`
+
+The reference parquet presents SF as:
+
+- pandas/parquet row index named `pnode_id`
+- no standalone `pnode_id` data column after `pd.read_parquet(...)`
+- string node ids in the index, e.g. `AECI`, `AECI.ALTW`, `AECI.AMMO`
+
+Annual SPICE publication must preserve that row-key presentation.
 
 If any published constraint is missing SF coverage, publish must fail.
 
@@ -108,6 +126,7 @@ Examples of schema drift that require a contract update:
 - adding or removing a published column
 - renaming a column
 - changing nullability requirements
+- changing SF row-key representation (`pnode_id` index vs positional index)
 - changing the SF column-key format
 
 ---
@@ -119,6 +138,7 @@ The publish path must validate:
 - all required columns present
 - required non-null columns contain no nulls
 - every published constraint has SF coverage
+- SF row identifiers are real `pnode_id` values, not positional integers
 - output ordering matches the contract
 
 These checks must happen before writing the final output.

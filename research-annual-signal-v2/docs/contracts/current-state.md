@@ -59,7 +59,7 @@ Authoritative champion-confirmation loading is still R1-only (`scripts/champion_
 | Benchmark loading R2/R3 | Partial | `champion_confirmation.py` is still R1-only, but `scripts/round_comparison.py` loads matched `V4.4.R1/R2/R3` |
 | Round-aware scoring comparison | Partial | `scripts/round_comparison.py` compares `v0c` vs `V4.4` across `R1/R2/R3`; `Bucket_6_20` is not yet re-evaluated round-aware |
 | Publish smoke test | Done | R1/R2/R3 × onpeak/offpeak dry-run, zero missing-SF errors (`releases/miso/annual/7.1b/smoke_test.json`) |
-| Release manifest | Done | `releases/miso/annual/7.1b/manifest.json` — `aq4` supported for prior PYs; `2025-06/aq4` excluded pending `2026-03` DA |
+| Release manifest | Done | `releases/miso/annual/7.1b/manifest.json` — `aq4` publishable for all PYs; `2025-06/aq4` evaluable=no (GT needs 2026-03/04/05 DA) |
 | Round comparison registry | Done | `registry/miso/annual/comparisons/round_comparison_v1/` normalized to `spec.json` + `metrics.json` (504 raw cells, 84 aggregated head-to-head cells) |
 | Published output contract | Done | `docs/contracts/output-schema.md` + `ml/products/annual/output_schema.py` |
 
@@ -91,17 +91,31 @@ Some legacy entries still do not have:
 
 `data/nb_cache/` is the stale artifact. It was built by the old pipeline with `market_round=1` implicitly. The round-aware on-disk caches are written by `load_collapsed()` and `_cid_mapping_cache_path()` in `ml/data_loader.py`, which include `_r{round}_` in the filename. `build_class_model_table` consumes these round-aware loaders but does not write its own cache. Scripts that use `data/nb_cache/` (champion_confirmation, nb_bucket_model) read from the old cache directly and are therefore R1-only.
 
-## 7. What is NOT frozen
+## 7. Publishability vs evaluability
+
+The 7.1b publication path (`build_class_publish_table`) uses only ex-ante features:
+- Auction-side density/limits/bridge data
+- Pre-close DA history (through round cutoff date)
+- Class-specific shadow_price_da / da_rank_value from monthly binding
+
+It does NOT call `build_ground_truth()` or `compute_nb_flags()`. GT and NB are evaluation-only dependencies.
+
+| Cell | Publishable | Evaluable | Notes |
+|------|-------------|-----------|-------|
+| 2019-06 through 2024-06, all aq/ct/round | Yes | Yes | Full DA available |
+| 2025-06/aq1-aq3 | Yes | Yes | Settlement months 2025-06 through 2026-02; monthly cache complete |
+| 2025-06/aq4 | Yes | No | Settlement months 2026-03/04/05 DA not yet available |
+
+## 8. What is NOT frozen
 
 - `scripts/archive/` — legacy research scripts, will raise TypeError if run without updating
 - `data/nb_cache/` — stale R1-only model tables, not authoritative
 - Round-aware evaluation results for `Bucket_6_20` — only `v0c` vs `V4.4` has been run across `R1/R2/R3`
 - `7.1b` smoke test after the `constraint_limit` output-schema fix — should be rerun once before final publish freeze
-- `7.1b` on NFS is currently only published for `2025-06`
-- `7.1b` `2025-06/aq4` remains blocked by missing `2026-03` DA cache; older `aq4` is available in prior releases/benchmark artifacts
+- `7.1b` published coverage and this doc may drift; verify against on-disk signal paths before making release claims. Current NFS coverage is broader than `2025-06` only.
 - PJM annual — no code, no data, no models
 
-## 8. Promotion rules (not yet enforced)
+## 9. Promotion rules (not yet enforced)
 
 No model may be promoted to champion or attached to a release without:
 - bound `universe_id`

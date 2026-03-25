@@ -17,7 +17,7 @@
   "supported_ctypes": ["onpeak", "offpeak"],
   "supported_planning_years": ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06", "2025-06"],
   "supported_quarters": ["aq1", "aq2", "aq3", "aq4"],
-  "aq4_note": "aq4 supported for PYs where all 3 settlement months have DA data. 2025-06/aq4 excluded (2026-03 DA not yet available).",
+  "aq4_note": "aq4 supported for all PYs. Publication requires only ex-ante features (auction-side + pre-close history). Evaluation requires realized DA for all 3 settlement months.",
   "tier_sizes": [200, 200, 200, 200, 200],
   "scoring": {
     "method": "v0c formula",
@@ -37,11 +37,20 @@
     "no_missing_sf": "signal_publisher.py raises ValueError if any published constraint lacks SF",
     "no_duplicate_cids": "dedup in grouped walk-and-fill",
     "branch_cap_enforced": true,
-    "v61_overlap_check": "validate_against_v61 comparison logged"
+    "v61_overlap_check": "validate_against_v61 comparison logged",
+    "sf_node_key_format": "SF rows must use canonical pnode_id keys in the same style as TEST.Signal.MISO.DA_ANNUAL_2YR.V3.R1; parquet row index must be pnode_id and positional integer row indices are invalid"
   },
+  "publishability": {
+    "2025-06/aq4": {
+      "publishable": true,
+      "evaluable": false,
+      "reason": "Scoring is ex-ante (pre-close history through Apr/May 2025). GT requires 2026-03/04/05 DA which is not yet available."
+    }
+  },
+  "publish_path": "build_class_publish_table (ex-ante only, no GT or NB dependency)",
+  "sf_row_contract": "Rows keyed by parquet index pnode_id (DA-style node ids), not by positional RangeIndex and not duplicated as a standalone pnode_id column",
   "known_exclusions": {
-    "aq4_2025": "2025-06/aq4 excluded — 2026-03 DA not yet available",
-    "data_nb_cache": "NOT used — round-aware path uses build_class_model_table + load_collapsed"
+    "data_nb_cache": "NOT used — round-aware path uses build_class_publish_table + load_collapsed"
   },
   "code_commit": "628b4b2",
   "publish_entrypoint": "scripts/publish_annual_signal.py --py {PY} --market-round {R}",

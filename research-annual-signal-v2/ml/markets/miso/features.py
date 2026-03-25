@@ -305,6 +305,81 @@ def _recompute_class_tiers(table: pl.DataFrame) -> pl.DataFrame:
     return table.with_columns(pl.Series("label_tier", tiers))
 
 
+def build_class_publish_table(
+    planning_year: str,
+    aq_quarter: str,
+    class_type: str,
+    market_round: int,
+) -> pl.DataFrame:
+    """Build a publish-only model table — ex-ante features only, no GT or NB.
+
+    Used for publication when settlement data is not yet available (or not needed).
+    Contains all columns needed for v0c scoring + publish metadata.
+
+    Returns branch-level DataFrame with density features, history features,
+    and class-specific shadow_price_da / da_rank_value.
+    """
+    # Step 1: Branch universe (density + limits + metadata features)
+    collapsed = load_collapsed(planning_year, aq_quarter, market_round=market_round)
+    branches = collapsed["branch_name"].to_list()
+
+    # Step 2: History features (BF + da_rank + monthly_binding)
+    hist_df, monthly_binding = compute_history_features(
+        eval_py=planning_year,
+        aq_quarter=aq_quarter,
+        universe_branches=branches,
+        market_round=market_round,
+    )
+
+    # Assemble: collapsed + history
+    table = collapsed.join(hist_df, on="branch_name", how="left")
+
+    # Fill BF nulls
+    bf_cols = [
+        "bf_6", "bf_12", "bf_15", "bf_24", "bfo_6", "bfo_12", "bfo_24",
+        "bf_combined_6", "bf_combined_12", "bf_combined_24",
+    ]
+    for col in bf_cols:
+        if col in table.columns:
+            table = table.with_columns(pl.col(col).fill_null(0.0))
+
+    if "da_rank_value" in table.columns:
+        n_positive_hist = int(table.filter(
+            pl.col("has_hist_da").fill_null(False)
+        ).height)
+        sentinel = float(n_positive_hist + 1) if n_positive_hist > 0 else 1.0
+        table = table.with_columns(pl.col("da_rank_value").fill_null(sentinel))
+
+    if "has_hist_da" in table.columns:
+        table = table.with_columns(pl.col("has_hist_da").fill_null(False))
+
+    # Class-specific shadow_price_da + da_rank_value
+    sp_col = "onpeak_sp" if class_type == "onpeak" else "offpeak_sp"
+    class_spda = _compute_class_shadow_price_da(monthly_binding, branches, sp_col)
+    table = table.drop(["shadow_price_da", "da_rank_value"])
+    table = table.join(class_spda, on="branch_name", how="left")
+    table = table.with_columns(
+        pl.col("shadow_price_da").fill_null(0.0),
+        pl.col("da_rank_value").fill_null(float(len(branches) + 1)),
+    )
+
+    # Metadata columns
+    table = table.with_columns(
+        pl.lit(planning_year).alias("planning_year"),
+        pl.lit(aq_quarter).alias("aq_quarter"),
+        pl.lit(class_type).alias("class_type"),
+    )
+
+    assert table["branch_name"].n_unique() == len(table), "Duplicate branch_names"
+
+    logger.info(
+        "Publish table %s/%s/%s/R%d: %d branches (ex-ante, no GT/NB)",
+        planning_year, aq_quarter, class_type, market_round, len(table),
+    )
+
+    return table
+
+
 def build_class_model_table_all(
     groups: list[str],
     class_type: str,

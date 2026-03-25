@@ -123,8 +123,9 @@ def save_signal(
     cstr_out = constraints_df.set_index("__index_level_0__")
     cstr_out.to_parquet(f"{cstr_dir}/signal.parquet")
 
-    # SF: set pnode_id as index-like (V6.1 uses pnode_id as last column, not index)
-    sf_df.to_parquet(f"{sf_dir}/signal.parquet", index=False)
+    # SF: pnode_id must be the index (matching DA_ANNUAL_2YR.V3.R1 format)
+    sf_out = sf_df.set_index("pnode_id")
+    sf_out.to_parquet(f"{sf_dir}/signal.parquet")
 
     logger.info("Saved: %s (%d constraints, %s SF)", cstr_dir, len(cstr_out), sf_df.shape)
 
@@ -149,9 +150,9 @@ def main():
     planning_year = args.py
     market_round = args.market_round
     signal_name = args.signal_name or f"{DEFAULT_SIGNAL_PREFIX}.R{market_round}"
-    # aq4 is supported for all PYs except those with incomplete GT.
-    # GT requires realized DA for all 3 settlement months in the quarter.
-    # aq4 settlement = Mar/Apr/May of PY+1. If any month is missing, skip aq4.
+    # aq4 is publishable for all PYs — the publish path (build_class_publish_table)
+    # uses only ex-ante features and does not require GT.
+    # Evaluation (not publication) requires realized DA for settlement months.
     quarters = [args.aq] if args.aq else AQ_QUARTERS
     class_types = [args.class_type] if args.class_type else CLASS_TYPES
     tier_sizes = [int(x) for x in args.tier_sizes.split(",")] if args.tier_sizes else DEFAULT_TIER_SIZES

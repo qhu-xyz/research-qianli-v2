@@ -15,7 +15,7 @@ import polars as pl
 
 from ml.markets.miso.config import get_market_months
 from ml.markets.miso.data_loader import load_cid_mapping, load_constraint_limits
-from ml.markets.miso.features import build_class_model_table
+from ml.markets.miso.features import build_class_publish_table
 from ml.markets.miso.scoring import score_v0c
 from ml.products.annual.output_schema import (
     CONSTRAINT_INDEX_COLUMN,
@@ -44,7 +44,7 @@ def publish_signal(
 
     # ── Step 1: Score branches ────────────────────────────────────────
     logger.info("Step 1: Scoring %s/%s/%s", planning_year, aq_quarter, class_type)
-    model_table = build_class_model_table(planning_year, aq_quarter, class_type, market_round=market_round)
+    model_table = build_class_publish_table(planning_year, aq_quarter, class_type, market_round=market_round)
     scores = score_v0c(model_table, bf_col)
     model_table = model_table.with_columns(pl.Series("v0c_score", scores))
 

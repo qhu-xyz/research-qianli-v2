@@ -20,10 +20,12 @@ Completed:
 - `7.1b` manifest
 - `R1/R2/R3 × onpeak/offpeak` publish smoke test
 - publish hard-fails on missing SF
+- explicit published output contract
 
 Open:
 
 - small artifact metadata cleanup
+- rerun the publish smoke test once after the `constraint_limit` schema fix
 - final go / no-go publish decision
 
 ### Repo reorganization track
@@ -96,6 +98,7 @@ Open:
 - [spec.json](/home/xyz/workspace/research-qianli-v2/research-annual-signal-v2/registry/miso/annual/comparisons/round_comparison_v1/spec.json)
 - [metrics.json](/home/xyz/workspace/research-qianli-v2/research-annual-signal-v2/registry/miso/annual/comparisons/round_comparison_v1/metrics.json)
 - [analysis.json](/home/xyz/workspace/research-qianli-v2/research-annual-signal-v2/registry/miso/annual/comparisons/round_comparison_v1/analysis.json)
+- [output-schema.md](/home/xyz/workspace/research-qianli-v2/research-annual-signal-v2/docs/contracts/output-schema.md)
 
 ### 3.3 Repo-organization groundwork
 
@@ -153,6 +156,7 @@ Meaning:
 ### 5.2 Actual open gaps
 
 - stale wording in some comparison-analysis outputs
+- rerun the publish smoke test after the `constraint_limit` schema fix
 - registry backfill for older promoted annual entries
 - script surface still mixes production and research
 - active production code still lives in flat `ml/`

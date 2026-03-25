@@ -59,7 +59,7 @@ Authoritative champion-confirmation loading is still R1-only (`scripts/champion_
 | Benchmark loading R2/R3 | Partial | `champion_confirmation.py` is still R1-only, but `scripts/round_comparison.py` loads matched `V4.4.R1/R2/R3` |
 | Round-aware scoring comparison | Partial | `scripts/round_comparison.py` compares `v0c` vs `V4.4` across `R1/R2/R3`; `Bucket_6_20` is not yet re-evaluated round-aware |
 | Publish smoke test | Done | R1/R2/R3 × onpeak/offpeak dry-run, zero missing-SF errors (`releases/miso/annual/7.1b/smoke_test.json`) |
-| Release manifest | Done | `releases/miso/annual/7.1b/manifest.json` |
+| Release manifest | Done | `releases/miso/annual/7.1b/manifest.json` — `aq4` supported for prior PYs; `2025-06/aq4` excluded pending `2026-03` DA |
 | Round comparison registry | Done | `registry/miso/annual/comparisons/round_comparison_v1/` normalized to `spec.json` + `metrics.json` (504 raw cells, 84 aggregated head-to-head cells) |
 | Published output contract | Done | `docs/contracts/output-schema.md` + `ml/products/annual/output_schema.py` |
 
@@ -97,6 +97,8 @@ Some legacy entries still do not have:
 - `data/nb_cache/` — stale R1-only model tables, not authoritative
 - Round-aware evaluation results for `Bucket_6_20` — only `v0c` vs `V4.4` has been run across `R1/R2/R3`
 - `7.1b` smoke test after the `constraint_limit` output-schema fix — should be rerun once before final publish freeze
+- `7.1b` on NFS is currently only published for `2025-06`
+- `7.1b` `2025-06/aq4` remains blocked by missing `2026-03` DA cache; older `aq4` is available in prior releases/benchmark artifacts
 - PJM annual — no code, no data, no models
 
 ## 8. Promotion rules (not yet enforced)

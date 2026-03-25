@@ -22,6 +22,11 @@ Completed:
 - publish hard-fails on missing SF
 - explicit published output contract
 
+Release scope note:
+
+- `7.1b` supports `aq4` for prior PYs where all settlement months have DA
+- `2025-06/aq4` remains excluded because `2026-03` DA is not yet available
+
 Open:
 
 - small artifact metadata cleanup

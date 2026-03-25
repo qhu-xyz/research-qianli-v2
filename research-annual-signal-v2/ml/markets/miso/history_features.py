@@ -226,8 +226,13 @@ def compute_history_features(
       - monthly_binding_table: full monthly table (needed by nb_detection)
     """
     from ml.core.calendars import get_history_cutoff_date
+    from datetime import timedelta
     cutoff_month_full = get_history_cutoff_month(eval_py, market_round=market_round)
     cutoff_date = get_history_cutoff_date(eval_py, market_round=market_round)
+
+    # The daily loader uses `d >= cutoff_date: break` (strictly-before semantics).
+    # cutoff_date is the last INCLUSIVE day. So pass cutoff_date + 1 to include it.
+    daily_cutoff = cutoff_date + timedelta(days=1)
 
     # The binding table range must include the cutoff_date's month so that
     # daily cache can load partial-month data. E.g. R1 cutoff_date=April 7:
@@ -240,7 +245,7 @@ def compute_history_features(
         aq_quarter=aq_quarter,
         cutoff_month=binding_table_end,
         floor_month=BF_FLOOR_MONTH,
-        cutoff_date=cutoff_date,
+        cutoff_date=daily_cutoff,
         market_round=market_round,
     )
 

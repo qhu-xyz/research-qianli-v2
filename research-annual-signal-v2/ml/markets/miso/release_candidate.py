@@ -9,10 +9,15 @@ Research-only printing/report logic is excluded.
 """
 from __future__ import annotations
 
+import logging
+
+import lightgbm as lgb
 import numpy as np
 import polars as pl
 
 from ml.markets.miso.config import CLASS_BF_COL, CROSS_CLASS_BF_COL, CLASS_NB_FLAG_COL
+
+logger = logging.getLogger(__name__)
 
 # ── Stage 1: Bucket_6_20 ─────────────────────────────────────────────
 
@@ -84,6 +89,8 @@ TIER_SIZE = 200
 N_TIERS = 5
 SPECIALIST_PER_TIER = 50
 BASE_PER_TIER = 150
+
+SPECIALIST_BRANCH_POOL_SIZE = SPECIALIST_PER_TIER * N_TIERS
 
 
 # ── Helpers (byte-exact copies from research) ────────────────────────
@@ -172,6 +179,29 @@ def build_eval_table(
     from ml.markets.miso.deviation_profile import build_deviation_features
 
     table = build_class_model_table(eval_py, aq, ct, market_round=market_round)
+    table = _prepare_release_candidate_table(table, ct)
+
+    try:
+        table = _join_deviation_features(
+            table=table,
+            planning_year=eval_py,
+            aq=aq,
+            market_round=market_round,
+            strict=False,
+        )
+    except Exception as e:
+        logger.warning(
+            "Deviation features failed for %s/%s/R%d: %s", eval_py, aq, market_round, e
+        )
+        for c in STAGE2_FEATS:
+            if c not in table.columns:
+                table = table.with_columns(pl.lit(0.0).alias(c))
+
+    return table
+
+
+def _prepare_release_candidate_table(table: pl.DataFrame, ct: str) -> pl.DataFrame:
+    """Alias model-table columns into the 7.2b scorer contract."""
 
     bf_col = CLASS_BF_COL[ct]
     bf_cross_col = CROSS_CLASS_BF_COL[ct]
@@ -188,21 +218,256 @@ def build_eval_table(
         pl.col("realized_shadow_price").alias("sp"),
     ).rename({"branch_name": "branch"})
 
-    try:
-        dev = build_deviation_features(eval_py, aq, market_round=market_round)
-        dev = dev.rename({"branch_name": "branch"})
-        table = table.join(dev, on="branch", how="left")
-        dev_cols = [c for c in dev.columns if c != "branch"]
-        for c in dev_cols:
-            if c in table.columns:
-                table = table.with_columns(pl.col(c).fill_null(0.0))
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(
-            "Deviation features failed for %s/%s/R%d: %s", eval_py, aq, market_round, e
-        )
-        for c in STAGE2_FEATS:
-            if c not in table.columns:
-                table = table.with_columns(pl.lit(0.0).alias(c))
+    return table
+
+
+def _join_deviation_features(
+    table: pl.DataFrame,
+    planning_year: str,
+    aq: str,
+    market_round: int,
+    strict: bool,
+) -> pl.DataFrame:
+    """Join deviation features onto a prepared 7.2b branch table."""
+    from ml.markets.miso.deviation_profile import build_deviation_features
+
+    dev = build_deviation_features(planning_year, aq, market_round=market_round)
+    dev = dev.rename({"branch_name": "branch"})
+    table = table.join(dev, on="branch", how="left")
+    dev_cols = [c for c in dev.columns if c != "branch"]
+
+    for c in dev_cols:
+        if c in table.columns:
+            if strict and table.filter(pl.col(c).is_null()).height > 0:
+                raise ValueError(
+                    f"Deviation feature {c} has nulls for {planning_year}/{aq}/R{market_round}"
+                )
+            table = table.with_columns(pl.col(c).fill_null(0.0))
+
+    missing = [c for c in STAGE2_FEATS if c not in table.columns]
+    if missing:
+        if strict:
+            raise ValueError(
+                f"Missing deviation features for {planning_year}/{aq}/R{market_round}: {missing}"
+            )
+        for c in missing:
+            table = table.with_columns(pl.lit(0.0).alias(c))
 
     return table
+
+
+def build_eval_table_strict(
+    eval_py: str,
+    aq: str,
+    ct: str,
+    market_round: int,
+) -> pl.DataFrame:
+    """Build one strict 7.2b training/eval table with no deviation fallback."""
+    from ml.markets.miso.features import build_class_model_table
+
+    table = build_class_model_table(eval_py, aq, ct, market_round=market_round)
+    table = _prepare_release_candidate_table(table, ct)
+    return _join_deviation_features(
+        table=table,
+        planning_year=eval_py,
+        aq=aq,
+        market_round=market_round,
+        strict=True,
+    )
+
+
+def build_publish_table_72b(
+    planning_year: str,
+    aq: str,
+    ct: str,
+    market_round: int,
+) -> pl.DataFrame:
+    """Build one strict ex-ante 7.2b publish table for the target cell.
+
+    Uses build_class_publish_table (no GT/NB) and only aliases the columns
+    needed for scoring. Does NOT alias is_nb12 or sp (not available ex-ante).
+    """
+    from ml.markets.miso.features import build_class_publish_table
+
+    table = build_class_publish_table(planning_year, aq, ct, market_round=market_round)
+
+    bf_col = CLASS_BF_COL[ct]
+    bf_cross_col = CROSS_CLASS_BF_COL[ct]
+
+    table = table.with_columns(
+        pl.col(bf_col).alias("bf"),
+        pl.col(bf_cross_col).alias("bf_cross"),
+        pl.max_horizontal(
+            "bin_80_cid_max", "bin_90_cid_max",
+            "bin_100_cid_max", "bin_110_cid_max",
+        ).alias("rt_max"),
+    )
+
+    # Deviation features expect "branch" column name (research convention)
+    table = table.rename({"branch_name": "branch"})
+    table = _join_deviation_features(
+        table=table,
+        planning_year=planning_year,
+        aq=aq,
+        market_round=market_round,
+        strict=True,
+    )
+    # Rename back to branch_name for publisher join compatibility
+    return table.rename({"branch": "branch_name"})
+
+
+_TRAIN_TABLE_CACHE: dict[tuple[str, str, str, int], pl.DataFrame] = {}
+_PUBLISH_MODEL_CACHE: dict[tuple[str, str, int], dict] = {}
+_PUBLISH_SCORE_CACHE: dict[tuple[str, str, str, int], pl.DataFrame] = {}
+
+
+def _get_train_table(py: str, aq: str, ct: str, market_round: int) -> pl.DataFrame:
+    key = (py, aq, ct, market_round)
+    if key not in _TRAIN_TABLE_CACHE:
+        _TRAIN_TABLE_CACHE[key] = build_eval_table_strict(py, aq, ct, market_round)
+    return _TRAIN_TABLE_CACHE[key]
+
+
+def get_publish_train_pys(planning_year: str) -> list[str]:
+    """Historical planning years used to train the publish-time models."""
+    train_pys = [py for py in ALL_PYS if py < planning_year]
+    if not train_pys:
+        raise ValueError(f"No historical training years available for {planning_year}")
+    return train_pys
+
+
+def train_publish_models_72b(
+    planning_year: str,
+    ct: str,
+    market_round: int,
+) -> dict:
+    """Train and cache the base + specialist models for one publish year/ctype/round."""
+    key = (planning_year, ct, market_round)
+    if key in _PUBLISH_MODEL_CACHE:
+        return _PUBLISH_MODEL_CACHE[key]
+
+    train_pys = get_publish_train_pys(planning_year)
+    train_frames: list[pl.DataFrame] = []
+    for tpy in train_pys:
+        for taq in AQS_FULL:
+            t = _get_train_table(tpy, taq, ct, market_round)
+            train_frames.append(
+                t.with_columns(
+                    pl.lit(tpy).alias("py"),
+                    pl.lit(taq).alias("aq_label"),
+                )
+            )
+    train_all = pl.concat(train_frames, how="diagonal")
+
+    base_feats = [f for f in BASE_FEATURES if f in train_all.columns]
+    if len(base_feats) != len(BASE_FEATURES):
+        missing = [f for f in BASE_FEATURES if f not in base_feats]
+        raise ValueError(f"Missing base features for publish training: {missing}")
+
+    sp_t = train_all["sp"].to_numpy().astype(np.float64)
+    labels_t = assign_bucket_labels(sp_t)
+    weights_t = assign_bucket_weights(labels_t)
+    groups_t = train_all.group_by(
+        ["py", "aq_label"], maintain_order=True
+    ).len()["len"].to_numpy()
+
+    ds_base = lgb.Dataset(
+        train_all.select(base_feats).to_numpy().astype(np.float64),
+        label=labels_t,
+        group=groups_t,
+        weight=weights_t,
+        feature_name=base_feats,
+        free_raw_data=False,
+    )
+    model_base = lgb.train(BASE_LGB, ds_base, num_boost_round=BASE_BOOST_ROUNDS)
+
+    s2_train_frames: list[pl.DataFrame] = []
+    for tpy in train_pys:
+        for taq in AQS_FULL:
+            t = _get_train_table(tpy, taq, ct, market_round)
+            bf_s = t["bf"].to_numpy()
+            bf_c = t["bf_cross"].to_numpy()
+            t_td = t.filter(pl.Series((bf_s == 0) & (bf_c == 0)))
+            if len(t_td) > 0:
+                s2_train_frames.append(t_td)
+
+    if not s2_train_frames:
+        raise ValueError(
+            f"No specialist training rows for {planning_year}/{ct}/R{market_round}"
+        )
+
+    s2_train = pl.concat(s2_train_frames, how="diagonal")
+    s2_feats = [f for f in STAGE2_FEATS if f in s2_train.columns]
+    if len(s2_feats) != len(STAGE2_FEATS):
+        missing = [f for f in STAGE2_FEATS if f not in s2_feats]
+        raise ValueError(f"Missing specialist features for publish training: {missing}")
+
+    s2_sp = s2_train["sp"].to_numpy().astype(np.float64)
+    s2_lab = (s2_sp > 0).astype(np.int32)
+    s2_wt = np.ones(len(s2_lab))
+    s2_wt[s2_sp > 200] = 3.0
+    s2_wt[s2_sp > 5000] = 10.0
+    ds_s2 = lgb.Dataset(
+        s2_train.select(s2_feats).to_numpy().astype(np.float64),
+        label=s2_lab,
+        weight=s2_wt,
+        feature_name=s2_feats,
+        free_raw_data=False,
+    )
+    model_s2 = lgb.train(STAGE2_LGB, ds_s2, num_boost_round=STAGE2_BOOST_ROUNDS)
+
+    payload = {
+        "train_pys": train_pys,
+        "base_features": base_feats,
+        "specialist_features": s2_feats,
+        "base_model": model_base,
+        "specialist_model": model_s2,
+    }
+    _PUBLISH_MODEL_CACHE[key] = payload
+    return payload
+
+
+def score_publish_branches_72b(
+    planning_year: str,
+    aq: str,
+    ct: str,
+    market_round: int,
+) -> pl.DataFrame:
+    """Score one publish cell and assign branch-level origin for 7.2b."""
+    key = (planning_year, aq, ct, market_round)
+    if key in _PUBLISH_SCORE_CACHE:
+        return _PUBLISH_SCORE_CACHE[key]
+
+    models = train_publish_models_72b(planning_year, ct, market_round)
+    table = build_publish_table_72b(planning_year, aq, ct, market_round)
+
+    base_scores = models["base_model"].predict(
+        table.select(models["base_features"]).to_numpy().astype(np.float64)
+    )
+    specialist_scores = models["specialist_model"].predict(
+        table.select(models["specialist_features"]).to_numpy().astype(np.float64)
+    )
+
+    bf = table["bf"].to_numpy().astype(np.float64)
+    bf_cross = table["bf_cross"].to_numpy().astype(np.float64)
+    is_true_dormant = (bf == 0) & (bf_cross == 0)
+    td_idx = np.where(is_true_dormant)[0]
+    td_order = td_idx[np.argsort(specialist_scores[td_idx])[::-1]]
+    specialist_branch_idx = set(
+        td_order[:SPECIALIST_BRANCH_POOL_SIZE].tolist()
+    )
+
+    out = table.with_columns(
+        pl.Series("base_score", base_scores),
+        pl.Series("specialist_score", specialist_scores),
+        pl.Series("is_true_dormant", is_true_dormant),
+        pl.Series(
+            "origin",
+            [
+                "specialist" if i in specialist_branch_idx else "base"
+                for i in range(len(table))
+            ],
+        ),
+    )
+    _PUBLISH_SCORE_CACHE[key] = out
+    return out

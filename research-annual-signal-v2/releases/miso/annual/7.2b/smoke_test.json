@@ -1,0 +1,31 @@
+{
+  "test_date": "2026-03-26",
+  "test_type": "full_publish",
+  "status": "passed",
+  "publish_entrypoint": "scripts/production/publish_annual_signal.py --scoring-mode 7.2b --py {PY} --market-round {R}",
+  "published_grid": {
+    "planning_years": ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06", "2025-06"],
+    "quarters": ["aq1", "aq2", "aq3", "aq4"],
+    "class_types": ["onpeak", "offpeak"],
+    "rounds": [1, 2, 3],
+    "total_cells": 168,
+    "cells_published": 168,
+    "cells_failed": 0,
+    "constraints_per_cell": 1000
+  },
+  "per_tier_contract": {
+    "tier_size": 200,
+    "specialist_target": 50,
+    "base_target": 150,
+    "specialist_shortfall_backfill": "base within same tier"
+  },
+  "output_contract": {
+    "constraints_parquet_schema": "7.x family",
+    "sf_parquet_index": "pnode_id (DA-style string node names)",
+    "sf_coverage": "100% — every published constraint has SF",
+    "constraint_limit": "non-null for all published constraints"
+  },
+  "not_published": {
+    "2026-06": "auction-side inputs not yet on NFS; publishable when available"
+  }
+}

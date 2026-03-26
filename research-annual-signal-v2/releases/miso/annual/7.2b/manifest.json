@@ -1,0 +1,66 @@
+{
+  "release_name": "miso_annual_7_2b",
+  "signal_prefix": "TEST.Signal.MISO.SPICE_ANNUAL_V7.2B",
+  "signal_paths": {
+    "R1": "TEST.Signal.MISO.SPICE_ANNUAL_V7.2B.R1",
+    "R2": "TEST.Signal.MISO.SPICE_ANNUAL_V7.2B.R2",
+    "R3": "TEST.Signal.MISO.SPICE_ANNUAL_V7.2B.R3"
+  },
+  "model_id": "miso_annual_72b_bucket620_plus_specialist_v1",
+  "feature_recipe_id": "miso_annual_72b_features_v1",
+  "label_recipe_id": "miso_annual_72b_branch_parity_v1",
+  "universe_id": "miso_annual_branch_active_v1",
+  "supported_rounds": [1, 2, 3],
+  "round_sensitive": true,
+  "cutoff_granularity": "day",
+  "cutoff_source": "ml/core/calendars.py:get_history_cutoff_date plus daily loader exclusive boundary",
+  "supported_ctypes": ["onpeak", "offpeak"],
+  "supported_planning_years": ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06", "2025-06", "2026-06"],
+  "supported_quarters": ["aq1", "aq2", "aq3", "aq4"],
+  "aq4_note": "Publication supports aq1-aq4 for all planning years when auction-side inputs exist. Evaluation/reference parity may lag for the latest year aq4 because realized settlement DA is incomplete, but publication is still required.",
+  "known_exclusions": {},
+  "tier_sizes": [200, 200, 200, 200, 200],
+  "scoring": {
+    "method": "base LambdaRank + dormant specialist LightGBM",
+    "per_round_training": true,
+    "per_round_features": true,
+    "research_branch_parity_reference": "/opt/tmp/qianli/miso/trash/annual_candidate_7.2b/results.parquet",
+    "research_branch_level_reference": "/opt/tmp/qianli/miso/trash/annual_candidate_7.2b/branch_level.parquet"
+  },
+  "publication_policy": {
+    "type": "production_only_constraint_tier_assembly",
+    "tiers": 5,
+    "tier_size": 200,
+    "per_tier_base_origin": 150,
+    "per_tier_specialist_origin": 50,
+    "within_tier_order": ["specialist_block", "base_block"],
+    "specialist_pool_sort": ["specialist_score desc", "base_score desc", "constraint_id asc"],
+    "base_pool_sort": ["base_score desc", "constraint_id asc"],
+    "branch_cap_enforced_during_walk": true,
+    "sf_dedup_enforced_during_walk": true,
+    "specialist_shortfall_backfill": "base within same tier only",
+    "research_benchmarked": false
+  },
+  "cache_provenance": {
+    "density_limits": "MISO_SPICE_DENSITY_DISTRIBUTION.parquet / CONSTRAINT_LIMIT.parquet, round-specific partitions",
+    "bridge": "MISO_SPICE_CONSTRAINT_INFO.parquet, round-specific partitions",
+    "history": "data/realized_da/ (monthly) + /opt/tmp/qianli/realized_da_daily/ (daily, signed sums)",
+    "density_signal_score": "MISO_SPICE_DENSITY_SIGNAL_SCORE.parquet, filtered by market_round",
+    "sf": "MISO_SPICE_SF.parquet, round-specific partitions",
+    "collapsed_cache": "data/collapsed/ with _r{round}_ in key; must be rebuilt from raw source for parity-sensitive work"
+  },
+  "validation_gates": {
+    "no_missing_sf": "Publisher raises ValueError if any published constraint lacks SF",
+    "no_deviation_zero_fill": "7.2b publish mode uses strict deviation-feature joins",
+    "no_silent_train_skip": "7.2b publish adapter hard-fails on missing training cells",
+    "branch_cap_enforced": true,
+    "sf_node_key_format": "SF rows use parquet index pnode_id in DA-style canonical node format"
+  },
+  "publish_path": "scripts/production/publish_annual_signal.py --scoring-mode 7.2b --py {PY} --market-round {R}",
+  "publishability": {
+    "all_quarters_all_years": true,
+    "evaluation_note": "Do not block publication on incomplete latest-year GT. 2026-06/aq4 is publishable even if not yet evaluable."
+  },
+  "code_commit": "b6e5393",
+  "predecessor": "miso_annual_7_1b"
+}

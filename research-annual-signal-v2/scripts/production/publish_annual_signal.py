@@ -2,7 +2,9 @@
 
 Generates constraints + SF parquets for all (aq, class_type) combinations.
 Validates against V6.1 for overlapping constraints.
-Signal name includes round: TEST.Signal.MISO.SPICE_ANNUAL_V7.1B.R{round}
+Signal name includes round:
+  - TEST.Signal.MISO.SPICE_ANNUAL_V7.1B.R{round}
+  - TEST.Signal.MISO.SPICE_ANNUAL_V7.2B.R{round}
 
 Usage:
     PYTHONPATH=. uv run python scripts/publish_annual_signal.py --py 2025-06 --market-round 1
@@ -27,12 +29,15 @@ sys.path.insert(0, "/home/xyz/workspace/pbase/src")
 os.environ.setdefault("RAY_ADDRESS", "ray://10.8.0.36:10001")
 
 from ml.config import AQ_QUARTERS, CLASS_TYPES
-from ml.signal_publisher import publish_signal
+from ml.signal_publisher import publish_signal, publish_signal_72b
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_SIGNAL_PREFIX = "TEST.Signal.MISO.SPICE_ANNUAL_V7.1B"
+DEFAULT_SIGNAL_PREFIXES = {
+    "7.1b": "TEST.Signal.MISO.SPICE_ANNUAL_V7.1B",
+    "7.2b": "TEST.Signal.MISO.SPICE_ANNUAL_V7.2B",
+}
 V61_CONSTRAINTS_PATH = "/opt/data/xyz-dataset/signal_data/miso/constraints/Signal.MISO.SPICE_ANNUAL_V6.1"
 V61_SF_PATH = "/opt/data/xyz-dataset/signal_data/miso/sf/Signal.MISO.SPICE_ANNUAL_V6.1"
 
@@ -131,15 +136,16 @@ def save_signal(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Publish annual signal (V7.1B)")
+    parser = argparse.ArgumentParser(description="Publish annual signal (V7.1B / V7.2B)")
     parser.add_argument("--py", required=True, help="Planning year (e.g., 2025-06)")
     parser.add_argument("--aq", default=None, help="Single quarter (e.g., aq1)")
     parser.add_argument("--class-type", default=None, choices=CLASS_TYPES)
     parser.add_argument("--market-round", type=int, required=True, help="Auction round (explicit; no default)")
+    parser.add_argument("--scoring-mode", default="7.1b", choices=["7.1b", "7.2b"])
     parser.add_argument("--validate-only", action="store_true", help="Validate without saving")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be saved")
     parser.add_argument("--tier-sizes", default=None, help="Comma-separated tier sizes (default: 200,200,200,200,200)")
-    parser.add_argument("--signal-name", default=None, help="Signal name override (default: V7.1B.R{round})")
+    parser.add_argument("--signal-name", default=None, help="Signal name override (default: mode-specific .R{round})")
     args = parser.parse_args()
 
     # Init Ray
@@ -149,16 +155,18 @@ def main():
 
     planning_year = args.py
     market_round = args.market_round
-    signal_name = args.signal_name or f"{DEFAULT_SIGNAL_PREFIX}.R{market_round}"
-    # aq4 is publishable for all PYs — the publish path (build_class_publish_table)
-    # uses only ex-ante features and does not require GT.
-    # Evaluation (not publication) requires realized DA for settlement months.
+    signal_prefix = DEFAULT_SIGNAL_PREFIXES[args.scoring_mode]
+    signal_name = args.signal_name or f"{signal_prefix}.R{market_round}"
     quarters = [args.aq] if args.aq else AQ_QUARTERS
     class_types = [args.class_type] if args.class_type else CLASS_TYPES
     tier_sizes = [int(x) for x in args.tier_sizes.split(",")] if args.tier_sizes else DEFAULT_TIER_SIZES
+    publish_fn = publish_signal_72b if args.scoring_mode == "7.2b" else publish_signal
 
     logger.info("Publishing %s for %s", signal_name, planning_year)
-    logger.info("Round: R%s, Quarters: %s, Classes: %s, Tiers: %s", market_round, quarters, class_types, tier_sizes)
+    logger.info(
+        "Mode: %s, Round: R%s, Quarters: %s, Classes: %s, Tiers: %s",
+        args.scoring_mode, market_round, quarters, class_types, tier_sizes,
+    )
 
     t0 = time.time()
     all_results = []
@@ -169,7 +177,7 @@ def main():
             logger.info("\n%s %s/%s/%s %s", "=" * 20, planning_year, aq, ct, "=" * 20)
 
             try:
-                constraints_df, sf_df = publish_signal(
+                constraints_df, sf_df = publish_fn(
                     planning_year=planning_year,
                     aq_quarter=aq,
                     class_type=ct,

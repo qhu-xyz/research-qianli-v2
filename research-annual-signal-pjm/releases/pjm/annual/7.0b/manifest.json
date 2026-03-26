@@ -1,0 +1,111 @@
+{
+  "release_name": "pjm_annual_7_0b",
+  "signal_prefix": "TEST.Signal.PJM.SPICE_ANNUAL_V7.0B",
+  "signal_paths": {
+    "R1": "TEST.Signal.PJM.SPICE_ANNUAL_V7.0B.R1",
+    "R2": "TEST.Signal.PJM.SPICE_ANNUAL_V7.0B.R2",
+    "R3": "TEST.Signal.PJM.SPICE_ANNUAL_V7.0B.R3",
+    "R4": "TEST.Signal.PJM.SPICE_ANNUAL_V7.0B.R4"
+  },
+  "benchmark_baseline": "TEST.Signal.PJM.SPICE_ANNUAL_V4.6.R{round}",
+  "model_id": "pjm_annual_v69_formula_v1",
+  "feature_recipe_id": "pjm_annual_density_da_v1",
+  "label_recipe_id": "pjm_annual_branch_gt_v1",
+  "universe_id": "pjm_annual_branch_active_v1",
+  "supported_rounds": [1, 2, 3, 4],
+  "round_sensitive": true,
+  "cutoff_granularity": "month",
+  "cutoff_rule": "historical DA features use June (PY-2) through March PY inclusive",
+  "supported_ctypes": ["onpeak", "dailyoffpeak", "wkndonpeak"],
+  "ctype_policy": {
+    "onpeak": "non-off-peak weekdays HB07-HB22 EPT",
+    "dailyoffpeak": "every day HB23 + HB00-HB06 EPT",
+    "wkndonpeak": "off-peak-day HB07-HB22 EPT",
+    "holiday_source": "pbase.utils.hours.is_off_peak_day"
+  },
+  "supported_planning_years": ["2019-06", "2020-06", "2021-06", "2022-06", "2023-06", "2024-06", "2025-06"],
+  "publish_period_type": "a",
+  "internal_bridge_period_types": ["aq1", "aq2", "aq3", "aq4"],
+  "scoring": {
+    "method": "density_plus_da_formula",
+    "formula": "0.30 * density_rank + 0.70 * da_rank",
+    "rank_direction": "low_is_best",
+    "per_round_features": true,
+    "per_ctype_features": true
+  },
+  "publish_schema": {
+    "constraint_contract": "V4.6-compatible-plus-limit",
+    "sf_row_contract": "Rows keyed by parquet index pnode_id",
+    "sf_column_contract": "Columns exactly match published constraint index keys",
+    "constraint_index_contract": "{constraint_id}|{shadow_sign}|spice",
+    "required_additional_columns": ["constraint_limit"],
+    "optional_debug_columns": ["branch_name"]
+  },
+  "publish_subset_policy": {
+    "published_artifact_is_post_dedup": true,
+    "all_expanded_cids_are_not_published": true,
+    "candidate_order": [
+      "branch_score_desc",
+      "shadow_price_da_desc",
+      "constraint_id_asc"
+    ]
+  },
+  "tier_policy": {
+    "num_tiers": 5,
+    "tier_sizes": [200, 200, 200, 200, 200],
+    "tier0_is_strongest": true,
+    "short_final_publish_allowed": true
+  },
+  "dedup_policy": {
+    "branch_cap": 3,
+    "exclude_zero_sf": true,
+    "require_unique_constraint_keys": true,
+    "sf_similarity_pruning": "none_for_7_0b"
+  },
+  "metadata_provenance": {
+    "constraint": "monitored portion of selected constraint_id before first ':'",
+    "equipment": "selected branch_name + ',' + constraint, matching PJM V4.6 style",
+    "convention": "selected bridge row convention",
+    "constraint_limit": "selected bridge/limit row limit",
+    "shadow_price_da": "per-constraint historical DA aggregation over June(PY-2) through March(PY), ctype-specific",
+    "shadow_sign": "sign of the same historical DA aggregation; fallback to overlapping V4.6 sign, else -1",
+    "flow_direction": "-shadow_sign",
+    "shadow_price": "same as shadow_sign"
+  },
+  "cache_provenance": {
+    "density": "PJM_SPICE_DENSITY_DISTRIBUTION.parquet annual root",
+    "bridge": "PJM_SPICE_CONSTRAINT_INFO.parquet annual root, class-type filtered",
+    "limit": "PJM_SPICE_CONSTRAINT_LIMIT.parquet annual root",
+    "sf": "PJM_SPICE_SF.parquet annual root",
+    "history": "PJM_DA_SHADOW_PRICE.parquet year partitions",
+    "notes": "Historical DA features map via monitored-line union lookup; GT maps quarter-by-quarter"
+  },
+  "validation_gates": {
+    "no_missing_sf": true,
+    "no_duplicate_constraint_keys": true,
+    "sf_columns_match_constraint_index": true,
+    "sf_row_index_is_pnode_id": true,
+    "required_constraint_columns_non_null": true,
+    "round_and_ctype_paths_explicit": true
+  },
+  "publishability": {
+    "2019-06": {"rounds": [1,2,3,4], "publishable": true, "evaluable_vs_v46": true},
+    "2020-06": {"rounds": [1,2,3,4], "publishable": true, "evaluable_vs_v46": true},
+    "2021-06": {"rounds": [1,2,3,4], "publishable": true, "evaluable_vs_v46": true},
+    "2022-06": {"rounds": [1,2,3,4], "publishable": true, "evaluable_vs_v46": true},
+    "2023-06": {"rounds": [1,2,3,4], "publishable": true, "evaluable_vs_v46": true},
+    "2024-06": {"rounds": [1,2,3,4], "publishable": true, "evaluable_vs_v46": true},
+    "2025-06": {
+      "rounds": [1,2,3,4],
+      "publishable": true,
+      "evaluable_vs_v46": {"R1": false, "R2": true, "R3": true, "R4": true},
+      "reason": "R1 has no V4.6 benchmark. GT incomplete (DA through Mar 2026 only, 10/12 months)"
+    }
+  },
+  "publish_path": "ml.markets.pjm.signal_publisher.publish_signal",
+  "release_artifacts": [
+    "releases/pjm/annual/7.0b/manifest.json",
+    "releases/pjm/annual/7.0b/smoke_test.json"
+  ],
+  "status": "draft_contract_frozen_before_implementation"
+}

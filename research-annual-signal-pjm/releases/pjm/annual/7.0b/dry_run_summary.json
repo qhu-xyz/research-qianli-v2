@@ -1,0 +1,62 @@
+{
+  "planning_year": "2024-06",
+  "round": 2,
+  "class_type": "onpeak",
+  "constraint_rows": 772,
+  "constraint_columns": [
+    "0_max",
+    "60_max",
+    "65_max",
+    "70_max",
+    "75_max",
+    "80_max",
+    "85_max",
+    "90_max",
+    "95_max",
+    "100_max",
+    "0_sum",
+    "60_sum",
+    "65_sum",
+    "70_sum",
+    "75_sum",
+    "80_sum",
+    "85_sum",
+    "90_sum",
+    "95_sum",
+    "100_sum",
+    "deviation_max",
+    "deviation_sum",
+    "flow_direction",
+    "equipment",
+    "convention",
+    "shadow_sign",
+    "shadow_price",
+    "shadow_price_da",
+    "constraint",
+    "deviation_max_rank",
+    "deviation_sum_rank",
+    "shadow_rank",
+    "rank",
+    "tier",
+    "constraint_limit",
+    "__index_level_0__"
+  ],
+  "sf_shape": [
+    11337,
+    772
+  ],
+  "sf_index_name": "pnode_id",
+  "tier_counts": {
+    "0": 200,
+    "1": 200,
+    "2": 200,
+    "3": 172
+  },
+  "first_constraint_keys": [
+    "NOTTINGH230 KV  2-3:(NUKE) L500.PeachBottom-Conastone.5012|-1|spice",
+    "NOTTINGH230 KV  2-3:500/230.Conastone.500-2|-1|spice",
+    "CONASTON230 KV  CNS-NOR2:BASE|-1|spice",
+    "GARDNERS115 KV  GAR-TEX:230/115.Lewistown.T3|-1|spice",
+    "GARDNERS115 KV  GAR-TEX:230/115.MiddletownJct.T5|-1|spice"
+  ]
+}

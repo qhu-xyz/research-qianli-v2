@@ -177,13 +177,19 @@ def main():
             logger.info("\n%s %s/%s/%s %s", "=" * 20, planning_year, aq, ct, "=" * 20)
 
             try:
-                constraints_df, sf_df = publish_fn(
+                result = publish_fn(
                     planning_year=planning_year,
                     aq_quarter=aq,
                     class_type=ct,
                     tier_sizes=tier_sizes,
                     market_round=args.market_round,
                 )
+                # 7.2b returns (constraints, sf, audit_rows); 7.1b returns (constraints, sf)
+                if len(result) == 3:
+                    constraints_df, sf_df, audit_rows = result
+                else:
+                    constraints_df, sf_df = result
+                    audit_rows = None
 
                 # Validate
                 val = validate_against_v61(constraints_df, planning_year, aq, ct)
@@ -193,6 +199,14 @@ def main():
                 if not args.validate_only:
                     save_signal(constraints_df, sf_df, planning_year, aq, ct,
                                 signal_name=signal_name, dry_run=args.dry_run)
+                    # Persist per-tier audit for 7.2b
+                    if audit_rows and not args.dry_run:
+                        import json as _json
+                        audit_dir = f"/opt/data/xyz-dataset/signal_data/miso/audit/{signal_name}/{planning_year}/{aq}/{ct}"
+                        os.makedirs(audit_dir, exist_ok=True)
+                        with open(f"{audit_dir}/tier_audit.json", "w") as f:
+                            _json.dump(audit_rows, f, indent=2)
+                        logger.info("Saved tier audit to %s", audit_dir)
 
                 all_results.append({
                     "quarter": aq, "class": ct,

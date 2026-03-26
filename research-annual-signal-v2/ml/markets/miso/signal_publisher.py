@@ -437,7 +437,7 @@ def publish_signal_72b(
     logger.info("  Constraints: %d × %d, SF: %d × %d",
                 len(constraints_out), len(constraints_out.columns),
                 len(sf_out), len(sf_out.columns) - 1)
-    return constraints_out, sf_out
+    return constraints_out, sf_out, audit_rows
 
 
 # ── Helpers ───────────────────────────────────────────────────────────

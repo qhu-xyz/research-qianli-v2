@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import polars as pl
 import pytest
 
@@ -39,7 +40,7 @@ def _all_expected_cells():
     for R in ROUNDS:
         for py in PYS:
             for aq in AQS_FULL:
-                if py == "2025-06" and aq == "aq4":
+                if py == "2025-06" and aq == "aq4" and R in [2, 3]:
                     continue
                 for ct in CTYPES:
                     cells.append((R, py, aq, ct))
@@ -59,7 +60,7 @@ class TestPresence:
             assert root.exists(), f"Signal root missing: {root}"
 
     def test_total_cell_count(self):
-        assert len(ALL_CELLS) == 162
+        assert len(ALL_CELLS) == 164
 
     @pytest.mark.parametrize("R,py,aq,ct", ALL_CELLS[:20])  # sample 20
     def test_constraint_file_exists(self, R, py, aq, ct):
@@ -69,10 +70,16 @@ class TestPresence:
     def test_sf_file_exists(self, R, py, aq, ct):
         assert _sf_path(R, py, aq, ct).exists()
 
-    def test_2025_aq4_absent(self):
-        for R in ROUNDS:
+    def test_2025_aq4_r1_present(self):
+        for ct in CTYPES:
+            assert _cstr_path(1, "2025-06", "aq4", ct).exists()
+            assert _sf_path(1, "2025-06", "aq4", ct).exists()
+
+    def test_2025_aq4_r2_r3_absent(self):
+        for R in [2, 3]:
             for ct in CTYPES:
                 assert not _cstr_path(R, "2025-06", "aq4", ct).exists()
+                assert not _sf_path(R, "2025-06", "aq4", ct).exists()
 
     def test_historical_aq4_present(self):
         for py in ["2022-06", "2023-06", "2024-06"]:
@@ -129,6 +136,15 @@ class TestRowCounts:
     def test_sf_constraint_count_matches(self):
         sf = pl.read_parquet(str(_sf_path(1, "2024-06", "aq1", "onpeak")))
         assert len(sf.columns) - 1 == 1000  # minus pnode_id
+
+    def test_sf_reads_back_with_pnode_id_index(self):
+        sf = pd.read_parquet(_sf_path(1, "2025-06", "aq1", "onpeak"))
+        assert sf.index.name == "pnode_id"
+        assert type(sf.index).__name__ == "Index"
+        assert "pnode_id" not in sf.columns
+        first_nodes = sf.index[:5].tolist()
+        assert all(isinstance(x, str) for x in first_nodes)
+        assert first_nodes != [0, 1, 2, 3, 4]
 
 
 # ── 4. Round differences ───────────────────────────────────────────────

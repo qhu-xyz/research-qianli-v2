@@ -1,0 +1,126 @@
+{
+  "release_name": "pjm_annual_7_0b",
+  "status": "multi_cell_pass",
+  "last_run": "2026-03-25",
+  "cells_tested": 5,
+  "cells_passed": 5,
+  "cells_failed": 0,
+  "cells": [
+    {
+      "planning_year": "2024-06",
+      "market_round": 1,
+      "class_type": "onpeak",
+      "constraint_rows": 773,
+      "sf_shape": [11319, 773],
+      "sf_index_name": "pnode_id",
+      "tier_counts": {"0": 200, "1": 200, "2": 200, "3": 173},
+      "overlap_with_v46": 103,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 1.0,
+        "shadow_sign": 0.990
+      },
+      "round_trip_pass": true,
+      "status": "PASS"
+    },
+    {
+      "planning_year": "2024-06",
+      "market_round": 2,
+      "class_type": "dailyoffpeak",
+      "constraint_rows": 779,
+      "sf_shape": [11337, 779],
+      "sf_index_name": "pnode_id",
+      "tier_counts": {"0": 200, "1": 200, "2": 200, "3": 179},
+      "overlap_with_v46": 107,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 0.991,
+        "shadow_sign": 0.972
+      },
+      "round_trip_pass": true,
+      "status": "PASS"
+    },
+    {
+      "planning_year": "2024-06",
+      "market_round": 3,
+      "class_type": "wkndonpeak",
+      "constraint_rows": 782,
+      "sf_shape": [11333, 782],
+      "sf_index_name": "pnode_id",
+      "tier_counts": {"0": 200, "1": 200, "2": 200, "3": 182},
+      "overlap_with_v46": 107,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 1.0,
+        "shadow_sign": 1.0
+      },
+      "round_trip_pass": true,
+      "status": "PASS"
+    },
+    {
+      "planning_year": "2021-06",
+      "market_round": 2,
+      "class_type": "onpeak",
+      "constraint_rows": 819,
+      "sf_shape": [10943, 819],
+      "sf_index_name": "pnode_id",
+      "tier_counts": {"0": 200, "1": 200, "2": 200, "3": 200, "4": 19},
+      "overlap_with_v46": 95,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 1.0,
+        "shadow_sign": 0.979
+      },
+      "round_trip_pass": true,
+      "status": "PASS"
+    },
+    {
+      "planning_year": "2025-06",
+      "market_round": 4,
+      "class_type": "onpeak",
+      "constraint_rows": 788,
+      "sf_shape": [11263, 788],
+      "sf_index_name": "pnode_id",
+      "tier_counts": {"0": 200, "1": 200, "2": 200, "3": 188},
+      "overlap_with_v46": 95,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 1.0,
+        "shadow_sign": 0.989
+      },
+      "round_trip_pass": true,
+      "status": "PASS"
+    }
+  ],
+  "bugs_fixed_this_run": [
+    "SF dtype: source parquet has float32 columns, now cast to float64 in load_annual_sf()",
+    "Constraints parquet: __index_level_0__ was both index and data column (set_index drop=False), now drop=True"
+  ],
+  "checks": [
+    "constraints parquet exists",
+    "sf parquet exists",
+    "constraint parquet has all 35 contracted columns",
+    "constraint parquet index key is unique",
+    "sf parquet row index name is pnode_id",
+    "sf columns exactly match constraint index keys",
+    "no missing SF for published constraints",
+    "no nulls in required constraint columns",
+    "all SF values float64",
+    "no NaN in SF",
+    "rank direction: low = best (tier 0 has lowest rank)",
+    "tier assignment contiguous from 0",
+    "save/load round-trip via ConstraintsSignal/ShiftFactorSignal dev path"
+  ],
+  "known_observations": [
+    "Row counts 773-819 across cells (below 1000 target due to branch_cap + zero-SF filtering)",
+    "V4.6 overlap is ~95-107 rows per cell (our universe is broader but with less V4.6 overlap)",
+    "shadow_sign parity 97-100% (our sign from DA history vs V4.6 from SPICE flow_direction)",
+    "convention parity: 99-100% (1 cell at 99.1% for dailyoffpeak, minor convention difference)",
+    "2021-06 reaches tier 4 with 19 rows (more candidates survive filtering for older PY)"
+  ]
+}

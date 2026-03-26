@@ -1,0 +1,139 @@
+{
+  "n_cells": 5,
+  "n_pass": 5,
+  "n_fail": 0,
+  "n_error": 0,
+  "cells": [
+    {
+      "label": "2024-06/R1/onpeak",
+      "status": "PASS",
+      "publish_elapsed_s": 62.3,
+      "constraint_rows": 773,
+      "constraint_issues": [],
+      "sf_shape": [
+        11319,
+        773
+      ],
+      "sf_issues": [],
+      "tier_counts": {
+        "0": 200,
+        "1": 200,
+        "2": 200,
+        "3": 173
+      },
+      "overlap_count": 103,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 1.0,
+        "shadow_sign": 0.9902912621359223
+      },
+      "round_trip_pass": true
+    },
+    {
+      "label": "2024-06/R2/dailyoffpeak",
+      "status": "PASS",
+      "publish_elapsed_s": 62.6,
+      "constraint_rows": 779,
+      "constraint_issues": [],
+      "sf_shape": [
+        11337,
+        779
+      ],
+      "sf_issues": [],
+      "tier_counts": {
+        "0": 200,
+        "1": 200,
+        "2": 200,
+        "3": 179
+      },
+      "overlap_count": 107,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 0.9906542056074766,
+        "shadow_sign": 0.9719626168224299
+      },
+      "round_trip_pass": true
+    },
+    {
+      "label": "2024-06/R3/wkndonpeak",
+      "status": "PASS",
+      "publish_elapsed_s": 62.6,
+      "constraint_rows": 782,
+      "constraint_issues": [],
+      "sf_shape": [
+        11333,
+        782
+      ],
+      "sf_issues": [],
+      "tier_counts": {
+        "0": 200,
+        "1": 200,
+        "2": 200,
+        "3": 182
+      },
+      "overlap_count": 107,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 1.0,
+        "shadow_sign": 1.0
+      },
+      "round_trip_pass": true
+    },
+    {
+      "label": "2021-06/R2/onpeak",
+      "status": "PASS",
+      "publish_elapsed_s": 68.2,
+      "constraint_rows": 819,
+      "constraint_issues": [],
+      "sf_shape": [
+        10943,
+        819
+      ],
+      "sf_issues": [],
+      "tier_counts": {
+        "0": 200,
+        "1": 200,
+        "2": 200,
+        "3": 200,
+        "4": 19
+      },
+      "overlap_count": 95,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 1.0,
+        "shadow_sign": 0.9789473684210527
+      },
+      "round_trip_pass": true
+    },
+    {
+      "label": "2025-06/R4/onpeak",
+      "status": "PASS",
+      "publish_elapsed_s": 61.8,
+      "constraint_rows": 788,
+      "constraint_issues": [],
+      "sf_shape": [
+        11263,
+        788
+      ],
+      "sf_issues": [],
+      "tier_counts": {
+        "0": 200,
+        "1": 200,
+        "2": 200,
+        "3": 188
+      },
+      "overlap_count": 95,
+      "overlap_parity": {
+        "constraint": 1.0,
+        "equipment": 1.0,
+        "convention": 1.0,
+        "shadow_sign": 0.9894736842105263
+      },
+      "round_trip_pass": true
+    }
+  ]
+}

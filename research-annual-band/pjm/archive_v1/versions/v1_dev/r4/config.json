@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "version": "v1_dev",
+  "rto": "pjm",
+  "description": "PJM R4 asymmetric bands (5 bins, per-class, no correction)",
+  "created": "2026-03-16",
+  "part": "bands",
+  "round": "r4",
+  "period_type": "a",
+  "baseline": "mtm_1st_mean * 12",
+  "method": {
+    "band_type": "asymmetric",
+    "calibration": "signed quantile pair of (mcp - baseline) per (bin, class)",
+    "cv_method": "temporal_expanding",
+    "n_bins": 5,
+    "min_cell_rows": 200,
+    "min_train_pys": 2,
+    "classes": [
+      "onpeak",
+      "dailyoffpeak",
+      "wkndonpeak"
+    ]
+  }
+}

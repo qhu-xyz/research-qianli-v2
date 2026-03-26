@@ -1,0 +1,3890 @@
+[
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 31524,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 28164,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 28392,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 19668,
+    "buy_at_upper_p95": 96.1,
+    "shortfall": -1.4
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 27360,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 16332,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 31896,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 16032,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 45828,
+    "buy_at_upper_p95": 100.0,
+    "shortfall": 2.5
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 23520,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 268716,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 165000,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 103716,
+    "buy_at_upper_p95": 97.7,
+    "shortfall": 0.2
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 59688,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 48060,
+    "buy_at_upper_p95": 97.3,
+    "shortfall": -0.2
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 43692,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 47928,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 1,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 69348,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 19932,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 17784,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 21768,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 17580,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 23544,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 16284,
+    "buy_at_upper_p95": 95.2,
+    "shortfall": -2.3
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 30300,
+    "buy_at_upper_p95": 100.0,
+    "shortfall": 2.5
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 19536,
+    "buy_at_upper_p95": 93.6,
+    "shortfall": -3.9
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 37644,
+    "buy_at_upper_p95": 100.0,
+    "shortfall": 2.5
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 22092,
+    "buy_at_upper_p95": 96.0,
+    "shortfall": -1.5
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 226464,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 133188,
+    "buy_at_upper_p95": 99.4,
+    "shortfall": 1.9
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 93276,
+    "buy_at_upper_p95": 96.2,
+    "shortfall": -1.3
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 37716,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 39348,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 39828,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 49836,
+    "buy_at_upper_p95": 97.5,
+    "shortfall": -0.0
+  },
+  {
+    "round": 1,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 59736,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 28392,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 28380,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 27084,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 24204,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 25680,
+    "buy_at_upper_p95": 99.7,
+    "shortfall": 2.2
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 22728,
+    "buy_at_upper_p95": 99.7,
+    "shortfall": 2.2
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 28452,
+    "buy_at_upper_p95": 99.8,
+    "shortfall": 2.3
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 17556,
+    "buy_at_upper_p95": 99.4,
+    "shortfall": 1.9
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 39132,
+    "buy_at_upper_p95": 99.7,
+    "shortfall": 2.2
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 11448,
+    "buy_at_upper_p95": 100.0,
+    "shortfall": 2.5
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 253056,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 148740,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 104316,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 56772,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 51288,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 48408,
+    "buy_at_upper_p95": 99.7,
+    "shortfall": 2.2
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 46008,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 1,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 50580,
+    "buy_at_upper_p95": 99.8,
+    "shortfall": 2.3
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 18480,
+    "buy_at_upper_p95": 96.1,
+    "shortfall": -1.4
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 16188,
+    "buy_at_upper_p95": 96.4,
+    "shortfall": -1.1
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 15732,
+    "buy_at_upper_p95": 95.5,
+    "shortfall": -2.0
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 13284,
+    "buy_at_upper_p95": 96.6,
+    "shortfall": -0.9
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 19368,
+    "buy_at_upper_p95": 97.1,
+    "shortfall": -0.4
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 14580,
+    "buy_at_upper_p95": 95.9,
+    "shortfall": -1.6
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 20364,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 16224,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 33948,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 18360,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 186528,
+    "buy_at_upper_p95": 97.4,
+    "shortfall": -0.1
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 107892,
+    "buy_at_upper_p95": 97.5,
+    "shortfall": 0.0
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 78636,
+    "buy_at_upper_p95": 97.3,
+    "shortfall": -0.2
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 34668,
+    "buy_at_upper_p95": 96.2,
+    "shortfall": -1.3
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 29016,
+    "buy_at_upper_p95": 96.0,
+    "shortfall": -1.5
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 33948,
+    "buy_at_upper_p95": 96.6,
+    "shortfall": -0.9
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 36588,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 1,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 52308,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 111144,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 107964,
+    "buy_at_upper_p95": 99.4,
+    "shortfall": 1.9
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 87072,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 74004,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 73764,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 53160,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 61704,
+    "buy_at_upper_p95": 99.4,
+    "shortfall": 1.9
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 39456,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 71136,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 33588,
+    "buy_at_upper_p95": 96.0,
+    "shortfall": -1.5
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 712992,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 404820,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 308172,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 219108,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 161076,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 126924,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 101160,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 1,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 104724,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 129384,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 114900,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 123960,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 83232,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 121512,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 65028,
+    "buy_at_upper_p95": 99.4,
+    "shortfall": 1.9
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 98388,
+    "buy_at_upper_p95": 99.7,
+    "shortfall": 2.2
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 45492,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 73464,
+    "buy_at_upper_p95": 99.9,
+    "shortfall": 2.4
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 31032,
+    "buy_at_upper_p95": 96.9,
+    "shortfall": -0.6
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 886392,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 546708,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 339684,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 244284,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 207192,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 186540,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 143880,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 1,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 104496,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 25212,
+    "buy_at_upper_p95": 97.4,
+    "shortfall": -0.1
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 27576,
+    "buy_at_upper_p95": 96.0,
+    "shortfall": -1.5
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 31092,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 28860,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 43944,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 31764,
+    "buy_at_upper_p95": 96.4,
+    "shortfall": -1.1
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 56700,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 31140,
+    "buy_at_upper_p95": 97.5,
+    "shortfall": 0.0
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 55344,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 35280,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 366912,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 212292,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 154620,
+    "buy_at_upper_p95": 97.7,
+    "shortfall": 0.2
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 52788,
+    "buy_at_upper_p95": 96.7,
+    "shortfall": -0.8
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 59952,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 75708,
+    "buy_at_upper_p95": 97.7,
+    "shortfall": 0.2
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 87840,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 2,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 90624,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 29112,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 38496,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 33900,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 28668,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 32772,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 23772,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 33144,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 22632,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 26304,
+    "buy_at_upper_p95": 99.9,
+    "shortfall": 2.4
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 16980,
+    "buy_at_upper_p95": 95.0,
+    "shortfall": -2.5
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 285780,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 155232,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 130548,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 67608,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 62568,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 56544,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 55776,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 2,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 43284,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 25476,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 30144,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 26796,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 30684,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 31008,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 26364,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 34068,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 21516,
+    "buy_at_upper_p95": 99.8,
+    "shortfall": 2.3
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 39864,
+    "buy_at_upper_p95": 94.1,
+    "shortfall": -3.4
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 18180,
+    "buy_at_upper_p95": 99.8,
+    "shortfall": 2.3
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 284100,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 157212,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 126888,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 55620,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 57480,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 57372,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 55584,
+    "buy_at_upper_p95": 99.7,
+    "shortfall": 2.2
+  },
+  {
+    "round": 2,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 58044,
+    "buy_at_upper_p95": 95.9,
+    "shortfall": -1.6
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 16668,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 18168,
+    "buy_at_upper_p95": 96.6,
+    "shortfall": -0.9
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 19692,
+    "buy_at_upper_p95": 95.7,
+    "shortfall": -1.8
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 19632,
+    "buy_at_upper_p95": 96.1,
+    "shortfall": -1.4
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 20136,
+    "buy_at_upper_p95": 96.3,
+    "shortfall": -1.2
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 17484,
+    "buy_at_upper_p95": 94.0,
+    "shortfall": -3.5
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 24972,
+    "buy_at_upper_p95": 94.5,
+    "shortfall": -3.0
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 19716,
+    "buy_at_upper_p95": 95.0,
+    "shortfall": -2.5
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 49356,
+    "buy_at_upper_p95": 91.2,
+    "shortfall": -6.3
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 24336,
+    "buy_at_upper_p95": 96.6,
+    "shortfall": -0.9
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 230160,
+    "buy_at_upper_p95": 94.8,
+    "shortfall": -2.7
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 130824,
+    "buy_at_upper_p95": 94.2,
+    "shortfall": -3.3
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 99336,
+    "buy_at_upper_p95": 95.7,
+    "shortfall": -1.8
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 34836,
+    "buy_at_upper_p95": 97.3,
+    "shortfall": -0.2
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 39324,
+    "buy_at_upper_p95": 95.9,
+    "shortfall": -1.6
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 37620,
+    "buy_at_upper_p95": 95.2,
+    "shortfall": -2.3
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 44688,
+    "buy_at_upper_p95": 94.7,
+    "shortfall": -2.8
+  },
+  {
+    "round": 2,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 73692,
+    "buy_at_upper_p95": 93.0,
+    "shortfall": -4.5
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 115524,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 135960,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 91260,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 96996,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 74796,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 61896,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 63348,
+    "buy_at_upper_p95": 97.7,
+    "shortfall": 0.2
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 44148,
+    "buy_at_upper_p95": 96.2,
+    "shortfall": -1.3
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 76692,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 35712,
+    "buy_at_upper_p95": 97.4,
+    "shortfall": -0.1
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 796332,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 421620,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 374712,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 251484,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 188256,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 136692,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 107496,
+    "buy_at_upper_p95": 97.1,
+    "shortfall": -0.4
+  },
+  {
+    "round": 2,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 112404,
+    "buy_at_upper_p95": 97.5,
+    "shortfall": 0.0
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 153492,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 157128,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 151608,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 112452,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 134112,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 85008,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 121572,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 71352,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 99708,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 48168,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 1134600,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 660492,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 474108,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 310620,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 264060,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 219120,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 192924,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 2,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 147876,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 32796,
+    "buy_at_upper_p95": 97.5,
+    "shortfall": 0.0
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 37524,
+    "buy_at_upper_p95": 96.1,
+    "shortfall": -1.4
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 35208,
+    "buy_at_upper_p95": 95.6,
+    "shortfall": -1.9
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 32748,
+    "buy_at_upper_p95": 94.3,
+    "shortfall": -3.2
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 52236,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 37380,
+    "buy_at_upper_p95": 97.2,
+    "shortfall": -0.3
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 56772,
+    "buy_at_upper_p95": 97.1,
+    "shortfall": -0.4
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 31836,
+    "buy_at_upper_p95": 93.3,
+    "shortfall": -4.2
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 66084,
+    "buy_at_upper_p95": 97.2,
+    "shortfall": -0.3
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 36564,
+    "buy_at_upper_p95": 97.2,
+    "shortfall": -0.3
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 419148,
+    "buy_at_upper_p95": 96.6,
+    "shortfall": -0.9
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 243096,
+    "buy_at_upper_p95": 97.2,
+    "shortfall": -0.3
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 176052,
+    "buy_at_upper_p95": 95.7,
+    "shortfall": -1.8
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 70320,
+    "buy_at_upper_p95": 96.8,
+    "shortfall": -0.7
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 67956,
+    "buy_at_upper_p95": 95.0,
+    "shortfall": -2.5
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 89616,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 88608,
+    "buy_at_upper_p95": 95.7,
+    "shortfall": -1.8
+  },
+  {
+    "round": 3,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 102648,
+    "buy_at_upper_p95": 97.2,
+    "shortfall": -0.3
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 42096,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 40308,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 46164,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 35940,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 39324,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 30636,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 37644,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 25524,
+    "buy_at_upper_p95": 96.8,
+    "shortfall": -0.7
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 35592,
+    "buy_at_upper_p95": 99.7,
+    "shortfall": 2.2
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 17016,
+    "buy_at_upper_p95": 96.0,
+    "shortfall": -1.5
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 350244,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 200820,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 149424,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 82404,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 82104,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 69960,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 63168,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 3,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 52608,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 26928,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 34380,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 25344,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 30192,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 31440,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 25332,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 33768,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 20088,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 45888,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 19188,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 292548,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 163368,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 129180,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 61308,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 55536,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 56772,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 53856,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 3,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 65076,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 18300,
+    "buy_at_upper_p95": 94.8,
+    "shortfall": -2.7
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 24804,
+    "buy_at_upper_p95": 94.5,
+    "shortfall": -3.0
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 17712,
+    "buy_at_upper_p95": 93.8,
+    "shortfall": -3.7
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 23148,
+    "buy_at_upper_p95": 91.8,
+    "shortfall": -5.7
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 21324,
+    "buy_at_upper_p95": 94.0,
+    "shortfall": -3.5
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 19752,
+    "buy_at_upper_p95": 93.2,
+    "shortfall": -4.3
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 24984,
+    "buy_at_upper_p95": 92.1,
+    "shortfall": -5.4
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 20304,
+    "buy_at_upper_p95": 95.2,
+    "shortfall": -2.3
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 56088,
+    "buy_at_upper_p95": 92.1,
+    "shortfall": -5.4
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 24624,
+    "buy_at_upper_p95": 95.6,
+    "shortfall": -1.9
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 251040,
+    "buy_at_upper_p95": 93.5,
+    "shortfall": -4.0
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 138408,
+    "buy_at_upper_p95": 93.0,
+    "shortfall": -4.5
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 112632,
+    "buy_at_upper_p95": 94.1,
+    "shortfall": -3.4
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 43104,
+    "buy_at_upper_p95": 94.6,
+    "shortfall": -2.9
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 40860,
+    "buy_at_upper_p95": 92.7,
+    "shortfall": -4.8
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 41076,
+    "buy_at_upper_p95": 93.6,
+    "shortfall": -3.9
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 45288,
+    "buy_at_upper_p95": 93.5,
+    "shortfall": -4.0
+  },
+  {
+    "round": 3,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 80712,
+    "buy_at_upper_p95": 93.2,
+    "shortfall": -4.3
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 121944,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 158196,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 103404,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 105360,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 85320,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 67020,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 69300,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 46140,
+    "buy_at_upper_p95": 96.8,
+    "shortfall": -0.7
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 82092,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 35688,
+    "buy_at_upper_p95": 96.6,
+    "shortfall": -0.9
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 874464,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 462060,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 412404,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 280140,
+    "buy_at_upper_p95": 99.4,
+    "shortfall": 1.9
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 208764,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 152340,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 115440,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 3,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 117780,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 157656,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 164496,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 160164,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 123588,
+    "buy_at_upper_p95": 97.4,
+    "shortfall": -0.1
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 139764,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 97296,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 122256,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 72768,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 109620,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 52740,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 1200348,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 689460,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 510888,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 322152,
+    "buy_at_upper_p95": 97.7,
+    "shortfall": 0.2
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 283752,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 237060,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 195024,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 3,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 162360,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 33552,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 38724,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 40308,
+    "buy_at_upper_p95": 94.5,
+    "shortfall": -3.0
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 32388,
+    "buy_at_upper_p95": 96.8,
+    "shortfall": -0.7
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 44448,
+    "buy_at_upper_p95": 95.4,
+    "shortfall": -2.1
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 31152,
+    "buy_at_upper_p95": 94.5,
+    "shortfall": -3.0
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 50580,
+    "buy_at_upper_p95": 95.8,
+    "shortfall": -1.7
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 28680,
+    "buy_at_upper_p95": 92.1,
+    "shortfall": -5.4
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 64044,
+    "buy_at_upper_p95": 96.8,
+    "shortfall": -0.7
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 30948,
+    "buy_at_upper_p95": 96.0,
+    "shortfall": -1.5
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 394824,
+    "buy_at_upper_p95": 95.9,
+    "shortfall": -1.6
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 232932,
+    "buy_at_upper_p95": 96.2,
+    "shortfall": -1.3
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 161892,
+    "buy_at_upper_p95": 95.5,
+    "shortfall": -2.0
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 72276,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 72696,
+    "buy_at_upper_p95": 95.5,
+    "shortfall": -2.0
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 75600,
+    "buy_at_upper_p95": 95.0,
+    "shortfall": -2.5
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 79260,
+    "buy_at_upper_p95": 94.4,
+    "shortfall": -3.1
+  },
+  {
+    "round": 4,
+    "py": 2019,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 94992,
+    "buy_at_upper_p95": 96.6,
+    "shortfall": -0.9
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 37416,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 38772,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 40980,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 37920,
+    "buy_at_upper_p95": 97.4,
+    "shortfall": -0.1
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 41436,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 35688,
+    "buy_at_upper_p95": 96.4,
+    "shortfall": -1.1
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 36336,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 29460,
+    "buy_at_upper_p95": 96.7,
+    "shortfall": -0.8
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 39552,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 21480,
+    "buy_at_upper_p95": 97.3,
+    "shortfall": -0.2
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 359040,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 195720,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 163320,
+    "buy_at_upper_p95": 97.4,
+    "shortfall": -0.1
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 76188,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 78900,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 77124,
+    "buy_at_upper_p95": 97.7,
+    "shortfall": 0.2
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 65796,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 4,
+    "py": 2020,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 61032,
+    "buy_at_upper_p95": 98.3,
+    "shortfall": 0.8
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 26280,
+    "buy_at_upper_p95": 97.7,
+    "shortfall": 0.2
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 28932,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 24876,
+    "buy_at_upper_p95": 96.0,
+    "shortfall": -1.5
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 30000,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 26280,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 24456,
+    "buy_at_upper_p95": 96.5,
+    "shortfall": -1.0
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 31428,
+    "buy_at_upper_p95": 94.3,
+    "shortfall": -3.2
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 18024,
+    "buy_at_upper_p95": 95.4,
+    "shortfall": -2.1
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 42300,
+    "buy_at_upper_p95": 92.1,
+    "shortfall": -5.4
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 18696,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 271272,
+    "buy_at_upper_p95": 96.2,
+    "shortfall": -1.3
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 151164,
+    "buy_at_upper_p95": 95.2,
+    "shortfall": -2.3
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 120108,
+    "buy_at_upper_p95": 97.4,
+    "shortfall": -0.1
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 55212,
+    "buy_at_upper_p95": 97.7,
+    "shortfall": 0.2
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 54876,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 50736,
+    "buy_at_upper_p95": 97.2,
+    "shortfall": -0.3
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 49452,
+    "buy_at_upper_p95": 94.7,
+    "shortfall": -2.8
+  },
+  {
+    "round": 4,
+    "py": 2021,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 60996,
+    "buy_at_upper_p95": 93.9,
+    "shortfall": -3.6
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 17040,
+    "buy_at_upper_p95": 95.7,
+    "shortfall": -1.8
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 20844,
+    "buy_at_upper_p95": 94.2,
+    "shortfall": -3.3
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 17688,
+    "buy_at_upper_p95": 93.6,
+    "shortfall": -3.9
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 19632,
+    "buy_at_upper_p95": 93.6,
+    "shortfall": -3.9
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 22620,
+    "buy_at_upper_p95": 94.5,
+    "shortfall": -3.0
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 20484,
+    "buy_at_upper_p95": 93.3,
+    "shortfall": -4.2
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 23364,
+    "buy_at_upper_p95": 93.0,
+    "shortfall": -4.5
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 19464,
+    "buy_at_upper_p95": 93.9,
+    "shortfall": -3.6
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 46068,
+    "buy_at_upper_p95": 86.6,
+    "shortfall": -10.9
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 24084,
+    "buy_at_upper_p95": 92.3,
+    "shortfall": -5.2
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 231288,
+    "buy_at_upper_p95": 92.3,
+    "shortfall": -5.2
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 126780,
+    "buy_at_upper_p95": 91.4,
+    "shortfall": -6.1
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 104508,
+    "buy_at_upper_p95": 93.4,
+    "shortfall": -4.1
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 37884,
+    "buy_at_upper_p95": 94.9,
+    "shortfall": -2.6
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 37320,
+    "buy_at_upper_p95": 93.6,
+    "shortfall": -3.9
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 43104,
+    "buy_at_upper_p95": 94.0,
+    "shortfall": -3.5
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 42828,
+    "buy_at_upper_p95": 93.4,
+    "shortfall": -4.1
+  },
+  {
+    "round": 4,
+    "py": 2022,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 70152,
+    "buy_at_upper_p95": 88.6,
+    "shortfall": -8.9
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 118932,
+    "buy_at_upper_p95": 98.9,
+    "shortfall": 1.4
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 143604,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 102936,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 103776,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 87540,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 66624,
+    "buy_at_upper_p95": 97.2,
+    "shortfall": -0.3
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 69672,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 47568,
+    "buy_at_upper_p95": 96.4,
+    "shortfall": -1.1
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 81600,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 35856,
+    "buy_at_upper_p95": 92.1,
+    "shortfall": -5.4
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 858108,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 460680,
+    "buy_at_upper_p95": 99.0,
+    "shortfall": 1.5
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 397428,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 262536,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 206712,
+    "buy_at_upper_p95": 99.2,
+    "shortfall": 1.7
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 154164,
+    "buy_at_upper_p95": 98.1,
+    "shortfall": 0.6
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 117240,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 4,
+    "py": 2023,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 117456,
+    "buy_at_upper_p95": 97.1,
+    "shortfall": -0.4
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "prevail",
+    "n": 133248,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "counter",
+    "n": 156720,
+    "buy_at_upper_p95": 97.9,
+    "shortfall": 0.4
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "prevail",
+    "n": 143928,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "counter",
+    "n": 121164,
+    "buy_at_upper_p95": 97.6,
+    "shortfall": 0.1
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "prevail",
+    "n": 134352,
+    "buy_at_upper_p95": 98.8,
+    "shortfall": 1.3
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "counter",
+    "n": 94824,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "prevail",
+    "n": 129876,
+    "buy_at_upper_p95": 98.4,
+    "shortfall": 0.9
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "counter",
+    "n": 74580,
+    "buy_at_upper_p95": 99.1,
+    "shortfall": 1.6
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "prevail",
+    "n": 178716,
+    "buy_at_upper_p95": 99.6,
+    "shortfall": 2.1
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "counter",
+    "n": 52200,
+    "buy_at_upper_p95": 99.3,
+    "shortfall": 1.8
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "all",
+    "n": 1219608,
+    "buy_at_upper_p95": 98.5,
+    "shortfall": 1.0
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "prevail",
+    "n": 720120,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "all",
+    "flow_type": "counter",
+    "n": 499488,
+    "buy_at_upper_p95": 98.2,
+    "shortfall": 0.7
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q1",
+    "flow_type": "all",
+    "n": 289968,
+    "buy_at_upper_p95": 98.0,
+    "shortfall": 0.5
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q2",
+    "flow_type": "all",
+    "n": 265092,
+    "buy_at_upper_p95": 97.8,
+    "shortfall": 0.3
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q3",
+    "flow_type": "all",
+    "n": 229176,
+    "buy_at_upper_p95": 98.6,
+    "shortfall": 1.1
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q4",
+    "flow_type": "all",
+    "n": 204456,
+    "buy_at_upper_p95": 98.7,
+    "shortfall": 1.2
+  },
+  {
+    "round": 4,
+    "py": 2024,
+    "bin": "q5",
+    "flow_type": "all",
+    "n": 230916,
+    "buy_at_upper_p95": 99.5,
+    "shortfall": 2.0
+  }
+]

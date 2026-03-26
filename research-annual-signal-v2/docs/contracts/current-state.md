@@ -112,7 +112,7 @@ It does NOT call `build_ground_truth()` or `compute_nb_flags()`. GT and NB are e
 - `data/nb_cache/` — stale R1-only model tables, not authoritative
 - Round-aware evaluation results for `Bucket_6_20` — only `v0c` vs `V4.4` has been run across `R1/R2/R3`
 - `7.1b` smoke test after the `constraint_limit` output-schema fix — should be rerun once before final publish freeze
-- `7.1b` published coverage and this doc may drift; verify against on-disk signal paths before making release claims. Current NFS coverage is broader than `2025-06` only.
+- `7.1b` published coverage and this doc may drift; verify against on-disk signal paths before making release claims. Current NFS coverage is broader than `2025-06` only, but `2025-06/aq4` is currently present on `R1` only (not yet on `R2/R3`).
 - PJM annual — no code, no data, no models
 
 ## 9. Promotion rules (not yet enforced)
